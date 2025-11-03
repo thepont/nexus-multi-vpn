@@ -2,6 +2,7 @@
 // This file contains the integration with the OpenVPN 3 library
 
 #include "openvpn_wrapper.h"
+#include <jni.h>  // For JNI types (JavaVM, JNIEnv, jobject)
 #include <android/log.h>
 #include <string>
 #include <cstring>
@@ -30,6 +31,7 @@
 
 // Using OpenVPN 3 ClientAPI - This is the real OpenVPN 3 service/library
 #include <client/ovpncli.hpp>
+#include <openvpn/client/dns_options.hpp>  // For DnsOptions
 using namespace openvpn::ClientAPI;
 
 // OpenVPN 3 ClientAPI is now included and ready to use
@@ -41,15 +43,81 @@ using namespace openvpn::ClientAPI;
 
 // Custom OpenVPN client implementation for Android
 // This class implements the abstract virtual methods required by OpenVPNClient
+// AND overrides TunBuilderBase methods to use Android's VpnService.Builder
 class AndroidOpenVPNClient : public OpenVPNClient {
 public:
-    AndroidOpenVPNClient() : OpenVPNClient() {
+    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), tunFd_(-1) {
         LOGI("AndroidOpenVPNClient created");
     }
     
     virtual ~AndroidOpenVPNClient() {
+        // Cleanup will be done by OpenVPNClient destructor
         LOGI("AndroidOpenVPNClient destroyed");
     }
+    
+    // Set JavaVM for getting JNIEnv in any thread
+    void setJavaVM(JavaVM* vm) {
+        javaVM_ = vm;
+        LOGI("JavaVM set in AndroidOpenVPNClient");
+    }
+    
+    // Set the Android VpnService.Builder instance (called from JNI)
+    // This is public so it can be called from openvpn_wrapper_set_android_params
+    void setVpnServiceBuilder(JNIEnv* env, jobject vpnBuilder) {
+        if (!env) {
+            LOGE("Cannot set VpnService.Builder: JNI env not available");
+            return;
+        }
+        
+        // Store JavaVM for later use (JNIEnv is thread-local)
+        if (!javaVM_) {
+            env->GetJavaVM(&javaVM_);
+        }
+        
+        if (vpnBuilder_) {
+            JNIEnv* currentEnv = getJNIEnv();
+            if (currentEnv) {
+                currentEnv->DeleteGlobalRef(vpnBuilder_);
+            }
+        }
+        
+        if (vpnBuilder) {
+            vpnBuilder_ = env->NewGlobalRef(vpnBuilder);
+            LOGI("VpnService.Builder set in AndroidOpenVPNClient");
+        } else {
+            vpnBuilder_ = nullptr;
+        }
+    }
+    
+    // Method to set the TUN file descriptor (called from JNI after establishing VpnService)
+    // This is public so it can be called from openvpn_wrapper_set_android_params
+    void setTunFileDescriptor(int fd) {
+        tunFd_ = fd;
+        LOGI("TUN file descriptor set to: %d", fd);
+    }
+    
+    // Get JNIEnv for current thread
+    JNIEnv* getJNIEnv() {
+        if (!javaVM_) {
+            return nullptr;
+        }
+        JNIEnv* env = nullptr;
+        int status = javaVM_->GetEnv((void**)&env, JNI_VERSION_1_6);
+        if (status != JNI_OK) {
+            // Attach current thread if needed
+            status = javaVM_->AttachCurrentThread(&env, nullptr);
+            if (status != JNI_OK) {
+                LOGE("Failed to attach thread to JVM");
+                return nullptr;
+            }
+        }
+        return env;
+    }
+    
+private:
+    JavaVM* javaVM_;  // JavaVM for getting JNIEnv in any thread
+    jobject vpnBuilder_;  // Android VpnService.Builder instance (global ref)
+    int tunFd_ = -1;  // TUN file descriptor from Android VpnService
     
     // Implement LogReceiver::log
     virtual void log(const LogInfo &log_info) override {
@@ -104,10 +172,81 @@ public:
         return true;
     }
     
-private:
-    // Additional state can be added here if needed
+    // Override TunBuilderBase methods to use Android VpnService.Builder
+    // These methods are called by OpenVPN 3 during connection setup
+    virtual bool tun_builder_add_address(const std::string &address,
+                                         int prefix_length,
+                                         const std::string &gateway,
+                                         bool ipv6,
+                                         bool net30) override {
+        LOGI("tun_builder_add_address: %s/%d (ipv6=%s)", address.c_str(), prefix_length, ipv6 ? "true" : "false");
+        
+        // For Android, we use the already-established VpnService interface
+        // OpenVPN 3 will configure routes, but we don't need to call Builder methods
+        // since the interface is already established. We just return true to allow
+        // OpenVPN 3 to continue with connection setup.
+        return true;
+    }
+    
+    virtual bool tun_builder_reroute_gw(bool ipv4, bool ipv6, unsigned int flags) override {
+        LOGI("tun_builder_reroute_gw: ipv4=%s, ipv6=%s", ipv4 ? "true" : "false", ipv6 ? "true" : "false");
+        // Gateway is already rerouted by VpnEngineService (routes to 0.0.0.0/0)
+        return true;
+    }
+    
+    virtual bool tun_builder_add_route(const std::string &address,
+                                       int prefix_length,
+                                       int metric,
+                                       bool ipv6) override {
+        LOGI("tun_builder_add_route: %s/%d (ipv6=%s)", address.c_str(), prefix_length, ipv6 ? "true" : "false");
+        // Routes are already configured by VpnEngineService
+        // Additional routes from OpenVPN config can be logged but don't need action
+        return true;
+    }
+    
+    virtual bool tun_builder_set_dns_options(const openvpn::DnsOptions &dns) override {
+        LOGI("tun_builder_set_dns_options called");
+        // DNS is already configured by VpnEngineService
+        // OpenVPN 3 DNS options can be logged but don't need action
+        // Note: dns.servers is a map, not a vector
+        LOGI("DNS options received (servers configured by VpnEngineService)");
+        return true;
+    }
+    
+    virtual bool tun_builder_set_mtu(int mtu) override {
+        LOGI("tun_builder_set_mtu: %d", mtu);
+        // MTU is already set by VpnEngineService
+        return true;
+    }
+    
+    virtual bool tun_builder_set_session_name(const std::string &name) override {
+        LOGI("tun_builder_set_session_name: %s", name.c_str());
+        // Session name is already set by VpnEngineService
+        return true;
+    }
+    
+    virtual int tun_builder_establish() override {
+        LOGI("═══════════════════════════════════════════════════════");
+        LOGI("tun_builder_establish() called by OpenVPN 3");
+        LOGI("Current TUN FD: %d", tunFd_);
+        LOGI("═══════════════════════════════════════════════════════");
+        
+        // For Android, the TUN interface is already established by VpnEngineService
+        // We return the file descriptor that was set via setTunFileDescriptor()
+        if (tunFd_ < 0) {
+            LOGE("❌ CRITICAL: TUN file descriptor not set!");
+            LOGE("   OpenVPN 3 cannot establish connection without a valid TUN FD");
+            LOGE("   This means setTunFileDescriptor() was not called before connect()");
+            LOGE("   The FD should be passed via nativeConnect() and setTunFileDescriptor()");
+            return -1;
+        }
+        
+        LOGI("✅ Returning TUN file descriptor: %d", tunFd_);
+        LOGI("   OpenVPN 3 will use this FD for packet I/O");
+        return tunFd_;
+    }
 };
-#endif
+#endif  // OPENVPN3_AVAILABLE
 
 // OpenVPN session structure
 struct OpenVpnSession {
@@ -115,7 +254,8 @@ struct OpenVpnSession {
     std::string last_error;
     
 #ifdef OPENVPN3_AVAILABLE
-    AndroidOpenVPNClient* client;
+    AndroidOpenVPNClient* androidClient;  // For accessing Android-specific methods
+    OpenVPNClient* client;  // Alias for androidClient (polymorphic base pointer)
     Config config;
     ProvideCreds creds;
     std::thread connection_thread;
@@ -128,10 +268,11 @@ struct OpenVpnSession {
     std::vector<uint8_t> send_buffer;
     std::vector<uint8_t> receive_buffer;
     
-    OpenVpnSession() : connected(false), client(nullptr), should_stop(false) {
+    OpenVpnSession() : connected(false), androidClient(nullptr), client(nullptr), should_stop(false) {
         // Initialize Android-specific OpenVPN 3 Client - This implements all required virtual methods
-        client = new AndroidOpenVPNClient();
-        if (!client) {
+        androidClient = new AndroidOpenVPNClient();
+        client = androidClient;  // Store both pointers for convenience
+        if (!client || !androidClient) {
             throw std::runtime_error("Failed to create Android OpenVPN 3 client");
         }
     }
@@ -140,9 +281,9 @@ struct OpenVpnSession {
         should_stop = true;
         
         // Stop connection if running
-        if (client && connected) {
+        if (androidClient && connected) {
             try {
-                client->stop();
+                androidClient->stop();
             } catch (...) {
                 // Ignore errors during cleanup
             }
@@ -153,9 +294,10 @@ struct OpenVpnSession {
             connection_thread.join();
         }
         
-        // Delete client
-        if (client) {
-            delete client;
+        // Delete client (androidClient is the actual instance)
+        if (androidClient) {
+            delete androidClient;
+            androidClient = nullptr;
             client = nullptr;
         }
     }
@@ -173,6 +315,46 @@ struct OpenVpnSession {
 };
 
 extern "C" {
+
+// Helper function to set Android-specific parameters
+void openvpn_wrapper_set_android_params(OpenVpnSession* session,
+                                        JNIEnv* env,
+                                        jobject vpnBuilder,
+                                        jint tunFd) {
+#ifdef OPENVPN3_AVAILABLE
+    if (!session || !session->androidClient) {
+        LOGE("Invalid session or androidClient not available");
+        return;
+    }
+    
+    LOGI("Setting Android params: tunFd=%d", tunFd);
+    
+    // Store JavaVM globally for use in other threads
+    JavaVM* javaVM = nullptr;
+    env->GetJavaVM(&javaVM);
+    
+    // Set JavaVM for getting JNIEnv in any thread
+    session->androidClient->setJavaVM(javaVM);
+    
+    if (vpnBuilder) {
+        session->androidClient->setVpnServiceBuilder(env, vpnBuilder);
+        LOGI("VpnService.Builder set in AndroidOpenVPNClient");
+    }
+    
+    // CRITICAL: Set TUN file descriptor BEFORE calling connect()
+    // OpenVPN 3 will call tun_builder_establish() during connect(), and it needs the FD
+    if (tunFd >= 0) {
+        session->androidClient->setTunFileDescriptor(tunFd);
+        LOGI("✅ TUN file descriptor set: %d", tunFd);
+    } else {
+        LOGE("❌ WARNING: TUN file descriptor not provided (-1)");
+        LOGE("   OpenVPN 3 connect() will call tun_builder_establish() which needs a valid FD");
+        LOGE("   Connection will likely fail unless FD is set via reflection");
+    }
+#else
+    LOGE("OpenVPN 3 not available - cannot set Android params");
+#endif
+}
 
 OpenVpnSession* openvpn_wrapper_create_session() {
     LOGI("Creating OpenVPN session");
@@ -210,7 +392,90 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         
         // Using OpenVPN 3 ClientAPI - Real service integration
         // 1. Parse and set OpenVPN config
-        session->config.content = std::string(config_str);
+        // NordVPN configs use username/password auth, not client certificates
+        // Add client-cert-not-required if not present to prevent "Missing External PKI alias" error
+        // Also remove OpenVPN 3 unsupported options
+        std::string config_content = std::string(config_str);
+        
+        // Remove OpenVPN 3 unsupported options (these are OpenVPN 2.x only)
+        std::vector<std::string> unsupported_options = {
+            "ping-timer-rem",
+            "remote-random",
+            "fast-io",
+            "comp-lzo"
+        };
+        
+        for (const auto& option : unsupported_options) {
+            // Remove lines containing the unsupported option
+            std::string search_pattern = option;
+            size_t pos = 0;
+            while ((pos = config_content.find(search_pattern, pos)) != std::string::npos) {
+                // Find the start of the line
+                size_t line_start = config_content.rfind('\n', pos);
+                if (line_start == std::string::npos) {
+                    line_start = 0;
+                } else {
+                    line_start++; // Skip the newline
+                }
+                // Find the end of the line
+                size_t line_end = config_content.find('\n', pos);
+                if (line_end == std::string::npos) {
+                    line_end = config_content.length();
+                } else {
+                    line_end++; // Include the newline
+                }
+                // Remove the entire line
+                config_content.erase(line_start, line_end - line_start);
+                pos = line_start; // Continue searching from where we removed
+            }
+        }
+        
+        // CRITICAL FIX: Remove auth-user-pass from config when using OpenVPN 3 ClientAPI
+        // OpenVPN 3 ClientAPI expects credentials via provide_creds(), NOT via auth file
+        // Having both causes OpenVPN 3 to try reading from a file path that may not be accessible
+        // or conflict with the credentials we provide programmatically
+        if (config_content.find("auth-user-pass") != std::string::npos) {
+            // Find and remove the auth-user-pass line (with or without file path)
+            size_t pos = 0;
+            while ((pos = config_content.find("auth-user-pass", pos)) != std::string::npos) {
+                // Find the start of the line
+                size_t line_start = config_content.rfind('\n', pos);
+                if (line_start == std::string::npos) {
+                    line_start = 0;
+                } else {
+                    line_start++; // Skip the newline
+                }
+                // Find the end of the line (could be just "auth-user-pass" or "auth-user-pass /path")
+                size_t line_end = config_content.find('\n', pos);
+                if (line_end == std::string::npos) {
+                    line_end = config_content.length();
+                } else {
+                    line_end++; // Include the newline
+                }
+                // Remove the entire line
+                config_content.erase(line_start, line_end - line_start);
+                LOGI("Removed 'auth-user-pass' line from config (using provide_creds() instead)");
+                // Don't continue searching - we only expect one auth-user-pass line
+                break;
+            }
+        }
+        
+        if (config_content.find("client-cert-not-required") == std::string::npos) {
+            // Add it before other auth directives or at the end
+            if (config_content.find("auth ") != std::string::npos) {
+                // Insert before auth directive
+                size_t pos = config_content.find("auth ");
+                config_content.insert(pos, "client-cert-not-required\n");
+            } else {
+                // Append at the end
+                config_content += "\nclient-cert-not-required\n";
+            }
+            LOGI("Added 'client-cert-not-required' directive to config");
+        }
+        
+        LOGI("OpenVPN config processed (%zu bytes, removed unsupported options)", config_content.length());
+        
+        session->config.content = config_content;
         session->config.connTimeout = 30;  // Connection timeout in seconds
         session->config.tunPersist = false; // Don't persist TUN interface
         
@@ -227,10 +492,28 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         LOGI("Config evaluated successfully. Profile: %s", eval.profileName.c_str());
         
         // 3. Set credentials
+        // username and password are already UTF-8 from JNI GetStringUTFChars()
+        // OpenVPN 3 ClientAPI's ProvideCreds uses std::string which stores UTF-8 bytes
         session->creds.username = std::string(username);
         session->creds.password = std::string(password);
         
+        // Log credential info (without exposing password)
         LOGI("Providing credentials...");
+        LOGI("Username length: %zu bytes (UTF-8)", session->creds.username.length());
+        LOGI("Password length: %zu bytes (UTF-8)", session->creds.password.length());
+        
+        // Verify UTF-8 encoding by checking first byte
+        if (!session->creds.username.empty()) {
+            LOGI("Username first byte: 0x%02x (UTF-8)", (unsigned char)session->creds.username[0]);
+        }
+        
+        // Verify credentials are not empty
+        if (session->creds.username.empty() || session->creds.password.empty()) {
+            LOGE("Credentials are empty - username: %zu bytes, password: %zu bytes", 
+                 session->creds.username.length(), session->creds.password.length());
+            session->last_error = "Credentials are empty";
+            return OPENVPN_ERROR_INVALID_PARAMS;
+        }
         
         // 4. Provide credentials to OpenVPN 3 service
         Status credsStatus = session->client->provide_creds(session->creds);
@@ -291,17 +574,27 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         });
         
         // Wait a bit for connection to start, then check status
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        // OpenVPN 3 connect() will call tun_builder_establish() which needs the TUN FD
+        LOGI("Waiting for OpenVPN 3 connection to start...");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         
         {
             std::lock_guard<std::mutex> lock(session->state_mutex);
             if (session->connected) {
-                return 0;
+                LOGI("✅ Connection established immediately!");
+                return OPENVPN_ERROR_SUCCESS;
+            }
+            
+            // Check if there's an error message
+            if (!session->last_error.empty()) {
+                LOGE("Connection error detected: %s", session->last_error.c_str());
+                // Don't return error yet - connection might still be in progress
             }
         }
         
         // Connection is in progress, return success (connection will complete asynchronously)
-        LOGI("Connection initiated, waiting for completion...");
+        LOGI("Connection initiated, will complete asynchronously...");
+        LOGI("Note: Connection status will be updated in background thread");
         return OPENVPN_ERROR_SUCCESS;
         
     } catch (const std::exception& e) {
@@ -471,15 +764,31 @@ int openvpn_wrapper_is_connected(OpenVpnSession* session) {
     try {
         std::lock_guard<std::mutex> lock(session->state_mutex);
         
-        if (!session->connected || !session->client) {
+        if (!session->client) {
             return 0;
         }
         
-        // Check connection status via OpenVPN 3 service API
-        ConnectionInfo info = session->client->connection_info();
+        // Check the session->connected flag first (set by background thread when connection succeeds)
+        // This is more reliable than ConnectionInfo which might not be immediately available
+        if (session->connected) {
+            // Connection is established according to background thread
+            // Optionally verify with ConnectionInfo, but don't fail if it's not ready yet
+            try {
+                ConnectionInfo info = session->client->connection_info();
+                // If ConnectionInfo is available, use it; otherwise trust session->connected
+                if (info.defined) {
+                    return 1;
+                }
+                // ConnectionInfo not ready yet, but session->connected is true
+                // This is OK - connection might still be finalizing
+                return 1;
+            } catch (...) {
+                // ConnectionInfo might throw if not ready - that's OK, use session->connected
+                return session->connected ? 1 : 0;
+            }
+        }
         
-        // Return true if OpenVPN 3 service reports connection is active
-        return info.defined ? 1 : 0;
+        return 0;
     } catch (const std::exception& e) {
         LOGE("Exception checking connection: %s", e.what());
         return 0;
