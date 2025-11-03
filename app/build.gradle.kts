@@ -67,7 +67,9 @@ android {
         }
         
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            // For now, only build arm64-v8a since vcpkg libraries are built for arm64-android
+            // TODO: Build vcpkg libraries for other ABIs (armeabi-v7a, x86, x86_64) when needed
+            abiFilters += listOf("arm64-v8a")
         }
     }
     
@@ -118,6 +120,10 @@ android {
             excludes += "/META-INF/LICENSE.txt"
             excludes += "/META-INF/LICENSE-notice.md"
             excludes += "/META-INF/**"
+        }
+        // Ensure MockK classes are included in test APK
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 
@@ -214,9 +220,14 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     
-    // Mocking (The standard for Kotlin)
+    // Mocking - Using Mockito for Android tests (more reliable than MockK on Android)
     testImplementation("io.mockk:mockk:1.13.10")
-    androidTestImplementation("io.mockk:mockk-android:1.13.10")
+    androidTestImplementation("org.mockito:mockito-android:5.11.0")
+    androidTestImplementation("org.mockito:mockito-core:5.11.0")
+    androidTestImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+    
+    // Keep MockK for unit tests (it works fine there)
+    androidTestImplementation("io.mockk:mockk-android:1.13.10") // Try keeping it too
     
     // Coroutines Testing (ESSENTIAL for ViewModels)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")

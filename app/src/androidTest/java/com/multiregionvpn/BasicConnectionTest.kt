@@ -14,7 +14,9 @@ import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.network.NordVpnApiService
 import com.google.common.truth.Truth.assertThat
-import io.mockk.mockk
+import org.mockito.Mock
+import org.mockito.MockitoAnnotations
+import org.mockito.kotlin.mock
 import retrofit2.Retrofit
 import retrofit2.converter.scalars.ScalarsConverterFactory
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -33,7 +35,10 @@ import org.junit.runner.RunWith
 class BasicConnectionTest {
 
     private lateinit var appContext: Context
+    
+    @Mock
     private lateinit var mockVpnService: VpnService
+    
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var vpnTemplateService: VpnTemplateService
     private val TEST_SERVER = "uk1234.nordvpn.com" // Use a real NordVPN server
@@ -41,7 +46,7 @@ class BasicConnectionTest {
     @Before
     fun setup() {
         appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        mockVpnService = mockk<VpnService>(relaxed = true)
+        MockitoAnnotations.openMocks(this)
         
         // Initialize dependencies manually (like VpnRoutingTest does)
         val database = AppDatabase.getDatabase(appContext)

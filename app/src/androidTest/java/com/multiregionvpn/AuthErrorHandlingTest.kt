@@ -7,7 +7,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.multiregionvpn.core.vpnclient.AuthenticationException
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
 import com.google.common.truth.Truth.assertThat
-import io.mockk.mockk
+import org.mockito.Mock
+import org.mockito.MockitoAnnotations
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
@@ -21,12 +24,15 @@ import org.junit.runner.RunWith
 class AuthErrorHandlingTest {
 
     private lateinit var appContext: Context
+    
+    @Mock
     private lateinit var mockVpnService: VpnService
 
     @Before
     fun setup() {
         appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        mockVpnService = mockk<VpnService>(relaxed = true)
+        // Initialize Mockito annotations
+        MockitoAnnotations.openMocks(this)
     }
 
     @Test

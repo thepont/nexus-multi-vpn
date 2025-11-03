@@ -12,3 +12,8 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# MockK rules - required for instrumentation tests
+-keep class io.mockk.** { *; }
+-keep class io.mockk.impl.** { *; }
+-dontwarn io.mockk.**
