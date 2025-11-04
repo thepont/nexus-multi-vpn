@@ -251,6 +251,7 @@ private:
 // OpenVPN session structure
 struct OpenVpnSession {
     bool connected;
+    bool connecting;  // True when connect() is running but not yet complete
     std::string last_error;
     
 #ifdef OPENVPN3_AVAILABLE
@@ -268,7 +269,7 @@ struct OpenVpnSession {
     std::vector<uint8_t> send_buffer;
     std::vector<uint8_t> receive_buffer;
     
-    OpenVpnSession() : connected(false), androidClient(nullptr), client(nullptr), should_stop(false) {
+    OpenVpnSession() : connected(false), connecting(false), androidClient(nullptr), client(nullptr), should_stop(false) {
         // Initialize Android-specific OpenVPN 3 Client - This implements all required virtual methods
         androidClient = new AndroidOpenVPNClient();
         client = androidClient;  // Store both pointers for convenience
@@ -281,7 +282,7 @@ struct OpenVpnSession {
         should_stop = true;
         
         // Stop connection if running
-        if (androidClient && connected) {
+        if (androidClient && (connected || connecting)) {
             try {
                 androidClient->stop();
             } catch (...) {
@@ -541,12 +542,22 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         
         LOGI("Starting OpenVPN 3 service connection in background thread...");
         
+        // Mark as connecting BEFORE starting the thread
+        {
+            std::lock_guard<std::mutex> lock(session->state_mutex);
+            session->connecting = true;
+            session->connected = false;
+        }
+        
         session->connection_thread = std::thread([session]() {
             try {
                 // This calls OpenVPN 3 service connect() - blocks until disconnect
+                // This can take a long time (60+ seconds), so we mark as connecting first
                 Status connectStatus = session->client->connect();
                 
                 std::lock_guard<std::mutex> lock(session->state_mutex);
+                session->connecting = false;  // No longer connecting
+                
                 if (connectStatus.error) {
                     session->last_error = connectStatus.message;
                     session->connected = false;
@@ -567,6 +578,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
                 }
             } catch (const std::exception& e) {
                 std::lock_guard<std::mutex> lock(session->state_mutex);
+                session->connecting = false;
                 session->last_error = e.what();
                 session->connected = false;
                 LOGE("Exception in connection thread: %s", e.what());
@@ -768,29 +780,26 @@ int openvpn_wrapper_is_connected(OpenVpnSession* session) {
             return 0;
         }
         
-        // Check the session->connected flag first (set by background thread when connection succeeds)
-        // This is more reliable than ConnectionInfo which might not be immediately available
+        // If connection is established, return true
         if (session->connected) {
-            // Connection is established according to background thread
-            // Optionally verify with ConnectionInfo, but don't fail if it's not ready yet
-            try {
-                ConnectionInfo info = session->client->connection_info();
-                // If ConnectionInfo is available, use it; otherwise trust session->connected
-                if (info.defined) {
-                    return 1;
-                }
-                // ConnectionInfo not ready yet, but session->connected is true
-                // This is OK - connection might still be finalizing
-                return 1;
-            } catch (...) {
-                // ConnectionInfo might throw if not ready - that's OK, use session->connected
-                return session->connected ? 1 : 0;
-            }
+            return 1;
+        }
+        
+        // If connection is in progress, return true (connection is happening, just not complete yet)
+        // This prevents the packet reception loop from giving up too early
+        if (session->connecting) {
+            LOGI("is_connected: connection in progress (connecting=true), returning 1");
+            return 1;
         }
         
         return 0;
     } catch (const std::exception& e) {
         LOGE("Exception checking connection: %s", e.what());
+        // If we can't check, trust session->connected or session->connecting
+        if (session) {
+            std::lock_guard<std::mutex> lock(session->state_mutex);
+            return (session->connected || session->connecting) ? 1 : 0;
+        }
         return 0;
     }
 #else

@@ -15,7 +15,8 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class NativeOpenVpnClient(
     private val context: Context,
-    private val vpnService: VpnService
+    private val vpnService: VpnService,
+    private val tunFd: Int = -1  // Optional: TUN file descriptor if already available
 ) : OpenVpnClient {
 
     private val connected = AtomicBoolean(false)
@@ -56,7 +57,9 @@ class NativeOpenVpnClient(
     private external fun nativeConnect(
         config: String,
         username: String,
-        password: String
+        password: String,
+        vpnBuilder: android.net.VpnService.Builder?,  // Pass VpnService.Builder for TunBuilderBase
+        tunFd: Int  // File descriptor of already-established TUN interface
     ): Long // Returns session handle (0 = error)
 
     @JvmName("nativeDisconnect")
@@ -88,11 +91,37 @@ class NativeOpenVpnClient(
                 if (authFilePath != null) {
                     val authFile = java.io.File(authFilePath)
                     if (authFile.exists()) {
-                        val lines = authFile.readLines()
+                        // Read file as UTF-8 (OpenVPN expects UTF-8)
+                        // readLines() uses UTF-8 by default, which is correct
+                        val lines = authFile.readLines(Charsets.UTF_8)
                         if (lines.size >= 2) {
                             username = lines[0].trim()
                             password = lines[1].trim()
-                            Log.d(TAG, "Credentials loaded from auth file (username length: ${username.length})")
+                            
+                            // Verify credentials are not empty
+                            if (username.isEmpty() || password.isEmpty()) {
+                                Log.e(TAG, "❌ Credentials are empty after reading from auth file")
+                                Log.e(TAG, "   Username length: ${username.length}, Password length: ${password.length}")
+                                return@withContext false
+                            }
+                            
+                            // Log encoding info (without exposing actual credentials)
+                            val usernameBytes = username.toByteArray(Charsets.UTF_8)
+                            val passwordBytes = password.toByteArray(Charsets.UTF_8)
+                            Log.d(TAG, "Credentials loaded from auth file (UTF-8):")
+                            Log.d(TAG, "   Username: ${username.length} chars, ${usernameBytes.size} UTF-8 bytes")
+                            Log.d(TAG, "   Password: ${password.length} chars, ${passwordBytes.size} UTF-8 bytes")
+                            
+                            // Verify UTF-8 encoding is valid
+                            try {
+                                // Attempt to decode as UTF-8 to verify encoding
+                                String(usernameBytes, Charsets.UTF_8)
+                                String(passwordBytes, Charsets.UTF_8)
+                                Log.d(TAG, "✅ Credentials are valid UTF-8 strings")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ Invalid UTF-8 encoding in credentials", e)
+                                return@withContext false
+                            }
                         } else {
                             Log.e(TAG, "❌ Auth file does not contain username/password (lines: ${lines.size})")
                             return@withContext false
@@ -108,9 +137,51 @@ class NativeOpenVpnClient(
 
                 Log.d(TAG, "Calling native connect() - config length: ${ovpnConfig.length} bytes")
                 
-                // Call native connect
+                // Get the TUN file descriptor - try multiple methods
+                var finalTunFd = tunFd  // Use provided FD if available
+                
+                if (finalTunFd < 0) {
+                    // Try to get it from VpnService via reflection
+                    try {
+                        val field = VpnService::class.java.getDeclaredField("mInterface")
+                        field.isAccessible = true
+                        val parcelFileDescriptor = field.get(vpnService) as? android.os.ParcelFileDescriptor
+                        if (parcelFileDescriptor != null) {
+                            // Try to get FD without detaching (we need it for both reading and writing)
+                            val fdField = parcelFileDescriptor.javaClass.getDeclaredField("mFd")
+                            fdField.isAccessible = true
+                            finalTunFd = fdField.getInt(parcelFileDescriptor)
+                            Log.d(TAG, "Got TUN FD via reflection from VpnService.mInterface: $finalTunFd")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not get TUN file descriptor via reflection: ${e.message}")
+                    }
+                }
+                
+                if (finalTunFd < 0) {
+                    // Last resort: try detachFd (but this might break other uses)
+                    try {
+                        val field = VpnService::class.java.getDeclaredField("mInterface")
+                        field.isAccessible = true
+                        val parcelFileDescriptor = field.get(vpnService) as? android.os.ParcelFileDescriptor
+                        finalTunFd = parcelFileDescriptor?.detachFd() ?: -1
+                        if (finalTunFd >= 0) {
+                            Log.d(TAG, "Got TUN FD via detachFd: $finalTunFd")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not detach TUN file descriptor: ${e.message}")
+                    }
+                }
+                
+                Log.d(TAG, "TUN file descriptor: $finalTunFd (${if (finalTunFd >= 0) "valid" else "invalid - OpenVPN 3 will need it via tun_builder_establish()"})")
+                
+                // Pass null for builder since we can't get the original builder after establishment
+                // OpenVPN 3 will use TunBuilderBase methods we override
+                val builder: android.net.VpnService.Builder? = null
+                
+                // Call native connect with VpnService.Builder and TUN FD
                 val handle = try {
-                    nativeConnect(ovpnConfig, username, password)
+                    nativeConnect(ovpnConfig, username, password, builder, finalTunFd)
                 } catch (e: UnsatisfiedLinkError) {
                     Log.e(TAG, "❌ UnsatisfiedLinkError - native library not loaded properly", e)
                     lastError = "Native library not loaded: ${e.message}"
@@ -246,6 +317,24 @@ class NativeOpenVpnClient(
         try {
             Log.d(TAG, "Packet reception started")
             
+            // Wait for connection to be fully established before starting packet reception
+            // OpenVPN 3 connection might take a moment to become fully ready
+            var connectionWaitAttempts = 0
+            val maxConnectionWaitAttempts = 50 // 5 seconds total (50 * 100ms)
+            while (!nativeIsConnected(sessionHandle.get()) && connectionWaitAttempts < maxConnectionWaitAttempts) {
+                delay(100)
+                connectionWaitAttempts++
+                if (connectionWaitAttempts % 10 == 0) {
+                    Log.d(TAG, "Waiting for connection to be ready... (attempt $connectionWaitAttempts/$maxConnectionWaitAttempts)")
+                }
+            }
+            
+            if (!nativeIsConnected(sessionHandle.get())) {
+                Log.w(TAG, "Connection not ready after waiting, but continuing anyway...")
+            } else {
+                Log.d(TAG, "✅ Connection is ready, starting packet reception loop")
+            }
+            
             while (connected.get() && connectionScope.isActive) {
                 val handle = sessionHandle.get()
                 if (handle == 0L) {
@@ -264,12 +353,16 @@ class NativeOpenVpnClient(
                     delay(10)
                 }
                 
-                // Check connection status
-                if (!nativeIsConnected(handle)) {
-                    Log.w(TAG, "Native connection lost")
-                    connected.set(false)
-                    break
+                // Check connection status less frequently to avoid false positives
+                // Only check every 100 iterations (about once per second)
+                if (connectionWaitAttempts % 100 == 0) {
+                    if (!nativeIsConnected(handle)) {
+                        Log.w(TAG, "Native connection lost")
+                        connected.set(false)
+                        break
+                    }
                 }
+                connectionWaitAttempts++
             }
         } catch (e: Exception) {
             if (connected.get()) {

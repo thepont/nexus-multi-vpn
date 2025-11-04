@@ -11,6 +11,13 @@ extern "C" {
 // Forward declaration of OpenVPN session
 struct OpenVpnSession;
 
+#ifdef __cplusplus
+// Forward declaration for C++ code
+#ifdef OPENVPN3_AVAILABLE
+class AndroidOpenVPNClient;
+#endif
+#endif
+
 // Session management
 OpenVpnSession* openvpn_wrapper_create_session();
 void openvpn_wrapper_destroy_session(OpenVpnSession* session);
@@ -29,6 +36,16 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
                            const char* config,
                            const char* username,
                            const char* password);
+
+// Set Android-specific parameters (VpnService.Builder and TUN file descriptor)
+// This must be called before connect() if using Android VpnService
+#ifdef __cplusplus
+#include <jni.h>
+void openvpn_wrapper_set_android_params(OpenVpnSession* session,
+                                        JNIEnv* env,
+                                        jobject vpnBuilder,
+                                        jint tunFd);
+#endif
 
 // Get last error message from session
 const char* openvpn_wrapper_get_last_error(OpenVpnSession* session);
