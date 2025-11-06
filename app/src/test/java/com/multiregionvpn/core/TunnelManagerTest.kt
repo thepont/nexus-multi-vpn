@@ -1,6 +1,6 @@
 package com.multiregionvpn.core
 
-import com.google.common.truth.Truth.assertThat
+import kotlin.test.*
 import com.multiregionvpn.core.vpnclient.MockOpenVpnClient
 import com.multiregionvpn.core.vpnclient.OpenVpnClient
 import com.multiregionvpn.data.database.AppRule
@@ -64,15 +64,15 @@ class TunnelManagerTest {
         val tunnelId = "nordvpn_UK"
         
         if (!mockConnectionManager.isTunnelConnected(tunnelId)) {
-            val created = mockConnectionManager.createTunnel(
+            val result = mockConnectionManager.createTunnel(
                 tunnelId = tunnelId,
                 ovpnConfig = preparedConfig.ovpnFileContent,
                 authFilePath = preparedConfig.authFile?.absolutePath
             )
             
             // THEN: Tunnel is created
-            assertThat(created).isTrue()
-            assertThat(mockConnectionManager.isTunnelConnected(tunnelId)).isTrue()
+            assertTrue(result.success)
+            assertTrue(mockConnectionManager.isTunnelConnected(tunnelId))
         }
     }
 
@@ -102,8 +102,8 @@ class TunnelManagerTest {
             .distinct()
         
         // THEN: Should only have one unique VPN config ID
-        assertThat(uniqueVpnConfigIds).hasSize(1)
-        assertThat(uniqueVpnConfigIds[0]).isEqualTo("vpn-uk-1")
+        assertEquals(1, uniqueVpnConfigIds.size)
+        assertEquals("vpn-uk-1", uniqueVpnConfigIds[0])
     }
 
     @Test
@@ -144,9 +144,9 @@ class TunnelManagerTest {
             .filter { it.vpnConfigId != null }
             .map { it.vpnConfigId!! }
             .distinct()
-        assertThat(uniqueVpnConfigIds).hasSize(2)
-        assertThat(mockConnectionManager.isTunnelConnected(tunnelIdUk)).isTrue()
-        assertThat(mockConnectionManager.isTunnelConnected(tunnelIdFr)).isTrue()
+        assertEquals(2, uniqueVpnConfigIds.size)
+        assertTrue(mockConnectionManager.isTunnelConnected(tunnelIdUk))
+        assertTrue(mockConnectionManager.isTunnelConnected(tunnelIdFr))
     }
 
     @Test
@@ -158,7 +158,7 @@ class TunnelManagerTest {
         val vpnConfig = mockSettingsRepo.getVpnConfigById("nonexistent-vpn")
         
         // THEN: VPN config is null, so tunnel should not be created
-        assertThat(vpnConfig).isNull()
+        assertNull(vpnConfig)
     }
 
     @Test
@@ -174,13 +174,13 @@ class TunnelManagerTest {
         
         // Create tunnel first
         mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, null)
-        assertThat(mockConnectionManager.isTunnelConnected(tunnelId)).isTrue()
+        assertTrue(mockConnectionManager.isTunnelConnected(tunnelId))
         
         // WHEN: Processing rules again (tunnel already exists)
         val isAlreadyConnected = mockConnectionManager.isTunnelConnected(tunnelId)
         
         // THEN: Tunnel should still be connected, no need to recreate
-        assertThat(isAlreadyConnected).isTrue()
+        assertTrue(isAlreadyConnected)
     }
 
     @Test
@@ -195,7 +195,7 @@ class TunnelManagerTest {
         )
         
         mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, null)
-        assertThat(mockConnectionManager.isTunnelConnected(tunnelId)).isTrue()
+        assertTrue(mockConnectionManager.isTunnelConnected(tunnelId))
         
         // WHEN: All app rules are removed (no active VPN configs)
         val activeTunnelIds = emptySet<String>()
@@ -206,7 +206,7 @@ class TunnelManagerTest {
         }
         
         // THEN: Tunnel is closed
-        assertThat(mockConnectionManager.isTunnelConnected(tunnelId)).isFalse()
+        assertFalse(mockConnectionManager.isTunnelConnected(tunnelId))
     }
 }
 

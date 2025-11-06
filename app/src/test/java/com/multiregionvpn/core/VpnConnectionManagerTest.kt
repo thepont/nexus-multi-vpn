@@ -1,11 +1,11 @@
 package com.multiregionvpn.core
 
-import com.google.common.truth.Truth.assertThat
 import com.multiregionvpn.core.vpnclient.MockOpenVpnClient
 import com.multiregionvpn.core.vpnclient.OpenVpnClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
+import kotlin.test.*
 
 /**
  * Unit tests for VpnConnectionManager
@@ -28,15 +28,15 @@ class VpnConnectionManagerTest {
     @Test
     fun `given tunnel does not exist, when createTunnel is called, then tunnel is created`() = runTest {
         // GIVEN: No tunnels exist
-        assertThat(manager.isTunnelConnected("test_tunnel")).isFalse()
+        assertFalse(manager.isTunnelConnected("test_tunnel"))
         
         // WHEN: Creating a tunnel
         val config = "client\nremote test.com 1194\nproto udp"
-        val created = manager.createTunnel("test_tunnel", config, null)
+        val result = manager.createTunnel("test_tunnel", config, null)
         
         // THEN: Tunnel is created
-        assertThat(created).isTrue()
-        assertThat(manager.isTunnelConnected("test_tunnel")).isTrue()
+        assertTrue(result.success)
+        assertTrue(manager.isTunnelConnected("test_tunnel"))
     }
 
     @Test
@@ -49,7 +49,7 @@ class VpnConnectionManagerTest {
         val result = manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", null)
         
         // THEN: Returns true (tunnel already exists and is connected)
-        assertThat(result).isTrue()
+        assertTrue(result.success)
     }
 
     @Test
@@ -66,7 +66,7 @@ class VpnConnectionManagerTest {
         // THEN: Packet is sent to the client
         // (We can verify this by checking the mock client's sentPackets)
         // For now, we verify no exceptions are thrown
-        assertThat(manager.isTunnelConnected(tunnelId)).isTrue()
+        assertTrue(manager.isTunnelConnected(tunnelId))
     }
 
     @Test
@@ -79,7 +79,7 @@ class VpnConnectionManagerTest {
         
         // THEN: No exception is thrown (graceful handling)
         // Tunnel should not exist
-        assertThat(manager.isTunnelConnected("nonexistent")).isFalse()
+        assertFalse(manager.isTunnelConnected("nonexistent"))
     }
 
     @Test
@@ -87,13 +87,13 @@ class VpnConnectionManagerTest {
         // GIVEN: A connected tunnel
         val tunnelId = "test_tunnel"
         manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", null)
-        assertThat(manager.isTunnelConnected(tunnelId)).isTrue()
+        assertTrue(manager.isTunnelConnected(tunnelId))
         
         // WHEN: Closing the tunnel
         manager.closeTunnel(tunnelId)
         
         // THEN: Tunnel is removed
-        assertThat(manager.isTunnelConnected(tunnelId)).isFalse()
+        assertFalse(manager.isTunnelConnected(tunnelId))
     }
 
     @Test
@@ -106,8 +106,8 @@ class VpnConnectionManagerTest {
         manager.closeAll()
         
         // THEN: All tunnels are closed
-        assertThat(manager.isTunnelConnected("tunnel1")).isFalse()
-        assertThat(manager.isTunnelConnected("tunnel2")).isFalse()
+        assertFalse(manager.isTunnelConnected("tunnel1"))
+        assertFalse(manager.isTunnelConnected("tunnel2"))
     }
 
     @Test
@@ -152,8 +152,8 @@ class VpnConnectionManagerTest {
         mockClient.simulateReceivePacket(testPacket)
         
         // THEN: Callback is invoked
-        assertThat(receivedTunnelId).isEqualTo(tunnelId)
-        assertThat(receivedPacket).isEqualTo(testPacket)
+        assertEquals(tunnelId, receivedTunnelId)
+        assertEquals(testPacket, receivedPacket)
     }
 }
 
