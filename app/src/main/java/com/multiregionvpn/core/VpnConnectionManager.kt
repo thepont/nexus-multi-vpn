@@ -102,10 +102,44 @@ class VpnConnectionManager(
         return "openvpn"
     }
     
-    private fun createClient(tunnelId: String): OpenVpnClient {
+    private fun createClient(tunnelId: String, config: String): OpenVpnClient {
         // Use provided factory if available (for testing)
         if (clientFactory != null) {
             return clientFactory.invoke(tunnelId)
+        }
+        
+        // Detect protocol from config
+        val protocol = detectProtocol(config)
+        Log.i(TAG, "Creating client for tunnel $tunnelId with protocol: $protocol")
+        
+        // Create appropriate client based on protocol
+        if (protocol == "wireguard" && context != null && vpnService != null) {
+            Log.i(TAG, "✅ Creating WireGuardVpnClient for tunnel $tunnelId")
+            val client = WireGuardVpnClient(
+                context = context,
+                vpnService = vpnService,
+                tunnelId = tunnelId
+            )
+            
+            // Set up callbacks for WireGuard client
+            client.onConnectionStateChanged = { tid, isConnected ->
+                Log.d(TAG, "WireGuard tunnel $tid connection state: $isConnected")
+                if (isConnected) {
+                    onConnectionCompleted(tid)
+                }
+            }
+            
+            client.onTunnelIpReceived = { tid, ip, prefixLength ->
+                Log.d(TAG, "WireGuard tunnel $tid IP received: $ip/$prefixLength")
+                tunnelIpCallback?.invoke(tid, ip, prefixLength)
+            }
+            
+            client.onTunnelDnsReceived = { tid, dnsServers ->
+                Log.d(TAG, "WireGuard tunnel $tid DNS received: ${dnsServers.joinToString(", ")}")
+                tunnelDnsCallback?.invoke(tid, dnsServers)
+            }
+            
+            return client
         }
         
         // In production, use NativeOpenVpnClient (OpenVPN 3 C++)
@@ -576,17 +610,17 @@ class VpnConnectionManager(
             }
         }
         
-        Log.d(TAG, "Creating OpenVPN client for tunnel $tunnelId...")
+        Log.d(TAG, "Creating VPN client for tunnel $tunnelId...")
         val client = try {
-            createClient(tunnelId)
+            createClient(tunnelId, ovpnConfig)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to create OpenVPN client for tunnel $tunnelId", e)
+            Log.e(TAG, "❌ Failed to create VPN client for tunnel $tunnelId", e)
             val error = VpnError.fromException(e, tunnelId)
             Log.e(TAG, "Error type: ${error.type}, message: ${error.message}")
             return TunnelCreationResult(success = false, error = error)
         }
         
-        Log.d(TAG, "OpenVPN client created for tunnel $tunnelId")
+        Log.d(TAG, "VPN client created for tunnel $tunnelId")
         
         // Set packet receiver callback
         client.setPacketReceiver { packet ->
