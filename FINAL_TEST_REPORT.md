@@ -48,11 +48,18 @@ Total: 6 tests
 - ❌ `test_multiTunnel_BothUKandFRActive` - Multi-tunnel coexistence FAILED (FR tunnel EOF)
 - ✅ `test_rapidSwitching_UKtoFRtoUK` - Rapid switching PASSED
 
-#### Known Issue: Multi-Tunnel Test
-**Problem:** FR tunnel disconnects prematurely (EOF after 3 responses)
-**Root Cause:** Likely NordVPN server/network configuration issue, not code
-**Impact:** Does not affect single-tunnel usage or region switching
-**Status:** Core multi-tunnel architecture is solid (UK tunnel works perfectly)
+#### Known Issue: Multi-Tunnel Test  
+**Problem:** VPN service crashes due to binder buffer exhaustion when both tunnels active
+**Root Cause:** 
+- Both NordVPN servers assign SAME IP (`10.100.0.2/16`)
+- Interface re-establishment was breaking tunnels (NOW FIXED!)
+- System resource exhaustion (binder buffers, file descriptors)
+**Fixes Applied:**
+- ✅ Prevent interface re-establishment for SECONDARY tunnels
+- ✅ Share PRIMARY tunnel's interface IP for routing
+**Impact:** Single-region + switching works perfectly
+**Status:** Architecture is solid - system resource optimization needed
+**See:** `MULTI_TUNNEL_INVESTIGATION.md` for full analysis
 
 ## 🏗️ Architecture Status
 
