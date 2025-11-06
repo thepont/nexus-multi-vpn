@@ -332,9 +332,18 @@ public:
     
     // Get the app FD for packet I/O (call after connection established)
     int getAppFd() const {
+        __android_log_print(ANDROID_LOG_INFO, "OpenVPN-Wrapper",
+            "AndroidOpenVPNClient::getAppFd() - factoryCreated_=%d, customTunClientFactory_=%p",
+            factoryCreated_, (void*)customTunClientFactory_);
+        
         if (factoryCreated_ && customTunClientFactory_) {
-            return customTunClientFactory_->getAppFd();
+            int fd = customTunClientFactory_->getAppFd();
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-Wrapper",
+                "CustomTunClientFactory::getAppFd() returned: %d", fd);
+            return fd;
         }
+        __android_log_print(ANDROID_LOG_WARN, "OpenVPN-Wrapper",
+            "AndroidOpenVPNClient::getAppFd() - factory not ready!");
         return -1;
     }
     

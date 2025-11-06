@@ -5,9 +5,12 @@
 #include <openvpn/common/rc.hpp>
 #include <openvpn/buffer/buffer.hpp>
 #include <openvpn/io/io.hpp>
+#include <asio/posix/stream_descriptor.hpp>
 #include <android/log.h>
 #include <string>
 #include <sstream>
+#include <array>
+#include <memory>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -58,6 +61,7 @@ public:
           callback_(callback),
           app_fd_(-1),
           lib_fd_(-1),
+          stream_(nullptr),
           halt_(false),
           mtu_(1500) {
         
@@ -108,7 +112,7 @@ public:
         // Notify parent
         parent_.tun_pre_tun_config();
         parent_.tun_pre_route_config();
-        start_async_read();
+        start_async_read();  // CRITICAL: Start reading from lib_fd to feed packets to OpenVPN
         parent_.tun_connected();
         
         OPENVPN_LOG("CustomTunClient started for tunnel: " << tunnel_id_);
@@ -223,16 +227,82 @@ public:
 private:
     /**
      * Start async reading from lib_fd
-     * This reads packets that OpenVPN has decrypted and sends them to parent
+     * CRITICAL: This implements the OUTBOUND path (app → OpenVPN → server)
+     * We read packets from lib_fd and call parent_.tun_recv() to feed them into OpenVPN
      */
     void start_async_read() {
         if (halt_ || lib_fd_ < 0) {
             return;
         }
         
-        // For now, we'll let VpnConnectionManager handle the reading
-        // OpenVPN 3 will poll lib_fd and call tun_send() when data arrives
-        OPENVPN_LOG("Async read setup complete (VpnConnectionManager will read from app_fd)");
+        try {
+            // Create Asio stream descriptor to register lib_fd with OpenVPN's io_context
+            // This makes OpenVPN's event loop poll lib_fd for readability
+            stream_ = new openvpn_io::posix::stream_descriptor(io_context_, lib_fd_);
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                "✅ Registered lib_fd=%d with OpenVPN io_context - OUTBOUND path ready", lib_fd_);
+            
+            // Start async read loop
+            queue_read();
+        } catch (const std::exception& e) {
+            __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
+                "❌ Failed to register lib_fd with io_context: %s", e.what());
+        }
+    }
+    
+    /**
+     * Queue async read from lib_fd
+     * This is the OUTBOUND path: App writes to app_fd → we read from lib_fd → OpenVPN encrypts
+     */
+    void queue_read() {
+        if (halt_ || !stream_) {
+            return;
+        }
+        
+        // Use a simple byte buffer for reading, then copy to BufferAllocated
+        auto read_buf = std::make_shared<std::array<uint8_t, 2048>>();
+        
+        stream_->async_read_some(
+            openvpn_io::buffer(read_buf->data(), read_buf->size()),
+            [this, read_buf](const openvpn_io::error_code& error, std::size_t bytes_read) mutable {
+                handle_read(error, bytes_read, read_buf);
+            }
+        );
+    }
+    
+    /**
+     * Handle packet read from lib_fd
+     * Feed packet to OpenVPN for encryption and transmission
+     */
+    void handle_read(const openvpn_io::error_code& error, std::size_t bytes_read,
+                    std::shared_ptr<std::array<uint8_t, 2048>> read_buf) {
+        if (halt_) {
+            return;
+        }
+        
+        if (!error && bytes_read > 0) {
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                "📤 OUTBOUND: Read %zu bytes from lib_fd (from app) - feeding to OpenVPN", bytes_read);
+            
+            // Create BufferAllocated and copy data
+            BufferAllocated buf;
+            buf.write(read_buf->data(), bytes_read);
+            
+            // CRITICAL: Call parent_.tun_recv() to feed packet into OpenVPN's pipeline
+            // This is documented in TunClientParent interface (tunbase.hpp line 85)
+            parent_.tun_recv(buf);
+            
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                "✅ OUTBOUND: Fed %zu byte packet to OpenVPN for encryption", bytes_read);
+            
+            // Queue next read
+            queue_read();
+        } else {
+            if (error && error != openvpn_io::error::operation_aborted) {
+                __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
+                    "❌ OUTBOUND: Read error from lib_fd: %s", error.message().c_str());
+            }
+        }
     }
     
     /**
@@ -295,6 +365,17 @@ private:
      * Clean up resources
      */
     void cleanup() {
+        halt_ = true;
+        
+        // Cancel and delete stream
+        if (stream_) {
+            try {
+                stream_->cancel();
+                delete stream_;
+            } catch (...) {}
+            stream_ = nullptr;
+        }
+        
         if (app_fd_ >= 0) {
             close(app_fd_);
             app_fd_ = -1;
@@ -311,6 +392,7 @@ private:
     CustomTunCallback* callback_;  // Callback for IP/DNS notifications
     int app_fd_;      // Our application's FD
     int lib_fd_;      // OpenVPN 3's FD
+    openvpn_io::posix::stream_descriptor* stream_;  // Asio stream for async reading from lib_fd
     bool halt_;
     int mtu_;
     std::string vpn_ip4_;
@@ -363,9 +445,17 @@ public:
      * Get the app FD from the created TunClient
      */
     int getAppFd() const {
+        __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+            "CustomTunClientFactory::getAppFd() - tun_client_=%p", (void*)tun_client_);
+        
         if (tun_client_) {
-            return tun_client_->getAppFd();
+            int fd = tun_client_->getAppFd();
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                "CustomTunClient::getAppFd() returned: %d", fd);
+            return fd;
         }
+        __android_log_print(ANDROID_LOG_WARN, "OpenVPN-CustomTUN",
+            "CustomTunClientFactory::getAppFd() - tun_client_ is NULL!");
         return -1;
     }
     

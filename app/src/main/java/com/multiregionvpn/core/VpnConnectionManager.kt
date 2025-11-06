@@ -646,47 +646,8 @@ class VpnConnectionManager(
             // Connect (this starts async connection - returns true immediately if started successfully)
             connected = client.connect(ovpnConfig, authFilePath)
             
-            // CRITICAL FOR EXTERNAL TUN FACTORY:
-            // If this is OpenVPN with External TUN Factory enabled, the socketpair was created
-            // internally by CustomTunClient during connect(). We need to retrieve the app FD.
-            if (connected && client is com.multiregionvpn.core.vpnclient.NativeOpenVpnClient) {
-                try {
-                    val appFd = client.getAppFd(tunnelId)
-                    if (appFd >= 0) {
-                        Log.i(TAG, "═══════════════════════════════════════════════════════")
-                        Log.i(TAG, "✅ External TUN Factory: Got app FD for tunnel $tunnelId")
-                        Log.i(TAG, "   App FD: $appFd")
-                        Log.i(TAG, "   Socketpair created by CustomTunClient ✅")
-                        Log.i(TAG, "   OpenVPN 3 is actively polling lib_fd ✅")
-                        Log.i(TAG, "   Updating FD storage and starting pipe reader...")
-                        Log.i(TAG, "═══════════════════════════════════════════════════════")
-                        
-                        // Update stored FD (overwrite the one from createPipe if it exists)
-                        pipeWriteFds[tunnelId] = appFd
-                        
-                        // Create PFD from app FD (don't use dup, use the actual FD)
-                        // Close old PFD if it exists to avoid FD leak
-                        pipeWritePfds[tunnelId]?.close()
-                        pipeWritePfds[tunnelId] = android.os.ParcelFileDescriptor.fromFd(appFd)
-                        
-                        // Restart pipe reader with correct FD
-                        // Stop old reader if running
-                        pipeReaders[tunnelId]?.cancel()
-                        pipeReaders.remove(tunnelId)
-                        
-                        // Start new reader with app FD
-                        startPipeReader(tunnelId, appFd)
-                        
-                        Log.i(TAG, "✅ External TUN Factory setup complete for tunnel $tunnelId")
-                    } else {
-                        Log.w(TAG, "⚠️  External TUN Factory returned invalid app FD: $appFd")
-                        Log.w(TAG, "   Falling back to createPipe() FD if available")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Failed to get app FD from External TUN Factory", e)
-                    Log.w(TAG, "   Falling back to createPipe() FD if available")
-                }
-            }
+            // NOTE: getAppFd() will be called AFTER connection is fully established
+            // (see polling loop below where isConnected() becomes true)
             
             // CRITICAL: connect() returns true immediately if connection started successfully,
             // but the actual connection completes asynchronously. We should NOT call
@@ -807,6 +768,50 @@ class VpnConnectionManager(
                     if (isConnected) {
                         // Connection completed - notify listener and flush queued packets
                         Log.i(TAG, "✅✅✅ Tunnel $tunnelId connection completed (after $attempts seconds) ✅✅✅")
+                        
+                        // CRITICAL FOR EXTERNAL TUN FACTORY:
+                        // Now that connection is FULLY established, retrieve the app FD from the socketpair
+                        // that was created by CustomTunClient during tun_start().
+                        val currentClient = connections[tunnelId]
+                        if (currentClient is com.multiregionvpn.core.vpnclient.NativeOpenVpnClient) {
+                            try {
+                                val appFd = currentClient.getAppFd(tunnelId)
+                                if (appFd >= 0) {
+                                    Log.i(TAG, "═══════════════════════════════════════════════════════")
+                                    Log.i(TAG, "✅ External TUN Factory: Got app FD for tunnel $tunnelId")
+                                    Log.i(TAG, "   App FD: $appFd")
+                                    Log.i(TAG, "   Socketpair created by CustomTunClient ✅")
+                                    Log.i(TAG, "   OpenVPN 3 is actively polling lib_fd ✅")
+                                    Log.i(TAG, "   Updating FD storage and starting pipe reader...")
+                                    Log.i(TAG, "═══════════════════════════════════════════════════════")
+                                    
+                                    // Update stored FD (overwrite the one from createPipe if it exists)
+                                    pipeWriteFds[tunnelId] = appFd
+                                    
+                                    // Create PFD from app FD (don't use dup, use the actual FD)
+                                    // Close old PFD if it exists to avoid FD leak
+                                    pipeWritePfds[tunnelId]?.close()
+                                    pipeWritePfds[tunnelId] = android.os.ParcelFileDescriptor.fromFd(appFd)
+                                    
+                                    // Restart pipe reader with correct FD
+                                    // Stop old reader if running
+                                    pipeReaders[tunnelId]?.cancel()
+                                    pipeReaders.remove(tunnelId)
+                                    
+                                    // Start new reader with app FD
+                                    startPipeReader(tunnelId, appFd)
+                                    
+                                    Log.i(TAG, "✅ External TUN Factory setup complete for tunnel $tunnelId")
+                                } else {
+                                    Log.w(TAG, "⚠️  External TUN Factory returned invalid app FD: $appFd")
+                                    Log.w(TAG, "   Falling back to createPipe() FD if available")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ Failed to get app FD from External TUN Factory", e)
+                                Log.w(TAG, "   Falling back to createPipe() FD if available")
+                            }
+                        }
+                        
                         Log.i(TAG, "   Flushing queued packets and notifying state change...")
                         
                         // Flush any packets that were queued while tunnel was connecting
