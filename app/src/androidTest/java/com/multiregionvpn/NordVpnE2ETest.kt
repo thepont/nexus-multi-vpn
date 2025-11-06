@@ -298,6 +298,134 @@ class NordVpnE2ETest {
         println("✅ TEST PASSED: Traffic successfully routed to Direct Internet")
     }
 
+    @Test
+    fun test_switchRegions_UKtoFR() = runBlocking {
+        println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        println("🧪 TEST: Switch Regions (UK → FR)")
+        println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
+        // PHASE 1: Route to UK
+        println("\n📍 PHASE 1: Initial routing to UK")
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
+
+        startVpnEngine()
+        verifyTunnelReadyForRouting("nordvpn_UK", timeoutMs = 120000)
+        
+        val ukIpInfo = IpCheckService.api.getIpInfo()
+        println("📍 UK IP: ${ukIpInfo.normalizedIpAddress}, Country: ${ukIpInfo.normalizedCountryCode}")
+        assertEquals("GB", ukIpInfo.normalizedCountryCode)
+        println("✅ Phase 1 complete: Confirmed UK routing")
+        
+        // PHASE 2: Switch to FR
+        println("\n📍 PHASE 2: Switching to France")
+        settingsRepo.updateAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
+        println("✓ Updated app rule: $TEST_PACKAGE_NAME -> FR VPN")
+        
+        // Wait for routing to update
+        delay(5000)
+        verifyTunnelReadyForRouting("nordvpn_FR", timeoutMs = 120000)
+        
+        val frIpInfo = IpCheckService.api.getIpInfo()
+        println("📍 FR IP: ${frIpInfo.normalizedIpAddress}, Country: ${frIpInfo.normalizedCountryCode}")
+        assertEquals(
+            "❌ Failed to switch to France! Expected FR, got ${frIpInfo.normalizedCountryCode}",
+            "FR",
+            frIpInfo.normalizedCountryCode
+        )
+        println("✅ Phase 2 complete: Confirmed switch to France")
+        println("✅ TEST PASSED: Successfully switched regions UK → FR")
+    }
+
+    @Test
+    fun test_multiTunnel_BothUKandFRActive() = runBlocking {
+        println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        println("🧪 TEST: Multi-Tunnel Coexistence (UK + FR)")
+        println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
+        // GIVEN: Route our test package to UK (but FR tunnel should also be available)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
+
+        // WHEN: VPN service starts, it should establish BOTH tunnels
+        // (UK for our app, FR should also be ready for other apps)
+        startVpnEngine()
+        
+        // Verify both tunnels become ready
+        println("\n📍 Verifying UK tunnel (in use)...")
+        verifyTunnelReadyForRouting("nordvpn_UK", timeoutMs = 120000)
+        println("✅ UK tunnel ready")
+        
+        println("\n📍 Verifying FR tunnel (standby)...")
+        verifyTunnelReadyForRouting("nordvpn_FR", timeoutMs = 120000)
+        println("✅ FR tunnel ready")
+        
+        // THEN: Our traffic should route to UK (the configured tunnel)
+        val vpnIpInfo = IpCheckService.api.getIpInfo()
+        println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
+        println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
+        
+        assertEquals(
+            "❌ Traffic not routed to UK! Expected GB, got ${vpnIpInfo.normalizedCountryCode}",
+            "GB",
+            vpnIpInfo.normalizedCountryCode
+        )
+        
+        // Verify VpnConnectionManager reports both tunnels as connected
+        val connectionManager = VpnConnectionManager.getInstance()
+        val ukConnected = connectionManager.isTunnelConnected("nordvpn_UK")
+        val frConnected = connectionManager.isTunnelConnected("nordvpn_FR")
+        
+        assertTrue("❌ UK tunnel not connected!", ukConnected)
+        assertTrue("❌ FR tunnel not connected!", frConnected)
+        
+        println("✅ Both tunnels active and ready")
+        println("✅ TEST PASSED: Multi-tunnel architecture working (UK + FR coexist)")
+    }
+
+    @Test
+    fun test_rapidSwitching_UKtoFRtoUK() = runBlocking {
+        println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        println("🧪 TEST: Rapid Region Switching (UK → FR → UK)")
+        println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
+        // Start with UK
+        println("\n📍 Switch 1: UK")
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        startVpnEngine()
+        verifyTunnelReadyForRouting("nordvpn_UK", timeoutMs = 120000)
+        
+        val uk1IpInfo = IpCheckService.api.getIpInfo()
+        assertEquals("GB", uk1IpInfo.normalizedCountryCode)
+        println("✅ Confirmed UK (switch 1)")
+        
+        // Switch to FR
+        println("\n📍 Switch 2: FR")
+        settingsRepo.updateAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
+        delay(3000) // Brief delay for routing update
+        verifyTunnelReadyForRouting("nordvpn_FR", timeoutMs = 120000)
+        
+        val frIpInfo = IpCheckService.api.getIpInfo()
+        assertEquals("FR", frIpInfo.normalizedCountryCode)
+        println("✅ Confirmed FR (switch 2)")
+        
+        // Switch back to UK
+        println("\n📍 Switch 3: UK (again)")
+        settingsRepo.updateAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        delay(3000) // Brief delay for routing update
+        // UK tunnel should still be connected from before
+        
+        val uk2IpInfo = IpCheckService.api.getIpInfo()
+        assertEquals(
+            "❌ Failed to switch back to UK! Expected GB, got ${uk2IpInfo.normalizedCountryCode}",
+            "GB",
+            uk2IpInfo.normalizedCountryCode
+        )
+        println("✅ Confirmed UK (switch 3)")
+        
+        println("✅ TEST PASSED: Rapid switching handled correctly (UK → FR → UK)")
+    }
+
     // --- HELPER FUNCTIONS ---
 
     /**

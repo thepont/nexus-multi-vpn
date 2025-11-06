@@ -72,6 +72,11 @@ class SettingsRepository @Inject constructor(
         appRuleDao.save(AppRule(packageName = packageName, vpnConfigId = vpnConfigId))
     }
     
+    suspend fun updateAppRule(packageName: String, vpnConfigId: String) {
+        // Update or create the app rule with new VPN config
+        appRuleDao.save(AppRule(packageName = packageName, vpnConfigId = vpnConfigId))
+    }
+    
     // Test helper methods
     suspend fun clearAllAppRules() {
         appRuleDao.clearAll()
