@@ -343,12 +343,19 @@ class NordVpnE2ETest {
         println("🧪 TEST: Multi-Tunnel Coexistence (UK + FR)")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        // GIVEN: Route our test package to UK (but FR tunnel should also be available)
+        // GIVEN: Create app rules for BOTH regions to force both tunnels to establish
+        // This is necessary because VpnEngineService only creates tunnels for VPN configs with app rules
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
+        
+        // Create a dummy app rule for FR to force FR tunnel creation
+        // (In a real scenario, a different app would have the FR rule)
+        settingsRepo.createAppRule("com.dummy.app.france", FR_VPN_ID)
+        println("✓ Created dummy app rule: com.dummy.app.france -> FR VPN")
+        println("   (This forces VpnEngineService to create FR tunnel even though we won't route to it)")
 
         // WHEN: VPN service starts, it should establish BOTH tunnels
-        // (UK for our app, FR should also be ready for other apps)
+        // (UK for our test app, FR for the dummy app - both tunnels coexist)
         startVpnEngine()
         
         // Verify both tunnels become ready
