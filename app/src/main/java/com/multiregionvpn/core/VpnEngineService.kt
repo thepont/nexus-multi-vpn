@@ -1008,11 +1008,23 @@ class VpnEngineService : VpnService() {
         
         Log.d(TAG, "✅ Stored DNS servers for tunnel $tunnelId: ${dnsServers.joinToString(", ")}")
         
+        // CRITICAL: Check if this is a PRIMARY or SECONDARY tunnel
+        // Only re-establish interface for PRIMARY tunnels to avoid closing connections
+        val tunnelIp = tunnelIps[tunnelId]
+        val isPrimaryTunnel = if (tunnelIp != null) {
+            val primaryForSubnet = subnetToPrimaryTunnel[tunnelIp.subnet]
+            primaryForSubnet == tunnelId
+        } else {
+            // If we don't have IP info yet, assume it's primary (will be checked again when IP arrives)
+            true
+        }
+        
         // Schedule interface re-establishment if interface is already established
         // This will update the interface with the correct DNS servers
-        if (vpnInterface != null) {
+        if (vpnInterface != null && isPrimaryTunnel) {
             Log.i(TAG, "═══════════════════════════════════════════════════════")
-            Log.i(TAG, "📥 VPN interface already established - re-establishing with DNS servers")
+            Log.i(TAG, "📥 VPN interface already established - re-establishing with DNS servers from PRIMARY tunnel")
+            Log.i(TAG, "   Tunnel: $tunnelId (PRIMARY)")
             Log.i(TAG, "   DNS servers: ${dnsServers.joinToString(", ")}")
             Log.i(TAG, "   This will update DNS configuration on VPN interface")
             Log.i(TAG, "═══════════════════════════════════════════════════════")
@@ -1038,6 +1050,9 @@ class VpnEngineService : VpnService() {
                     }
                 }
             }
+        } else if (vpnInterface != null && !isPrimaryTunnel) {
+            Log.w(TAG, "   Skipping interface re-establishment for SECONDARY tunnel $tunnelId (would break PRIMARY tunnel)")
+            Log.w(TAG, "   DNS servers stored but interface not updated (will use PRIMARY tunnel's DNS)")
         } else {
             Log.d(TAG, "VPN interface not yet established - DNS servers will be used when interface is created")
         }
@@ -1100,17 +1115,22 @@ class VpnEngineService : VpnService() {
         // Determine primary tunnel for this subnet (first-come-first-served)
         val primaryTunnel = subnetToPrimaryTunnel.computeIfAbsent(subnet) { tunnelId }
         
-        if (primaryTunnel == tunnelId) {
+        val isPrimaryTunnel = primaryTunnel == tunnelId
+        
+        if (isPrimaryTunnel) {
             Log.d(TAG, "✅ Tunnel $tunnelId is PRIMARY for subnet $subnet (IP: $ip)")
         } else {
             Log.w(TAG, "⚠️  Tunnel $tunnelId is SECONDARY for subnet $subnet (primary: $primaryTunnel)")
             Log.w(TAG, "   Using primary tunnel's IP on interface, but routing via ConnectionTracker")
+            Log.w(TAG, "   ⚠️  IMPORTANT: NOT re-establishing interface to avoid breaking existing tunnels!")
         }
         
-        // Schedule interface re-establishment if interface is already established
-        // This will update the interface with the new IP address
-        if (vpnInterface != null) {
-            Log.d(TAG, "VPN interface already established - scheduling re-establishment with new IP")
+        // CRITICAL FIX: Only re-establish interface for PRIMARY tunnels!
+        // Re-establishing the interface closes existing connections, which breaks secondary tunnels.
+        // Secondary tunnels with the same subnet/IP can still route packets via ConnectionTracker.
+        // This is necessary when multiple VPN servers assign the same IP address (e.g., NordVPN).
+        if (vpnInterface != null && isPrimaryTunnel) {
+            Log.d(TAG, "VPN interface already established - scheduling re-establishment with primary IP")
             shouldReestablishInterface = true
             
             // Re-establish interface in background to avoid blocking
@@ -1121,6 +1141,9 @@ class VpnEngineService : VpnService() {
                     shouldReestablishInterface = false
                 }
             }
+        } else if (vpnInterface != null && !isPrimaryTunnel) {
+            Log.w(TAG, "   Skipping interface re-establishment for SECONDARY tunnel (would break PRIMARY tunnel)")
+            Log.w(TAG, "   Both tunnels will share the interface IP, routing handled by ConnectionTracker")
         } else {
             Log.d(TAG, "VPN interface not yet established - IP will be used when interface is created")
         }
