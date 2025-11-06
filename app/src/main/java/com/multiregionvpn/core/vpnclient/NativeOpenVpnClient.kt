@@ -90,7 +90,8 @@ class NativeOpenVpnClient(
         password: String,
         vpnBuilder: android.net.VpnService.Builder?,  // Pass VpnService.Builder for TunBuilderBase
         tunFd: Int,  // File descriptor of already-established TUN interface
-        vpnService: android.net.VpnService  // Pass VpnService instance for protect() calls
+        vpnService: android.net.VpnService,  // Pass VpnService instance for protect() calls
+        tunnelId: String  // Tunnel ID for External TUN Factory (must be set BEFORE connect)
     ): Long // Returns session handle (0 = error)
 
     @JvmName("nativeDisconnect")
@@ -220,9 +221,15 @@ class NativeOpenVpnClient(
                 // OpenVPN 3 will use TunBuilderBase methods we override
                 val builder: android.net.VpnService.Builder? = null
                 
-                // Call native connect with VpnService.Builder, TUN FD, and VpnService instance
+                // CRITICAL: Pass tunnel ID to nativeConnect
+                // This ensures the tunnel ID is set BEFORE OpenVPN calls new_tun_factory()
+                // which happens DURING the connect() call in the background thread
+                val tunnelIdForConnect = tunnelId ?: ""
+                Log.d(TAG, "Calling nativeConnect with tunnelId: $tunnelIdForConnect")
+                
+                // Call native connect with VpnService.Builder, TUN FD, VpnService, and tunnel ID
                 val handle = try {
-                    nativeConnect(ovpnConfig, username, password, builder, finalTunFd, vpnService)
+                    nativeConnect(ovpnConfig, username, password, builder, finalTunFd, vpnService, tunnelIdForConnect)
                 } catch (e: UnsatisfiedLinkError) {
                     Log.e(TAG, "❌ UnsatisfiedLinkError - native library not loaded properly", e)
                     lastError = "Native library not loaded: ${e.message}"
@@ -272,13 +279,12 @@ class NativeOpenVpnClient(
 
                 sessionHandle.set(handle)
                 
-                // Set tunnel ID and callbacks if provided
-                // This must be done AFTER nativeConnect() succeeds (session is created)
-                // but BEFORE connection completes (so we can receive IP address and DNS)
+                // Set tunnel ID and callbacks AGAIN (they should already be set during connect)
+                // This ensures callbacks are registered even if set during connect failed
                 if (tunnelId != null && ipCallback != null) {
                     try {
                         nativeSetTunnelIdAndCallback(handle, tunnelId, ipCallback, dnsCallback)
-                        Log.d(TAG, "✅ Tunnel ID and callbacks set: tunnelId=$tunnelId")
+                        Log.d(TAG, "✅ Tunnel ID and callbacks confirmed: tunnelId=$tunnelId")
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to set tunnel ID and callbacks: ${e.message}")
                         // Continue anyway - connection can still work without callbacks

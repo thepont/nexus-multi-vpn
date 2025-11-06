@@ -34,7 +34,7 @@ extern "C" {
     Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
             JNIEnv *env, jobject thiz,
             jstring config, jstring username, jstring password,
-            jobject vpnBuilder, jint tunFd, jobject vpnService);
+            jobject vpnBuilder, jint tunFd, jobject vpnService, jstring tunnelId);
     
     JNIEXPORT void JNICALL
     Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeDisconnect(
@@ -86,7 +86,7 @@ JNIEXPORT jlong JNICALL
 Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
         JNIEnv *env, jobject thiz,
         jstring config, jstring username, jstring password,
-        jobject vpnBuilder, jint tunFd, jobject vpnService) {
+        jobject vpnBuilder, jint tunFd, jobject vpnService, jstring tunnelId) {
     
     LOGI("nativeConnect called - Using OpenVPN 3 ClientAPI service");
     LOGI("TUN file descriptor: %d", tunFd);
@@ -97,13 +97,22 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
     const char *configStr = env->GetStringUTFChars(config, nullptr);
     const char *usernameStr = env->GetStringUTFChars(username, nullptr);
     const char *passwordStr = env->GetStringUTFChars(password, nullptr);
+    const char *tunnelIdStr = tunnelId ? env->GetStringUTFChars(tunnelId, nullptr) : nullptr;
     
     if (!configStr || !usernameStr || !passwordStr) {
         LOGE("Failed to get string parameters");
         if (configStr) env->ReleaseStringUTFChars(config, configStr);
         if (usernameStr) env->ReleaseStringUTFChars(username, usernameStr);
         if (passwordStr) env->ReleaseStringUTFChars(password, passwordStr);
+        if (tunnelIdStr && tunnelId) env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
         return 0;
+    }
+    
+    // Log tunnel ID
+    if (tunnelIdStr) {
+        LOGI("Tunnel ID: %s", tunnelIdStr);
+    } else {
+        LOGI("Tunnel ID: (not provided)");
     }
     
     // Verify UTF-8 encoding and log credential info (without logging actual password)
@@ -123,14 +132,20 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
         env->ReleaseStringUTFChars(config, configStr);
         env->ReleaseStringUTFChars(username, usernameStr);
         env->ReleaseStringUTFChars(password, passwordStr);
+        if (tunnelIdStr && tunnelId) env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
         return 0;
     }
     
     // Set Android-specific parameters (VpnService.Builder, TUN FD, and VpnService instance)
     openvpn_wrapper_set_android_params(session, env, vpnBuilder, tunFd, vpnService);
     
-    // Note: Tunnel ID and callback should be set before connect() via separate JNI call
-    // This allows VpnEngineService to set up the callback before connection starts
+    // CRITICAL: Set tunnel ID BEFORE connect() is called
+    // This ensures AndroidOpenVPNClient has the tunnel ID when new_tun_factory() is called
+    // during the connection process in the background thread
+    if (tunnelIdStr) {
+        openvpn_wrapper_set_tunnel_id_and_callback(session, env, tunnelIdStr, nullptr, nullptr);
+        LOGI("✅ Tunnel ID set BEFORE connect: %s", tunnelIdStr);
+    }
     
     // Connect using wrapper
     int result = openvpn_wrapper_connect(session, configStr, usernameStr, passwordStr);
@@ -139,6 +154,7 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
     env->ReleaseStringUTFChars(config, configStr);
     env->ReleaseStringUTFChars(username, usernameStr);
     env->ReleaseStringUTFChars(password, passwordStr);
+    if (tunnelIdStr && tunnelId) env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
     
     if (result != 0) {
         const char* errorMsg = openvpn_wrapper_get_last_error(session);
