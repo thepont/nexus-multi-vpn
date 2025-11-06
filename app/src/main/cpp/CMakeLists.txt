@@ -695,6 +695,14 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
         # Define that OpenVPN 3 is available (only if we successfully set it up)
         if(CAN_BUILD_OPENVPN3)
             add_compile_definitions(OPENVPN3_AVAILABLE)
+            
+            # CRITICAL: Enable External TUN Factory mode for OpenVPN 3
+            # This tells OpenVPN 3 to use our custom TUN implementation instead of TunBuilderBase
+            # With this flag, OpenVPN 3 will actively poll our socketpair FD in its event loop
+            add_compile_definitions(OPENVPN_EXTERNAL_TUN_FACTORY)
+            message(STATUS "✅ OpenVPN 3 External TUN Factory mode ENABLED")
+            message(STATUS "   OpenVPN 3 will use custom TUN implementation")
+            message(STATUS "   Event loop will actively poll our socketpair FD")
         endif()
     endif()  # ENABLE_OPENVPN3 (inner check at line 141)
     
