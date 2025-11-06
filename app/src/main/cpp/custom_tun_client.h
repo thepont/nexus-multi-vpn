@@ -139,7 +139,14 @@ public:
      * @return true if send succeeded
      */
     virtual bool tun_send(BufferAllocated& buf) override {
+        // CRITICAL LOGGING: Log EVERY call to tun_send to verify OpenVPN is calling it
+        __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN", 
+            "🔔🔔🔔 tun_send() CALLED! tunnel=%s, packet_size=%zu bytes, halt=%d, lib_fd=%d", 
+            tunnel_id_.c_str(), buf.size(), halt_, lib_fd_);
+        
         if (halt_ || lib_fd_ < 0) {
+            __android_log_print(ANDROID_LOG_WARN, "OpenVPN-CustomTUN",
+                "❌ tun_send: Cannot send - halt=%d, lib_fd=%d", halt_, lib_fd_);
             return false;
         }
         
@@ -150,19 +157,24 @@ public:
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // Would block - queue for later (or drop)
-                OPENVPN_LOG("tun_send: Would block, dropping packet");
+                __android_log_print(ANDROID_LOG_WARN, "OpenVPN-CustomTUN",
+                    "⚠️  tun_send: Would block, dropping packet");
                 return false;
             }
-            OPENVPN_LOG("❌ tun_send: write error: " << strerror(errno));
+            __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
+                "❌ tun_send: write error: %s (errno=%d)", strerror(errno), errno);
             return false;
         }
         
         if (static_cast<size_t>(n) != buf.size()) {
-            OPENVPN_LOG("⚠️  tun_send: partial write (" << n << "/" << buf.size() << " bytes)");
+            __android_log_print(ANDROID_LOG_WARN, "OpenVPN-CustomTUN",
+                "⚠️  tun_send: partial write (%zd/%zu bytes)", n, buf.size());
             return false;
         }
         
         // Successfully wrote packet
+        __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+            "✅ tun_send: Successfully wrote %zu bytes to lib_fd=%d", buf.size(), lib_fd_);
         return true;
     }
     
