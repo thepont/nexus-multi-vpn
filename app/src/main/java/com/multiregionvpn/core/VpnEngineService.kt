@@ -561,6 +561,14 @@ class VpnEngineService : VpnService() {
         
         builder.setMtu(1500)
         
+        // CRITICAL: Set underlying networks to null to ensure Android DNS resolver uses VPN
+        // Without this, Android's DNS resolver may bypass the VPN and use system DNS directly
+        // This is especially important for API level 22+ (Lollipop MR1+)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1) {
+            builder.setUnderlyingNetworks(null)
+            Log.d(TAG, "✅ setUnderlyingNetworks(null) - DNS will use VPN interface only")
+        }
+        
         // Check VPN permission before establishing interface
         Log.d(TAG, "Checking VPN permission with VpnService.prepare()...")
         val prepareIntent = VpnService.prepare(this)
