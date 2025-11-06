@@ -6,11 +6,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.multiregionvpn.core.VpnEngineService
+import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
-import dagger.hilt.android.testing.HiltAndroidRule
-import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -18,20 +17,18 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.After
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.TimeUnit
-import javax.inject.Inject
 
 /**
  * Full E2E test for WireGuard multi-tunnel routing using ONLY Docker servers.
  * 
  * Test Flow:
  * 1. Set up VPN configs for UK and FR (Docker WireGuard servers)
- * 2. Create app rules (route Chrome -> UK, Settings -> FR)
+ * 2. Create app rules (route test apps -> UK/FR)
  * 3. Start VPN service and establish tunnels
- * 4. Make HTTP requests
+ * 4. Make HTTP requests from test apps
  * 5. Verify correct Docker web server responds
  * 
  * Docker Setup Required:
@@ -41,16 +38,13 @@ import javax.inject.Inject
  * - FR Web: 172.25.0.21 (returns {"country": "France"})
  * 
  * Run: cd docker-wireguard-test && ./setup.sh
+ * 
+ * NOTE: No Hilt - uses manual Room database initialization
  */
-@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class WireGuardMultiTunnelE2ETest {
     
-    @get:Rule
-    var hiltRule = HiltAndroidRule(this)
-    
-    @Inject
-    lateinit var settingsRepository: SettingsRepository
+    private lateinit var settingsRepository: SettingsRepository
     
     private lateinit var context: Context
     
@@ -85,8 +79,16 @@ AllowedIPs = 0.0.0.0/0
     
     @Before
     fun setup() {
-        hiltRule.inject()
         context = ApplicationProvider.getApplicationContext()
+        
+        // Manually initialize Room database (no Hilt)
+        val database = AppDatabase.getDatabase(context)
+        settingsRepository = SettingsRepository(
+            vpnConfigDao = database.vpnConfigDao(),
+            appRuleDao = database.appRuleDao(),
+            providerCredentialsDao = database.providerCredentialsDao(),
+            presetRuleDao = database.presetRuleDao()
+        )
         
         println("🧹 Cleaning up before test...")
         // Clean database
