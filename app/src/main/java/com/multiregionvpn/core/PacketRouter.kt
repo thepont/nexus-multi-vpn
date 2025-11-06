@@ -28,21 +28,19 @@ class PacketRouter(
     
     fun routePacket(packet: ByteArray) {
         try {
-            // Log packet details for debugging
-            if (packet.size > 0) {
-                val firstByte = packet[0].toInt() and 0xFF
-                val version = (firstByte shr 4) and 0x0F
-                Log.d(TAG, "📦 Received packet: size=${packet.size}, firstByte=0x${firstByte.toString(16)}, version=$version")
-            }
+            // PERFORMANCE: Removed per-packet logging to prevent binder exhaustion
+            // (was logging 100+ times per second, flooding binder buffer)
+            // Only log errors and important routing events
             
             // Parse packet to get 5-tuple
             val packetInfo = parsePacket(packet)
             if (packetInfo == null) {
-                Log.w(TAG, "❌ Packet parse failed - size=${packet.size}, first bytes: ${packet.take(20).joinToString(" ") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }}")
+                // Only log parse failures occasionally to avoid spam
+                if (Math.random() < 0.01) {  // 1% sample rate
+                    Log.w(TAG, "❌ Packet parse failed - size=${packet.size}")
+                }
                 return
             }
-            
-            Log.d(TAG, "✅ Parsed packet: ${packetInfo.srcIp}:${packetInfo.srcPort} → ${packetInfo.destIp}:${packetInfo.destPort}, protocol=${packetInfo.protocol}")
             
             // ARCHITECTURE NOTE: With SOCK_SEQPACKET socketpair architecture:
             // - Outbound packets (app → internet): Read from TUN → route here → write to socket pair → OpenVPN 3
@@ -177,7 +175,7 @@ class PacketRouter(
             // If we have a tunnel ID, route directly to it
             if (tunnelId != null) {
                 vpnConnectionManager.sendPacketToTunnel(tunnelId, packet)
-                Log.v(TAG, "Routed packet from UID $uid to tunnel $tunnelId (via connection tracker)")
+                // PERFORMANCE: Removed per-packet verbose logging
                 return
             }
             

@@ -136,11 +136,11 @@ class VpnEngineService : VpnService() {
                 
                 vpnOutput?.write(packet)
                 vpnOutput?.flush()
+                // PERFORMANCE: Removed per-packet logging to prevent binder exhaustion
                 if (isDnsResponse) {
-                    Log.d(TAG, "✅ DNS response written to TUN interface")
-                } else {
-                    Log.v(TAG, "Received ${packet.size} bytes from tunnel $tunnelId, wrote to TUN")
+                    Log.d(TAG, "📥 DNS response received from tunnel $tunnelId (${packet.size} bytes)")
                 }
+                // Removed verbose logging for non-DNS packets to prevent binder flood
             } catch (e: Exception) {
                 Log.e(TAG, "Error writing packet from tunnel $tunnelId to TUN", e)
             }

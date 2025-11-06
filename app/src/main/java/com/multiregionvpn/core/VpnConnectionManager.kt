@@ -38,8 +38,8 @@ class VpnConnectionManager(
     private var connectionStateListener: ((Boolean) -> Unit)? = null  // true = has connecting connections, false = all connected or none connecting
     // Socketpair file descriptors (SOCK_SEQPACKET for packet-oriented TUN emulation)
     private val pipeWriteFds = ConcurrentHashMap<String, Int>()  // tunnelId -> socketpair Kotlin-side FD for writing packets
-    private val pipeWritePfds = ConcurrentHashMap<String, android.os.ParcelFileDescriptor>()  // tunnelId -> PFD for Kotlin FD (keep open)
-    private val pipeReadPfds = ConcurrentHashMap<String, android.os.ParcelFileDescriptor>()  // tunnelId -> PFD for read FD (keep open)
+    private val pipeWritePfds = ConcurrentHashMap<String, android.os.ParcelFileDescriptor>()  // tunnelId -> PFD for Kotlin FD (keep open, used for both read and write)
+    // REMOVED pipeReadPfds - was creating duplicate PFD from same FD, causing double-close and FD leaks
     private val pipeWriters = ConcurrentHashMap<String, java.io.FileOutputStream>()  // tunnelId -> socket writer (for sending to OpenVPN)
     private val pipeReaders = ConcurrentHashMap<String, kotlinx.coroutines.Job>()  // tunnelId -> socket reader coroutine job (for receiving from OpenVPN)
     private val pipeReaderScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
@@ -129,9 +129,12 @@ class VpnConnectionManager(
                                 Log.d(TAG, "   Kotlin FD: $kotlinFd (bidirectional)")
                                 
                                 // Store pipe FDs and PFDs (keep PFDs open)
+                                // CRITICAL FIX: Only create ONE PFD per FD to avoid double-close issues
                                 pipeWriteFds[tunnelId] = kotlinFd
-                                pipeWritePfds[tunnelId] = android.os.ParcelFileDescriptor.fromFd(kotlinFd)
-                                pipeReadPfds[tunnelId] = android.os.ParcelFileDescriptor.fromFd(kotlinFd)  // Same FD for bidirectional
+                                val pfd = android.os.ParcelFileDescriptor.fromFd(kotlinFd)
+                                pipeWritePfds[tunnelId] = pfd
+                                // Don't create a second PFD from same FD - reuse the same PFD for read/write
+                                // pipeReadPfds[tunnelId] = pfd  // REMOVED - was causing double-close
                                 
                                 // Start pipe reader coroutine to read response packets from OpenVPN 3
                                 // OpenVPN 3 writes responses to socket pair, we read them and forward to TUN
@@ -264,10 +267,9 @@ class VpnConnectionManager(
                                 throw IllegalStateException("PFD not found for tunnel $tunnelId")
                             }
                         }
-                        Log.d(TAG, "📤 Writing ${packet.size} bytes to socket pair for tunnel $tunnelId")
+                        // PERFORMANCE: Removed per-packet logging to prevent binder exhaustion
                         writer.write(packet)
                         writer.flush()
-                        Log.d(TAG, "   ✅ Successfully wrote packet to socket pair (tunnel $tunnelId)")
                     } else {
                         // Fallback to old method if no socket pair
                         Log.w(TAG, "⚠️  No socket pair FD for tunnel $tunnelId - using fallback sendPacket()")
@@ -367,7 +369,8 @@ class VpnConnectionManager(
                 Log.d(TAG, "Starting pipe reader for tunnel $tunnelId (FD: $readFd)")
                 
                 // Get PFD from stored map (keeps FD open)
-                val pfd = pipeReadPfds[tunnelId]
+                // FIXED: Use pipeWritePfds since we only create one PFD per FD now
+                val pfd = pipeWritePfds[tunnelId]
                     ?: throw IllegalStateException("PFD not found for tunnel $tunnelId")
                 val reader = java.io.FileInputStream(pfd.fileDescriptor)
                 
@@ -430,12 +433,13 @@ class VpnConnectionManager(
         pipeReaders.remove(tunnelId)
         pipeWriters[tunnelId]?.close()
         pipeWriters.remove(tunnelId)
+        
+        // CRITICAL FIX: Only close PFD once (we removed the duplicate pipeReadPfds)
         pipeWritePfds[tunnelId]?.close()
-        pipeReadPfds[tunnelId]?.close()
         pipeWritePfds.remove(tunnelId)
-        pipeReadPfds.remove(tunnelId)
         pipeWriteFds.remove(tunnelId)
-        Log.d(TAG, "Stopped pipe reader and writer for tunnel $tunnelId")
+        
+        Log.d(TAG, "Stopped pipe reader and writer for tunnel $tunnelId (FD properly closed once)")
     }
     
     /**
