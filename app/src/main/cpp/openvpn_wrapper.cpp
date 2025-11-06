@@ -37,6 +37,13 @@
 #include <openvpn/client/dns_options.hpp>  // For DnsOptions
 using namespace openvpn::ClientAPI;
 
+// CRITICAL: Include External TUN Factory for proper custom TUN implementation
+#ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+#include "external_tun_factory.h"
+#include "custom_tun_client.h"
+// External TUN mode enabled - OpenVPN 3 will actively poll our socketpair FD
+#endif
+
 // OpenVPN 3 ClientAPI is now included and ready to use
 
 #include <thread>
@@ -650,6 +657,11 @@ struct OpenVpnSession {
     jobject dnsCallback;  // Global reference to Kotlin DNS callback object
     JavaVM* javaVM;  // For calling callback from any thread
     
+    #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+    // External TUN Factory for proper custom TUN implementation
+    openvpn::CustomExternalTunFactory::Ptr tunFactory;
+    #endif
+    
     OpenVpnSession() : connected(false), connecting(false), androidClient(nullptr), client(nullptr), should_stop(false), ipAddressCallback(nullptr), dnsCallback(nullptr), javaVM(nullptr) {
         // atomic<bool> is initialized with false above
         // Initialize Android-specific OpenVPN 3 Client - This implements all required virtual methods
@@ -658,6 +670,14 @@ struct OpenVpnSession {
         if (!client || !androidClient) {
             throw std::runtime_error("Failed to create Android OpenVPN 3 client");
         }
+        
+        #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+        // Create External TUN Factory for this tunnel
+        // NOTE: tunnelId will be set later via openvpn_wrapper_set_tunnel_id_and_callback()
+        // For now, create with empty string (will be updated before connect)
+        tunFactory = new openvpn::CustomExternalTunFactory("");
+        LOGI("Created CustomExternalTunFactory (tunnelId will be set before connect)");
+        #endif
     }
     
     ~OpenVpnSession() {
@@ -779,6 +799,14 @@ void openvpn_wrapper_set_tunnel_id_and_callback(OpenVpnSession* session,
     if (tunnelId) {
         session->tunnelId = std::string(tunnelId);
         LOGI("Tunnel ID set: %s", tunnelId);
+        
+        #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+        // Recreate External TUN Factory with correct tunnelId
+        // The factory was created with empty string in constructor, now update it
+        session->tunFactory = new openvpn::CustomExternalTunFactory(tunnelId);
+        LOGI("✅ Created CustomExternalTunFactory for tunnel: %s", tunnelId);
+        LOGI("   OpenVPN 3 will use this factory for TUN creation");
+        #endif
     }
     
     // Store JavaVM for callback
@@ -1048,22 +1076,32 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         session->config.compressionMode = "asym";
         LOGI("Set compressionMode = 'asym' to accept server-pushed LZO_STUB without compressing uplink");
         
-        // CRITICAL: Set the TunBuilderBase instance before eval_config()
-        // OpenVPN 3 needs this to call tun_builder_new() and other TUN setup methods
-        // Without this, TUN_SETUP_FAILED: tun_builder_new failed will occur
-        // The builder is passed via Options struct which is used in connect_setup()
-        // We need to set it in the Options that will be used when creating ClientOptions
-        // This is done via the Options struct passed to eval_config() or connect()
-        // However, Options is internal. Instead, OpenVPNClient inherits from TunBuilderBase,
-        // and the client instance itself IS the builder. We just need to ensure it's passed correctly.
-        // Actually, looking at the code, Config doesn't have a builder field - it's in Options
-        // which is created internally. The OpenVPNClient instance itself should be used as the builder.
-        // But since OpenVPNClient inherits from TunBuilderBase, and we're using it as the client,
-        // OpenVPN 3 should automatically use it. Let me check if there's another way...
-        // Actually, from cliopt.hpp line 393: tunconf->builder = config.builder;
-        // So the builder comes from config.builder, which means it's in Options, not Config.
-        // But Config doesn't expose Options. We need to check how to set it.
-        LOGI("Note: TunBuilderBase should be set, checking if OpenVPNClient instance is used as builder");
+        #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+        // CRITICAL: Set External TUN Factory before eval_config()
+        // With OPENVPN_EXTERNAL_TUN_FACTORY enabled, OpenVPN 3 Core will use our custom TUN implementation
+        // The factory creates CustomTunClient which creates socketpair and provides FD for OpenVPN to poll
+        // This is the CORRECT way to do custom TUN - OpenVPN will actively poll our FD!
+        if (!session->tunFactory) {
+            LOGE("❌ CRITICAL: External TUN Factory not initialized!");
+            LOGE("   This should have been created in openvpn_wrapper_set_tunnel_id_and_callback()");
+            session->last_error = "External TUN Factory not initialized";
+            return OPENVPN_ERROR_INTERNAL;
+        }
+        
+        session->config.extern_tun_factory = session->tunFactory.get();
+        LOGI("═══════════════════════════════════════════════════════");
+        LOGI("✅ External TUN Factory set on config:");
+        LOGI("   Factory pointer: %p", session->config.extern_tun_factory);
+        LOGI("   Tunnel ID: %s", session->tunnelId.c_str());
+        LOGI("   OpenVPN 3 will call factory->new_tun_factory()");
+        LOGI("   CustomTunClient will create socketpair");
+        LOGI("   OpenVPN 3 event loop will ACTIVELY poll lib_fd ✅✅✅");
+        LOGI("═══════════════════════════════════════════════════════");
+        #else
+        // TunBuilderBase mode (old approach - may have DNS issues with multi-tunnel)
+        LOGI("Note: Using TunBuilderBase mode (OpenVPNClient inherits from TunBuilderBase)");
+        LOGI("      For multi-tunnel support, consider enabling OPENVPN_EXTERNAL_TUN_FACTORY");
+        #endif
         
         // CRITICAL: Set autologinSessions = false to prevent creds_locked from being set
         // When autologin_sessions is true, ClientOptions constructor sets creds_locked = true,
