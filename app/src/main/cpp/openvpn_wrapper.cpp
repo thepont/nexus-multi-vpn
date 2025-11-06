@@ -67,6 +67,11 @@ public:
     
     virtual ~AndroidOpenVPNClient() {
         // Cleanup will be done by OpenVPNClient destructor
+        // OpenVPN 3 owns and deletes the factory - we just null our pointer
+#ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+        customTunClientFactory_ = nullptr;
+        factoryCreated_ = false;
+#endif
         LOGI("AndroidOpenVPNClient destroyed");
     }
     
@@ -194,21 +199,12 @@ public:
     // OpenVPNClient already inherits from ExternalTun::Factory
     virtual openvpn::TunClientFactory* new_tun_factory(const openvpn::ExternalTun::Config& conf, 
                                                         const openvpn::OptionList& opt) override {
-        LOGI("═══════════════════════════════════════════════════════");
-        LOGI("AndroidOpenVPNClient::new_tun_factory() called");
-        LOGI("   Tunnel ID: %s", tunnelId_.c_str());
-        LOGI("═══════════════════════════════════════════════════════");
+        LOGI("AndroidOpenVPNClient::new_tun_factory() for tunnel: %s", tunnelId_.c_str());
         
         // Create CustomTunClientFactory 
         // OpenVPN 3 takes ownership and will delete it - we just keep a non-owning pointer
         customTunClientFactory_ = new openvpn::CustomTunClientFactory(tunnelId_);
         factoryCreated_ = true;
-        
-        LOGI("✅ CustomTunClientFactory created successfully");
-        LOGI("   Factory will create CustomTunClient with socketpair");
-        LOGI("   OpenVPN 3 will poll the socketpair for packet I/O");
-        LOGI("   OpenVPN 3 owns factory (will delete it)");
-        LOGI("═══════════════════════════════════════════════════════");
         
         return customTunClientFactory_;
     }
@@ -1131,30 +1127,13 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         LOGI("Set compressionMode = 'asym' to accept server-pushed LZO_STUB without compressing uplink");
         
         #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
-        // CRITICAL: External TUN Factory setup
-        // AndroidOpenVPNClient (via OpenVPNClient) inherits from ExternalTun::Factory
-        // We override new_tun_factory() which OpenVPN 3 will call automatically during connection
-        // Our override creates CustomTunClientFactory → CustomTunClient → socketpair
-        // OpenVPN 3 event loop will ACTIVELY poll the socketpair's lib_fd ✅
+        // External TUN Factory setup
         if (!session->androidClient) {
-            LOGE("❌ CRITICAL: AndroidOpenVPNClient not initialized!");
+            LOGE("AndroidOpenVPNClient not initialized!");
             session->last_error = "AndroidOpenVPNClient not initialized";
             return OPENVPN_ERROR_INTERNAL;
         }
-        
-        LOGI("═══════════════════════════════════════════════════════");
-        LOGI("✅ External TUN Factory ready:");
-        LOGI("   Client: AndroidOpenVPNClient (overrides new_tun_factory())");
-        LOGI("   Tunnel ID: %s", session->tunnelId.c_str());
-        LOGI("   OpenVPN 3 will call client->new_tun_factory() during connect");
-        LOGI("   Which creates CustomTunClientFactory");
-        LOGI("   Which creates CustomTunClient with socketpair");
-        LOGI("   OpenVPN 3 event loop will ACTIVELY poll lib_fd ✅✅✅");
-        LOGI("═══════════════════════════════════════════════════════");
-        #else
-        // TunBuilderBase mode (old approach - may have DNS issues with multi-tunnel)
-        LOGI("Note: Using TunBuilderBase mode (OpenVPNClient inherits from TunBuilderBase)");
-        LOGI("      For multi-tunnel support, consider enabling OPENVPN_EXTERNAL_TUN_FACTORY");
+        LOGI("External TUN Factory ready for tunnel: %s", session->tunnelId.c_str());
         #endif
         
         // CRITICAL: Set autologinSessions = false to prevent creds_locked from being set

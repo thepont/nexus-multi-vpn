@@ -63,14 +63,12 @@ public:
     virtual void tun_start(const OptionList& opt,
                           TransportClient& transcli,
                           CryptoDCSettings& dc_settings) override {
-        OPENVPN_LOG("═══════════════════════════════════════════════════════");
         OPENVPN_LOG("CustomTunClient::tun_start() for tunnel: " << tunnel_id_);
-        OPENVPN_LOG("═══════════════════════════════════════════════════════");
         
         // Create socketpair for bidirectional communication
         int sockets[2];
         if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) == -1) {
-            OPENVPN_LOG("❌ Failed to create socket pair: " << strerror(errno));
+            OPENVPN_LOG("Failed to create socket pair: " << strerror(errno));
             parent_.tun_error(Error::TUN_SETUP_FAILED, 
                              std::string("Failed to create socket pair: ") + strerror(errno));
             return;
@@ -79,45 +77,29 @@ public:
         app_fd_ = sockets[0];   // Our application's end
         lib_fd_ = sockets[1];   // OpenVPN 3's end
         
-        OPENVPN_LOG("✅ Socket pair created successfully:");
-        OPENVPN_LOG("   App FD:  " << app_fd_ << " (for packet routing)");
-        OPENVPN_LOG("   Lib FD:  " << lib_fd_ << " (for OpenVPN 3 Core)");
+        OPENVPN_LOG("Socket pair created: app_fd=" << app_fd_ << " lib_fd=" << lib_fd_);
         
-        // Set non-blocking on library end (OpenVPN 3 expects non-blocking)
+        // Set non-blocking on both ends
         int flags = fcntl(lib_fd_, F_GETFL, 0);
         if (flags != -1) {
             fcntl(lib_fd_, F_SETFL, flags | O_NONBLOCK);
-            OPENVPN_LOG("✅ Set O_NONBLOCK on library FD");
         }
         
-        // Set non-blocking on app end too (for our async reading)
         flags = fcntl(app_fd_, F_GETFL, 0);
         if (flags != -1) {
             fcntl(app_fd_, F_SETFL, flags | O_NONBLOCK);
-            OPENVPN_LOG("✅ Set O_NONBLOCK on app FD");
         }
         
         // Extract TUN configuration from options
-        // OpenVPN 3 will have pushed IP address, routes, DNS, etc. in opt
         extract_tun_config(opt);
         
-        // Notify parent that TUN is pre-configured
+        // Notify parent
         parent_.tun_pre_tun_config();
-        
-        // Notify parent that routes are pre-configured
         parent_.tun_pre_route_config();
-        
-        // Start async reading from lib_fd (OpenVPN → App)
         start_async_read();
-        
-        // Notify parent that TUN is connected
         parent_.tun_connected();
         
-        OPENVPN_LOG("═══════════════════════════════════════════════════════");
-        OPENVPN_LOG("✅ CustomTunClient started successfully for tunnel: " << tunnel_id_);
-        OPENVPN_LOG("   lib_fd: " << lib_fd_ << " (OpenVPN 3 will poll this)");
-        OPENVPN_LOG("   app_fd: " << app_fd_ << " (Our app will use this)");
-        OPENVPN_LOG("═══════════════════════════════════════════════════════");
+        OPENVPN_LOG("CustomTunClient started for tunnel: " << tunnel_id_);
     }
     
     /**

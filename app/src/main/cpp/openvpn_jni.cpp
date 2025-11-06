@@ -334,14 +334,7 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_getAppFd(
         return -1;
     }
     
-    LOGI("═══════════════════════════════════════════════════════");
-    LOGI("✅ getAppFd: Retrieved app FD for tunnel: %s", tunnelIdStr);
-    LOGI("   App FD: %d", appFd);
-    LOGI("   Use this FD for packet I/O:");
-    LOGI("   • Write plaintext packets → OpenVPN encrypts & sends");
-    LOGI("   • Read decrypted packets ← OpenVPN receives & decrypts");
-    LOGI("═══════════════════════════════════════════════════════");
-    
+    LOGI("getAppFd: Retrieved app FD %d for tunnel: %s", appFd, tunnelIdStr);
     env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
     return appFd;
 }

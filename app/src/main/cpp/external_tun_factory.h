@@ -59,18 +59,10 @@ public:
      */
     virtual TunClientFactory* new_tun_factory(const ExternalTun::Config& conf, 
                                                const OptionList& opt) override {
-        OPENVPN_LOG("═══════════════════════════════════════════════════════");
-        OPENVPN_LOG("🔧 CustomExternalTunFactory::new_tun_factory()");
-        OPENVPN_LOG("   Creating TunClientFactory for tunnel: " << tunnel_id_);
-        OPENVPN_LOG("═══════════════════════════════════════════════════════");
+        OPENVPN_LOG("CustomExternalTunFactory::new_tun_factory() for tunnel: " << tunnel_id_);
         
         // Create and return CustomTunClientFactory
-        // This factory will create CustomTunClient instances
         tun_client_factory_ = new CustomTunClientFactory(tunnel_id_);
-        
-        OPENVPN_LOG("✅ CustomTunClientFactory created");
-        OPENVPN_LOG("   OpenVPN 3 will call factory->new_tun_client_obj() next");
-        OPENVPN_LOG("═══════════════════════════════════════════════════════");
         
         return tun_client_factory_.get();
     }
