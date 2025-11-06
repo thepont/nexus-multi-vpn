@@ -5,10 +5,13 @@
 #include <openvpn/tun/extern/config.hpp>
 #include <openvpn/common/rc.hpp>
 #include <openvpn/common/options.hpp>
-#include <openvpn/log/log.hpp>
+#include <android/log.h>
 #include <memory>
 #include <string>
 #include "custom_tun_client.h"
+
+// Use Android logging instead of OPENVPN_LOG
+#define EXTERNAL_TUN_LOG(...) __android_log_print(ANDROID_LOG_INFO, "ExternalTUN", __VA_ARGS__)
 
 namespace openvpn {
 
@@ -31,17 +34,17 @@ namespace openvpn {
  * 
  * This gives us full control over packet routing!
  */
-class CustomExternalTunFactory : public ExternalTun::Factory {
+class CustomExternalTunFactory : public ExternalTun::Factory, public RC<thread_unsafe_refcount> {
 public:
     typedef RCPtr<CustomExternalTunFactory> Ptr;
     
     CustomExternalTunFactory(const std::string& tunnel_id) 
         : tunnel_id_(tunnel_id) {
-        OPENVPN_LOG("CustomExternalTunFactory created for tunnel: " << tunnel_id_);
+        EXTERNAL_TUN_LOG("CustomExternalTunFactory created for tunnel: %s", tunnel_id_.c_str());
     }
     
     virtual ~CustomExternalTunFactory() {
-        OPENVPN_LOG("CustomExternalTunFactory destroyed for tunnel: " << tunnel_id_);
+        EXTERNAL_TUN_LOG("CustomExternalTunFactory destroyed for tunnel: %s", tunnel_id_.c_str());
     }
     
     /**

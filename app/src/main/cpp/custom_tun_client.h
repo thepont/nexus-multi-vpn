@@ -5,13 +5,17 @@
 #include <openvpn/common/rc.hpp>
 #include <openvpn/buffer/buffer.hpp>
 #include <openvpn/io/io.hpp>
-#include <openvpn/log/log.hpp>
+#include <android/log.h>
 #include <string>
+#include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <cstring>
+
+// Use Android logging instead of OPENVPN_LOG
+#define OPENVPN_LOG(msg) __android_log_print(ANDROID_LOG_INFO, "CustomTUN", "%s", (std::ostringstream() << msg).str().c_str())
 
 namespace openvpn {
 
