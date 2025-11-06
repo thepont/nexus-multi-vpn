@@ -19,6 +19,16 @@
 namespace openvpn {
 
 /**
+ * Callback interface for IP/DNS notifications from CustomTunClient
+ */
+class CustomTunCallback {
+public:
+    virtual ~CustomTunCallback() {}
+    virtual void on_ip_assigned(const std::string& tunnel_id, const std::string& ip, int prefix_len) = 0;
+    virtual void on_dns_configured(const std::string& tunnel_id, const std::vector<std::string>& dns_servers) = 0;
+};
+
+/**
  * Custom TUN Client Implementation using ExternalTun::Factory
  * 
  * This is the CORRECT way to implement custom TUN for OpenVPN 3.
@@ -40,10 +50,12 @@ public:
     
     CustomTunClient(openvpn_io::io_context& io_context,
                     TunClientParent& parent,
-                    const std::string& tunnel_id)
+                    const std::string& tunnel_id,
+                    CustomTunCallback* callback = nullptr)
         : io_context_(io_context),
           parent_(parent),
           tunnel_id_(tunnel_id),
+          callback_(callback),
           app_fd_(-1),
           lib_fd_(-1),
           halt_(false),
@@ -220,6 +232,39 @@ private:
         if (ip_opt && ip_opt->size() >= 2) {
             vpn_ip4_ = ip_opt->get(1, 256);  // max_len = 256 for IP address
             OPENVPN_LOG("TUN IP: " << vpn_ip4_);
+            
+            // Extract prefix length (netmask)
+            int prefix_len = 24;  // Default /24
+            if (ip_opt->size() >= 3) {
+                // Second parameter is netmask (e.g., "255.255.0.0")
+                // For point-to-point, OpenVPN uses "ifconfig local remote"
+                // So we'll just use default /24 for now
+            }
+            
+            // Notify callback about IP assignment
+            if (callback_ && !vpn_ip4_.empty()) {
+                OPENVPN_LOG("Notifying callback: IP=" << vpn_ip4_ << "/" << prefix_len);
+                callback_->on_ip_assigned(tunnel_id_, vpn_ip4_, prefix_len);
+            }
+        }
+        
+        // Extract DNS servers from dhcp-option
+        std::vector<std::string> dns_servers;
+        for (const auto& option : opt) {
+            if (option.size() >= 3 && option.ref(0) == "dhcp-option") {
+                std::string opt_type = option.get(1, 32);
+                if (opt_type == "DNS") {
+                    std::string dns = option.get(2, 256);
+                    dns_servers.push_back(dns);
+                    OPENVPN_LOG("TUN DNS: " << dns);
+                }
+            }
+        }
+        
+        // Notify callback about DNS configuration
+        if (callback_ && !dns_servers.empty()) {
+            OPENVPN_LOG("Notifying callback: DNS servers count=" << dns_servers.size());
+            callback_->on_dns_configured(tunnel_id_, dns_servers);
         }
         
         // Extract MTU
@@ -251,6 +296,7 @@ private:
     openvpn_io::io_context& io_context_;
     TunClientParent& parent_;
     std::string tunnel_id_;
+    CustomTunCallback* callback_;  // Callback for IP/DNS notifications
     int app_fd_;      // Our application's FD
     int lib_fd_;      // OpenVPN 3's FD
     bool halt_;
@@ -266,8 +312,8 @@ class CustomTunClientFactory : public TunClientFactory {
 public:
     typedef RCPtr<CustomTunClientFactory> Ptr;
     
-    CustomTunClientFactory(const std::string& tunnel_id)
-        : tunnel_id_(tunnel_id) {
+    CustomTunClientFactory(const std::string& tunnel_id, CustomTunCallback* callback = nullptr)
+        : tunnel_id_(tunnel_id), callback_(callback) {
         OPENVPN_LOG("CustomTunClientFactory created for tunnel: " << tunnel_id_);
     }
     
@@ -282,7 +328,7 @@ public:
                                               TunClientParent& parent,
                                               TransportClient* transcli) override {
         OPENVPN_LOG("Creating new CustomTunClient for tunnel: " << tunnel_id_);
-        auto client = new CustomTunClient(io_context, parent, tunnel_id_);
+        auto client = new CustomTunClient(io_context, parent, tunnel_id_, callback_);
         tun_client_ = client;  // Keep reference to get FDs later
         return TunClient::Ptr(client);
     }
@@ -323,6 +369,7 @@ public:
     
 private:
     std::string tunnel_id_;
+    CustomTunCallback* callback_;  // Callback for IP/DNS notifications
     CustomTunClient* tun_client_ = nullptr;  // Non-owning pointer to get FDs
 };
 

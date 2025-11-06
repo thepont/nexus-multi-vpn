@@ -55,7 +55,8 @@ using namespace openvpn::ClientAPI;
 // This class implements the abstract virtual methods required by OpenVPNClient
 // AND overrides TunBuilderBase methods to use Android's VpnService.Builder
 // Note: OpenVPNClient already inherits from ExternalTun::Factory, so we just override its methods
-class AndroidOpenVPNClient : public OpenVPNClient {
+// ALSO implements CustomTunCallback to receive IP/DNS notifications from CustomTunClient
+class AndroidOpenVPNClient : public OpenVPNClient, public openvpn::CustomTunCallback {
 public:
     AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), vpnService_(nullptr), tunFd_(-1), session_(nullptr), ipAddressCallback_(nullptr), dnsCallback_(nullptr), sessionJavaVM_(nullptr), destroying_(false)
 #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
@@ -210,12 +211,123 @@ public:
                                                         const openvpn::OptionList& opt) override {
         LOGI("AndroidOpenVPNClient::new_tun_factory() for tunnel: %s", tunnelId_.c_str());
         
-        // Create CustomTunClientFactory 
+        // Create CustomTunClientFactory with callback (this)
         // OpenVPN 3 takes ownership and will delete it - we just keep a non-owning pointer
-        customTunClientFactory_ = new openvpn::CustomTunClientFactory(tunnelId_);
+        customTunClientFactory_ = new openvpn::CustomTunClientFactory(tunnelId_, this);
         factoryCreated_ = true;
         
+        LOGI("Created CustomTunClientFactory with callback for IP/DNS notifications");
         return customTunClientFactory_;
+    }
+    
+    // Implement CustomTunCallback::on_ip_assigned
+    virtual void on_ip_assigned(const std::string& tunnel_id, const std::string& ip, int prefix_len) override {
+        LOGI("✅ on_ip_assigned callback: tunnel=%s, ip=%s/%d", tunnel_id.c_str(), ip.c_str(), prefix_len);
+        
+        // Forward to Android callbacks if available
+        if (!destroying_ && ipAddressCallback_ && sessionJavaVM_ && !tunnel_id.empty()) {
+            JNIEnv* env = nullptr;
+            jint result = sessionJavaVM_->GetEnv((void**)&env, JNI_VERSION_1_6);
+            if (result == JNI_EDETACHED) {
+                result = sessionJavaVM_->AttachCurrentThread(&env, nullptr);
+                if (result != JNI_OK || env == nullptr) {
+                    LOGW("Cannot attach thread to JNI for IP callback");
+                    return;
+                }
+            } else if (result != JNI_OK || env == nullptr) {
+                LOGW("Cannot get JNIEnv for IP callback");
+                return;
+            }
+            
+            jclass callbackClass = env->GetObjectClass(ipAddressCallback_);
+            if (callbackClass) {
+                jmethodID methodId = env->GetMethodID(callbackClass, "onTunnelIpReceived", 
+                    "(Ljava/lang/String;Ljava/lang/String;I)V");
+                if (methodId) {
+                    jstring tunnelIdStr = env->NewStringUTF(tunnel_id.c_str());
+                    jstring ipStr = env->NewStringUTF(ip.c_str());
+                    
+                    env->CallVoidMethod(ipAddressCallback_, methodId, tunnelIdStr, ipStr, prefix_len);
+                    
+                    if (env->ExceptionCheck()) {
+                        env->ExceptionDescribe();
+                        env->ExceptionClear();
+                    }
+                    
+                    env->DeleteLocalRef(tunnelIdStr);
+                    env->DeleteLocalRef(ipStr);
+                    env->DeleteLocalRef(callbackClass);
+                    
+                    LOGI("✅ Notified Kotlin about tunnel IP: tunnel=%s, ip=%s/%d", 
+                         tunnel_id.c_str(), ip.c_str(), prefix_len);
+                } else {
+                    LOGW("Cannot find onTunnelIpReceived method in callback");
+                    env->DeleteLocalRef(callbackClass);
+                }
+            }
+        }
+    }
+    
+    // Implement CustomTunCallback::on_dns_configured
+    virtual void on_dns_configured(const std::string& tunnel_id, const std::vector<std::string>& dns_servers) override {
+        LOGI("✅ on_dns_configured callback: tunnel=%s, dns_count=%zu", tunnel_id.c_str(), dns_servers.size());
+        
+        // Forward to Android callbacks if available
+        if (!destroying_ && dnsCallback_ && sessionJavaVM_ && !tunnel_id.empty() && !dns_servers.empty()) {
+            JNIEnv* env = nullptr;
+            jint result = sessionJavaVM_->GetEnv((void**)&env, JNI_VERSION_1_6);
+            if (result == JNI_EDETACHED) {
+                result = sessionJavaVM_->AttachCurrentThread(&env, nullptr);
+                if (result != JNI_OK || env == nullptr) {
+                    LOGW("Cannot attach thread to JNI for DNS callback");
+                    return;
+                }
+            } else if (result != JNI_OK || env == nullptr) {
+                LOGW("Cannot get JNIEnv for DNS callback");
+                return;
+            }
+            
+            jclass callbackClass = env->GetObjectClass(dnsCallback_);
+            if (callbackClass) {
+                // Create ArrayList for DNS servers
+                jclass arrayListClass = env->FindClass("java/util/ArrayList");
+                jmethodID arrayListInit = env->GetMethodID(arrayListClass, "<init>", "(I)V");
+                jmethodID arrayListAdd = env->GetMethodID(arrayListClass, "add", "(Ljava/lang/Object;)Z");
+                
+                jobject dnsList = env->NewObject(arrayListClass, arrayListInit, (jint)dns_servers.size());
+                
+                for (const auto& dns : dns_servers) {
+                    jstring dnsStr = env->NewStringUTF(dns.c_str());
+                    env->CallBooleanMethod(dnsList, arrayListAdd, dnsStr);
+                    env->DeleteLocalRef(dnsStr);
+                }
+                
+                jmethodID methodId = env->GetMethodID(callbackClass, "onTunnelDnsReceived", 
+                    "(Ljava/lang/String;Ljava/util/List;)V");
+                if (methodId) {
+                    jstring tunnelIdStr = env->NewStringUTF(tunnel_id.c_str());
+                    
+                    env->CallVoidMethod(dnsCallback_, methodId, tunnelIdStr, dnsList);
+                    
+                    if (env->ExceptionCheck()) {
+                        env->ExceptionDescribe();
+                        env->ExceptionClear();
+                    }
+                    
+                    env->DeleteLocalRef(tunnelIdStr);
+                    env->DeleteLocalRef(dnsList);
+                    env->DeleteLocalRef(arrayListClass);
+                    env->DeleteLocalRef(callbackClass);
+                    
+                    LOGI("✅ Notified Kotlin about tunnel DNS: tunnel=%s", tunnel_id.c_str());
+                } else {
+                    LOGW("Cannot find onTunnelDnsReceived method in callback");
+                    env->DeleteLocalRef(dnsList);
+                    env->DeleteLocalRef(arrayListClass);
+                    env->DeleteLocalRef(callbackClass);
+                }
+            }
+        }
     }
     
     // Get the app FD for packet I/O (call after connection established)
