@@ -56,6 +56,10 @@ extern "C" {
             JNIEnv *env, jobject thiz,
             jlong sessionHandle, jstring tunnelId, jobject ipCallback, jobject dnsCallback);
     
+    JNIEXPORT jint JNICALL
+    Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_getAppFd(
+            JNIEnv *env, jobject thiz, jstring tunnelId);
+    
     // JNI functions for VpnConnectionManager to create pipes
     JNIEXPORT jint JNICALL
     Java_com_multiregionvpn_core_VpnConnectionManager_createPipe(
@@ -269,6 +273,76 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeSetTunnelIdAndC
     if (tunnelIdStr && tunnelId) {
         env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
     }
+}
+
+// CRITICAL: Get the app FD from External TUN Factory
+// This FD is created by CustomTunClient and is used for packet I/O
+// Our app writes plaintext packets to this FD, OpenVPN reads and encrypts them
+// OpenVPN writes decrypted packets to this FD, our app reads them
+JNIEXPORT jint JNICALL
+Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_getAppFd(
+        JNIEnv *env, jobject thiz, jstring tunnelId) {
+    
+    if (!tunnelId) {
+        LOGE("getAppFd: tunnelId is null");
+        return -1;
+    }
+    
+    const char* tunnelIdStr = env->GetStringUTFChars(tunnelId, nullptr);
+    if (!tunnelIdStr) {
+        LOGE("getAppFd: failed to get tunnelId string");
+        return -1;
+    }
+    
+    #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+    // Get session for this tunnel
+    auto it = sessions.find(tunnelIdStr);
+    if (it == sessions.end()) {
+        LOGE("getAppFd: No session found for tunnel: %s", tunnelIdStr);
+        env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
+        return -1;
+    }
+    
+    OpenVpnSession* session = it->second;
+    if (!session) {
+        LOGE("getAppFd: Session pointer is null for tunnel: %s", tunnelIdStr);
+        env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
+        return -1;
+    }
+    
+    // Get app FD from External TUN Factory
+    if (!session->tunFactory) {
+        LOGE("getAppFd: External TUN Factory not initialized for tunnel: %s", tunnelIdStr);
+        env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
+        return -1;
+    }
+    
+    int appFd = session->tunFactory->getAppFd();
+    if (appFd < 0) {
+        LOGE("getAppFd: External TUN Factory returned invalid FD for tunnel: %s", tunnelIdStr);
+        LOGE("   This means CustomTunClient hasn't been created yet (connect not called?)");
+        env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
+        return -1;
+    }
+    
+    LOGI("═══════════════════════════════════════════════════════");
+    LOGI("✅ getAppFd: Retrieved app FD for tunnel: %s", tunnelIdStr);
+    LOGI("   App FD: %d", appFd);
+    LOGI("   Use this FD for packet I/O:");
+    LOGI("   • Write plaintext packets → OpenVPN encrypts & sends");
+    LOGI("   • Read decrypted packets ← OpenVPN receives & decrypts");
+    LOGI("═══════════════════════════════════════════════════════");
+    
+    env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
+    return appFd;
+    
+    #else
+    // Without External TUN Factory, we can't get app FD
+    LOGW("getAppFd: OPENVPN_EXTERNAL_TUN_FACTORY not enabled");
+    LOGW("   Cannot retrieve app FD - using old TunBuilderBase mode");
+    env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
+    return -1;
+    #endif
 }
 
 // Structure to hold socket pair FDs for a tunnel
