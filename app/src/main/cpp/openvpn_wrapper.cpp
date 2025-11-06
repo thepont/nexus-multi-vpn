@@ -407,6 +407,18 @@ private:
             LOGE("❌ Compression error: %s", evt.info.c_str());
             LOGE("Server pushed compression settings that OpenVPN 3 rejects");
             LOGE("This is a fatal error - connection will disconnect");
+        } else if (evt.name == "DATA_CHANNEL_STARTED") {
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-Transport",
+                "🚀 DATA_CHANNEL_STARTED - can now send/receive encrypted packets");
+        } else if (evt.name == "TRANSPORT_ERROR") {
+            __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-Transport",
+                "❌ TRANSPORT_ERROR: %s", evt.info.c_str());
+        } else if (evt.name.find("TRANSPORT") != std::string::npos || 
+                   evt.name.find("TX") != std::string::npos || 
+                   evt.name.find("RX") != std::string::npos) {
+            // Log any transport, TX (transmit), or RX (receive) related events
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-Transport",
+                "📡 %s: %s", evt.name.c_str(), evt.info.c_str());
         }
     }
     
