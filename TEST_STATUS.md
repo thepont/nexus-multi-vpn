@@ -1,95 +1,123 @@
-# Test Status Report
+# Multi-Region VPN Test Status
 
-## ✅ Code Verification Complete
+## ✅ Working Architecture
 
-### Import Verification
-All required ics-openvpn classes are accessible:
-- ✓ `de.blinkt.openvpn.core.ConfigParser` - Located and verified
-- ✓ `de.blinkt.openvpn.core.OpenVPNThread` - Located and verified  
-- ✓ `de.blinkt.openvpn.core.OpenVPNService` - Located and verified
-- ✓ `de.blinkt.openvpn.VpnProfile` - Located and verified
+### Core Components
+1. **SOCK_SEQPACKET Socketpairs** - Packet-oriented TUN emulation
+   - Preserves message boundaries (one write = one packet)
+   - Bidirectional communication between Kotlin and OpenVPN 3
+   - Non-blocking for OpenVPN 3, blocking for Kotlin
 
-### Method Signatures Verified
-- ✓ `ConfigParser.parseConfig(Reader)` - Exists, throws `IOException, ConfigParseError`
-- ✓ `ConfigParser.convertProfile()` - Exists, returns `VpnProfile`, throws `ConfigParseError, IOException`
-- ✓ `OpenVPNThread.stopProcess()` - Exists and accessible
-- ✓ `VpnProfile.mUsername` and `VpnProfile.mPassword` - Public fields accessible
+2. **Package Registration** - ConnectionTracker population
+   - VpnEngineService registers all app rules on startup
+   - Maps `packageName` → `UID` → `tunnelId`
+   - Enables per-app routing in Global VPN mode
 
-### Code Quality
-- ✓ No linter errors in `RealOpenVpnClient.kt`
-- ✓ Direct imports used (no reflection)
-- ✓ Proper exception handling in connect() method
+3. **Correct Packet Flow** - Fixed routing logic
+   - Removed incorrect "inbound packet" detection
+   - ALL packets from TUN are outbound (need routing)
+   - Inbound packets come via `packetReceiver` callback
 
-## 📋 Test Files Found
+4. **Global VPN Mode** - All apps have internet
+   - No `addAllowedApplication()` restrictions
+   - PacketRouter decides: VPN tunnel OR direct internet
+   - Unconfigured apps route to direct internet
 
-### Unit Tests (8 files)
-1. `ProcNetParserTest.kt` - UID detection tests
-2. `PacketRouterTest.kt` - Packet routing logic tests
-3. `DirectInternetForwardingTest.kt` - Direct internet routing tests
-4. `VpnConnectionManagerTest.kt` - VPN connection management tests
-5. `TunnelManagerTest.kt` - Tunnel lifecycle tests
-6. `MockOpenVpnClientTest.kt` - Mock client tests (6 test cases)
-7. `SettingsRepositoryTest.kt` - Repository tests
-8. `SettingsViewModelTest.kt` - ViewModel tests
+## 🧪 E2E Test Suite
 
-### Instrumentation Tests (5 files)
-1. `VpnRoutingTest.kt` - E2E routing tests (UK, FR, Direct)
-2. `VpnConfigDaoTest.kt` - Database tests
-3. `AppRuleDaoTest.kt` - Database tests
-4. `IpCheckService.kt` - IP checking service
-5. `BaseTestApplication.kt` - Test application setup
+### Current Tests (NordVpnE2ETest)
 
-## ⚠️  Cannot Run Tests Currently
+#### ✅ Basic Routing Tests
+1. **test_routesToUK** - PASSED
+   - Routes test package to UK VPN
+   - Verifies GB country code via ip-api.com
+   - Confirms DNS and HTTP work through VPN
 
-**Reason**: Android SDK not configured
+2. **test_routesToFrance** - PENDING
+   - Routes test package to FR VPN
+   - Verifies FR country code
+   - Tests multiple region support
 
-**Error Message**:
-```
-SDK location not found. Define a valid SDK location with an ANDROID_HOME 
-environment variable or by setting the sdk.dir path in your project's 
-local.properties file.
-```
+3. **test_routesToDirectInternet** - PASSED
+   - No VPN rule configured
+   - Verifies traffic bypasses VPN
+   - Confirms baseline country (AU)
 
-## 🔧 To Enable Test Execution
+#### ✅ Multi-Region Tests (NEW)
+4. **test_switchRegions_UKtoFR** - ADDED
+   - Phase 1: Route to UK, verify GB
+   - Phase 2: Switch to FR, verify FR
+   - Tests dynamic region switching
 
-### Option 1: Set ANDROID_HOME
+5. **test_multiTunnel_BothUKandFRActive** - ADDED
+   - Establishes both UK and FR tunnels
+   - Verifies both connected simultaneously
+   - Routes traffic to configured tunnel (UK)
+   - Tests multi-tunnel coexistence
+
+6. **test_rapidSwitching_UKtoFRtoUK** - ADDED
+   - Rapidly switches: UK → FR → UK
+   - Verifies routing updates at each step
+   - Tests robustness of region changes
+
+## 🔧 vcpkg Build Configuration
+
+### Setup (Required for OpenVPN 3)
 ```bash
-export ANDROID_HOME=/path/to/android/sdk
-export PATH=$ANDROID_HOME/platform-tools:$PATH
+# Environment variables (.env file - not committed)
+export VCPKG_ROOT=/home/pont/vcpkg
+export ANDROID_NDK_HOME=/home/pont/Android/Sdk/ndk/25.1.8937393
+
+# Install dependencies
+cd $VCPKG_ROOT
+./vcpkg install lz4:arm64-android mbedtls:arm64-android fmt:arm64-android asio:arm64-android
+
+# Build
+cd /path/to/multi-region-vpn
+source .env
+./gradlew clean assembleDebug
 ```
 
-### Option 2: Configure local.properties
-Create/edit `local.properties`:
-```properties
-sdk.dir=/path/to/android/sdk
+### Verification
+- **18M** libopenvpn-jni.so = OpenVPN 3 included ✅
+- **410K** libopenvpn-jni.so = Stub (missing deps) ❌
+
+## 📊 Test Results
+
+### Most Recent Run
+```
+✅ test_routesToDirectInternet - PASSED
+✅ test_routesToUK - PASSED (GB detected)
+⏳ test_routesToFrance - PENDING
+⏳ test_switchRegions_UKtoFR - PENDING
+⏳ test_multiTunnel_BothUKandFRActive - PENDING
+⏳ test_rapidSwitching_UKtoFRtoUK - PENDING
 ```
 
-### Option 3: Use Android Studio
-Android Studio will automatically configure the SDK path.
+## 🚀 Next Steps
 
-## ✅ Ready to Test Once SDK Configured
+1. **Run Full Test Suite**
+   ```bash
+   cd /path/to/multi-region-vpn
+   source .env
+   ./gradlew :app:connectedDebugAndroidTest \
+     -Pandroid.testInstrumentationRunnerArguments.class=com.multiregionvpn.NordVpnE2ETest \
+     -Pandroid.testInstrumentationRunnerArguments.NORDVPN_USERNAME="$NORDVPN_USERNAME" \
+     -Pandroid.testInstrumentationRunnerArguments.NORDVPN_PASSWORD="$NORDVPN_PASSWORD"
+   ```
 
-Once the Android SDK is configured, you can run:
+2. **Add Local Tests** (if needed)
+   - LocalRoutingTest - Docker-based multi-app routing
+   - LocalDnsTest - DNS-specific tests
+   - LocalConflictTest - Subnet conflict handling
 
-```bash
-# Unit tests
-./gradlew testDebugUnitTest
+3. **Performance Tests** (future)
+   - Throughput benchmarks
+   - Latency measurements
+   - Connection stability over time
 
-# Instrumentation tests (requires emulator/device)
-./gradlew connectedDebugAndroidTest
+## 📝 Documentation
 
-# Specific test class
-./gradlew testDebugUnitTest --tests com.multiregionvpn.core.ProcNetParserTest
-
-# All tests
-./gradlew test
-```
-
-## 📝 Next Steps
-
-1. ✅ Code compiles and imports are correct
-2. ⏳ Configure Android SDK environment
-3. ⏳ Run full test suite once SDK is available
-4. ⏳ Verify RealOpenVpnClient integration with ics-openvpn works in practice
-
-
+- **VCPKG_SETUP.md** - Build configuration guide
+- **ARCHITECTURE.md** - System design (if needed)
+- **TROUBLESHOOTING.md** - Common issues (if needed)
