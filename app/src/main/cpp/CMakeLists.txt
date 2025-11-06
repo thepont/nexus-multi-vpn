@@ -30,9 +30,10 @@ message(STATUS "CMAKE_MODULE_PATH (before OpenVPN 3): ${CMAKE_MODULE_PATH}")
 include(FetchContent)
 
 # Configure OpenVPN 3 fetch
-set(OPENVPN3_VERSION "v22.1" CACHE STRING "OpenVPN 3 version to fetch")
-# Or use a specific commit:
-# set(OPENVPN3_VERSION "main" CACHE STRING "OpenVPN 3 version to fetch")
+# Use master branch for latest External TUN Factory support
+set(OPENVPN3_VERSION "master" CACHE STRING "OpenVPN 3 version to fetch")
+# Old version v22.1 doesn't have External TUN Factory:
+# set(OPENVPN3_VERSION "v22.1" CACHE STRING "OpenVPN 3 version to fetch")
 
 FetchContent_Declare(
     openvpn3
@@ -851,6 +852,12 @@ target_link_libraries(openvpn-jni ${log-lib})
 #         openvpn3::client  # Or openvpn3-client, depending on OpenVPN 3 build
 #     )
 # endif()
+
+# Force include our logging override BEFORE any OpenVPN 3 headers
+# This fixes NDK 25 compilation issues with OpenVPN 3's stream operator logging
+target_compile_options(openvpn-jni PRIVATE
+    -include ${CMAKE_CURRENT_SOURCE_DIR}/openvpn_log_override.h
+)
 
 # Compiler definitions
 # OpenVPN 3 requires these definitions to compile correctly

@@ -14,8 +14,7 @@
 #include <errno.h>
 #include <cstring>
 
-// Use Android logging instead of OPENVPN_LOG
-#define OPENVPN_LOG(msg) __android_log_print(ANDROID_LOG_INFO, "CustomTUN", "%s", (std::ostringstream() << msg).str().c_str())
+// Note: OPENVPN_LOG is now defined globally via openvpn_log_override.h (force-included)
 
 namespace openvpn {
 
