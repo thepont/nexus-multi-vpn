@@ -730,6 +730,23 @@ class NordVpnE2ETest {
             println("   ⚠️  Could not stop VPN service: ${e.message}")
         }
 
+        // CRITICAL: Explicitly close all VPN connections and clean up native resources
+        try {
+            val connectionManager = VpnConnectionManager.getInstance()
+            println("   Closing all VPN connections...")
+            connectionManager.closeAll()
+            println("   ✅ All VPN connections closed")
+            
+            // Wait longer for native resources to be freed
+            // Socket pairs, OpenVPN 3 sessions, and file descriptors need time to clean up
+            Thread.sleep(3000)
+            println("   ✅ Native resources cleanup complete")
+        } catch (e: IllegalStateException) {
+            println("   VpnConnectionManager not initialized (no connections to close)")
+        } catch (e: Exception) {
+            println("   ⚠️  Could not close VPN connections: ${e.message}")
+        }
+
         // Clean up the database
         settingsRepo.clearAllAppRules()
         settingsRepo.clearAllVpnConfigs()
