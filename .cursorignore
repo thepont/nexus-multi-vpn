@@ -1,15 +1,54 @@
+# Dependencies
 node_modules/
-build/
-.gradle/
+vcpkg/
+
+# Build outputs (use ** to match at any level)
+**/build/
+**/.cxx/
+**/.gradle/
+**/.externalNativeBuild/
+**/captures/
+
+# IDE
 .idea/
+.vscode/
 *.iml
+
+# Compiled files
 *.class
 *.jar
+*.so
+*.o
+*.a
+
+# Android
 *.apk
 *.ap_
 *.aab
 *.dex
 local.properties
-.cxx/
-.externalNativeBuild/
-captures/
+
+# Git (large directory)
+.git/
+
+# Large library sources (we rarely edit these)
+libs/openvpn3/test/
+libs/openvpn3/doc/
+libs/openvpn3/.github/
+
+# vcpkg build artifacts
+**/vcpkg_installed/
+**/buildtrees/
+**/downloads/
+**/packages/
+
+# Test outputs and reports
+**/test-results/
+**/androidTest-results/
+**/.androidTest/
+**/reports/
+**/test-output/
+
+# Logs
+*.log
+logcat.txt
