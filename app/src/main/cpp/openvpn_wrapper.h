@@ -29,6 +29,7 @@ void openvpn_wrapper_destroy_session(OpenVpnSession* session);
 #define OPENVPN_ERROR_AUTH_FAILED -3
 #define OPENVPN_ERROR_CONNECTION_FAILED -4
 #define OPENVPN_ERROR_UNKNOWN -5
+#define OPENVPN_ERROR_INTERNAL -6
 
 // Connection management
 // Returns error code (see above), error message is stored in session->last_error
@@ -75,6 +76,9 @@ int openvpn_wrapper_receive_packet(OpenVpnSession* session,
 
 // Status
 int openvpn_wrapper_is_connected(OpenVpnSession* session);
+
+// Get app FD from External TUN Factory (for OPENVPN_EXTERNAL_TUN_FACTORY mode)
+int openvpn_wrapper_get_app_fd(OpenVpnSession* session);
 
 #ifdef __cplusplus
 }

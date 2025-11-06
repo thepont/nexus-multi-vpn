@@ -17,6 +17,11 @@ struct OpenVpnSession;
 // Global JavaVM reference (set once at library load)
 static JavaVM* g_javaVM = nullptr;
 
+// Global map of sessions keyed by tunnel ID
+// Used to retrieve session objects for app FD access
+static std::map<std::string, OpenVpnSession*> sessions;
+static std::mutex sessions_mutex;
+
 #define LOG_TAG "OpenVPN-JNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
@@ -269,6 +274,13 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeSetTunnelIdAndC
     // Set tunnel ID and callbacks
     openvpn_wrapper_set_tunnel_id_and_callback(session, env, tunnelIdStr, ipCallback, dnsCallback);
     
+    // Register session in global map for app FD retrieval
+    if (tunnelIdStr) {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        sessions[std::string(tunnelIdStr)] = session;
+        LOGI("Registered session for tunnel: %s", tunnelIdStr);
+    }
+    
     // Release string
     if (tunnelIdStr && tunnelId) {
         env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
@@ -294,33 +306,30 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_getAppFd(
         return -1;
     }
     
-    #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
     // Get session for this tunnel
-    auto it = sessions.find(tunnelIdStr);
-    if (it == sessions.end()) {
-        LOGE("getAppFd: No session found for tunnel: %s", tunnelIdStr);
-        env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
-        return -1;
+    OpenVpnSession* session = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        auto it = sessions.find(tunnelIdStr);
+        if (it == sessions.end()) {
+            LOGE("getAppFd: No session found for tunnel: %s", tunnelIdStr);
+            env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
+            return -1;
+        }
+        session = it->second;
     }
     
-    OpenVpnSession* session = it->second;
     if (!session) {
         LOGE("getAppFd: Session pointer is null for tunnel: %s", tunnelIdStr);
         env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
         return -1;
     }
     
-    // Get app FD from External TUN Factory
-    if (!session->tunFactory) {
-        LOGE("getAppFd: External TUN Factory not initialized for tunnel: %s", tunnelIdStr);
-        env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
-        return -1;
-    }
+    // Use wrapper function to get app FD (avoids incomplete type issues)
+    int appFd = openvpn_wrapper_get_app_fd(session);
     
-    int appFd = session->tunFactory->getAppFd();
     if (appFd < 0) {
-        LOGE("getAppFd: External TUN Factory returned invalid FD for tunnel: %s", tunnelIdStr);
-        LOGE("   This means CustomTunClient hasn't been created yet (connect not called?)");
+        LOGE("getAppFd: Failed to get app FD for tunnel: %s", tunnelIdStr);
         env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
         return -1;
     }
@@ -335,14 +344,6 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_getAppFd(
     
     env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
     return appFd;
-    
-    #else
-    // Without External TUN Factory, we can't get app FD
-    LOGW("getAppFd: OPENVPN_EXTERNAL_TUN_FACTORY not enabled");
-    LOGW("   Cannot retrieve app FD - using old TunBuilderBase mode");
-    env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
-    return -1;
-    #endif
 }
 
 // Structure to hold socket pair FDs for a tunnel

@@ -236,7 +236,7 @@ private:
         // Extract IP address
         const Option* ip_opt = opt.get_ptr("ifconfig");
         if (ip_opt && ip_opt->size() >= 2) {
-            vpn_ip4_ = (*ip_opt)[1];
+            vpn_ip4_ = ip_opt->get(1, 256);  // max_len = 256 for IP address
             OPENVPN_LOG("TUN IP: " << vpn_ip4_);
         }
         
@@ -244,7 +244,7 @@ private:
         const Option* mtu_opt = opt.get_ptr("tun-mtu");
         if (mtu_opt && mtu_opt->size() >= 2) {
             try {
-                mtu_ = std::stoi((*mtu_opt)[1]);
+                mtu_ = std::stoi(mtu_opt->get(1, 16));  // max_len = 16 for MTU number
                 OPENVPN_LOG("TUN MTU: " << mtu_);
             } catch (...) {
                 OPENVPN_LOG("⚠️  Failed to parse MTU, using default: " << mtu_);

@@ -54,9 +54,14 @@ using namespace openvpn::ClientAPI;
 // Custom OpenVPN client implementation for Android
 // This class implements the abstract virtual methods required by OpenVPNClient
 // AND overrides TunBuilderBase methods to use Android's VpnService.Builder
+// Note: OpenVPNClient already inherits from ExternalTun::Factory, so we just override its methods
 class AndroidOpenVPNClient : public OpenVPNClient {
 public:
-    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), vpnService_(nullptr), tunFd_(-1), session_(nullptr), ipAddressCallback_(nullptr), dnsCallback_(nullptr), sessionJavaVM_(nullptr) {
+    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), vpnService_(nullptr), tunFd_(-1), session_(nullptr), ipAddressCallback_(nullptr), dnsCallback_(nullptr), sessionJavaVM_(nullptr)
+#ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+        , customTunClientFactory_(nullptr), factoryCreated_(false)
+#endif
+    {
         LOGI("AndroidOpenVPNClient created");
     }
     
@@ -178,6 +183,51 @@ public:
         return env;
     }
     
+#ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+    // Set the tunnel ID (must be called before connect)
+    void setTunnelId(const std::string& tunnel_id) {
+        tunnelId_ = tunnel_id;
+        LOGI("Tunnel ID set to: %s", tunnel_id.c_str());
+    }
+    
+    // Override ExternalTun::Factory::new_tun_factory()
+    // OpenVPNClient already inherits from ExternalTun::Factory
+    virtual openvpn::TunClientFactory* new_tun_factory(const openvpn::ExternalTun::Config& conf, 
+                                                        const openvpn::OptionList& opt) override {
+        LOGI("═══════════════════════════════════════════════════════");
+        LOGI("AndroidOpenVPNClient::new_tun_factory() called");
+        LOGI("   Tunnel ID: %s", tunnelId_.c_str());
+        LOGI("═══════════════════════════════════════════════════════");
+        
+        // Create CustomTunClientFactory 
+        // OpenVPN 3 takes ownership and will delete it - we just keep a non-owning pointer
+        customTunClientFactory_ = new openvpn::CustomTunClientFactory(tunnelId_);
+        factoryCreated_ = true;
+        
+        LOGI("✅ CustomTunClientFactory created successfully");
+        LOGI("   Factory will create CustomTunClient with socketpair");
+        LOGI("   OpenVPN 3 will poll the socketpair for packet I/O");
+        LOGI("   OpenVPN 3 owns factory (will delete it)");
+        LOGI("═══════════════════════════════════════════════════════");
+        
+        return customTunClientFactory_;
+    }
+    
+    // Get the app FD for packet I/O (call after connection established)
+    int getAppFd() const {
+        if (factoryCreated_ && customTunClientFactory_) {
+            return customTunClientFactory_->getAppFd();
+        }
+        return -1;
+    }
+    
+    // Clear the factory pointer (called by OpenVPN when it deletes the factory)
+    void clearFactory() {
+        customTunClientFactory_ = nullptr;
+        factoryCreated_ = false;
+    }
+#endif
+    
 private:
     JavaVM* javaVM_;  // JavaVM for getting JNIEnv in any thread
     jobject vpnBuilder_;  // Android VpnService.Builder instance (global ref)
@@ -190,6 +240,13 @@ private:
     jobject dnsCallback_;  // Global reference to Kotlin DNS callback object
     JavaVM* sessionJavaVM_;  // JavaVM from session for callback
     std::string tunnelId_;  // Tunnel ID from session
+    
+#ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+    // Store the custom TUN client factory for app FD retrieval
+    // NOTE: This is a NON-OWNING pointer - OpenVPN 3 owns the factory and will delete it
+    openvpn::CustomTunClientFactory* customTunClientFactory_ = nullptr;
+    bool factoryCreated_ = false;  // Track if we created the factory
+#endif
     
     // Helper to set connected flag - implemented after OpenVpnSession definition
     void setConnectedFromEvent();
@@ -657,10 +714,7 @@ struct OpenVpnSession {
     jobject dnsCallback;  // Global reference to Kotlin DNS callback object
     JavaVM* javaVM;  // For calling callback from any thread
     
-    #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
-    // External TUN Factory for proper custom TUN implementation
-    openvpn::CustomExternalTunFactory::Ptr tunFactory;
-    #endif
+    // Note: No separate tunFactory needed - AndroidOpenVPNClient implements ExternalTun::Factory
     
     OpenVpnSession() : connected(false), connecting(false), androidClient(nullptr), client(nullptr), should_stop(false), ipAddressCallback(nullptr), dnsCallback(nullptr), javaVM(nullptr) {
         // atomic<bool> is initialized with false above
@@ -672,11 +726,9 @@ struct OpenVpnSession {
         }
         
         #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
-        // Create External TUN Factory for this tunnel
-        // NOTE: tunnelId will be set later via openvpn_wrapper_set_tunnel_id_and_callback()
-        // For now, create with empty string (will be updated before connect)
-        tunFactory = new openvpn::CustomExternalTunFactory("");
-        LOGI("Created CustomExternalTunFactory (tunnelId will be set before connect)");
+        // AndroidOpenVPNClient implements ExternalTun::Factory
+        // tunnelId will be set via openvpn_wrapper_set_tunnel_id_and_callback()
+        LOGI("AndroidOpenVPNClient created (implements ExternalTun::Factory)");
         #endif
     }
     
@@ -801,11 +853,13 @@ void openvpn_wrapper_set_tunnel_id_and_callback(OpenVpnSession* session,
         LOGI("Tunnel ID set: %s", tunnelId);
         
         #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
-        // Recreate External TUN Factory with correct tunnelId
-        // The factory was created with empty string in constructor, now update it
-        session->tunFactory = new openvpn::CustomExternalTunFactory(tunnelId);
-        LOGI("✅ Created CustomExternalTunFactory for tunnel: %s", tunnelId);
-        LOGI("   OpenVPN 3 will use this factory for TUN creation");
+        // Set tunnel ID on AndroidOpenVPNClient (which implements ExternalTun::Factory)
+        if (session->androidClient) {
+            session->androidClient->setTunnelId(tunnelId);
+            LOGI("✅ Set tunnel ID on AndroidOpenVPNClient: %s", tunnelId);
+            LOGI("   AndroidOpenVPNClient implements ExternalTun::Factory");
+            LOGI("   OpenVPN 3 will call client->new_tun_factory()");
+        }
         #endif
     }
     
@@ -1077,24 +1131,24 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         LOGI("Set compressionMode = 'asym' to accept server-pushed LZO_STUB without compressing uplink");
         
         #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
-        // CRITICAL: Set External TUN Factory before eval_config()
-        // With OPENVPN_EXTERNAL_TUN_FACTORY enabled, OpenVPN 3 Core will use our custom TUN implementation
-        // The factory creates CustomTunClient which creates socketpair and provides FD for OpenVPN to poll
-        // This is the CORRECT way to do custom TUN - OpenVPN will actively poll our FD!
-        if (!session->tunFactory) {
-            LOGE("❌ CRITICAL: External TUN Factory not initialized!");
-            LOGE("   This should have been created in openvpn_wrapper_set_tunnel_id_and_callback()");
-            session->last_error = "External TUN Factory not initialized";
+        // CRITICAL: External TUN Factory setup
+        // AndroidOpenVPNClient (via OpenVPNClient) inherits from ExternalTun::Factory
+        // We override new_tun_factory() which OpenVPN 3 will call automatically during connection
+        // Our override creates CustomTunClientFactory → CustomTunClient → socketpair
+        // OpenVPN 3 event loop will ACTIVELY poll the socketpair's lib_fd ✅
+        if (!session->androidClient) {
+            LOGE("❌ CRITICAL: AndroidOpenVPNClient not initialized!");
+            session->last_error = "AndroidOpenVPNClient not initialized";
             return OPENVPN_ERROR_INTERNAL;
         }
         
-        session->config.extern_tun_factory = session->tunFactory.get();
         LOGI("═══════════════════════════════════════════════════════");
-        LOGI("✅ External TUN Factory set on config:");
-        LOGI("   Factory pointer: %p", session->config.extern_tun_factory);
+        LOGI("✅ External TUN Factory ready:");
+        LOGI("   Client: AndroidOpenVPNClient (overrides new_tun_factory())");
         LOGI("   Tunnel ID: %s", session->tunnelId.c_str());
-        LOGI("   OpenVPN 3 will call factory->new_tun_factory()");
-        LOGI("   CustomTunClient will create socketpair");
+        LOGI("   OpenVPN 3 will call client->new_tun_factory() during connect");
+        LOGI("   Which creates CustomTunClientFactory");
+        LOGI("   Which creates CustomTunClient with socketpair");
         LOGI("   OpenVPN 3 event loop will ACTIVELY poll lib_fd ✅✅✅");
         LOGI("═══════════════════════════════════════════════════════");
         #else
@@ -1587,6 +1641,33 @@ int openvpn_wrapper_is_connected(OpenVpnSession* session) {
     }
 #else
     return session->connected ? 1 : 0;
+#endif
+}
+
+// Get app FD from External TUN Factory (for OPENVPN_EXTERNAL_TUN_FACTORY mode)
+int openvpn_wrapper_get_app_fd(OpenVpnSession* session) {
+    if (!session) {
+        LOGE("openvpn_wrapper_get_app_fd: null session");
+        return -1;
+    }
+    
+#ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+    if (!session->androidClient) {
+        LOGE("openvpn_wrapper_get_app_fd: androidClient not initialized");
+        return -1;
+    }
+    
+    int appFd = session->androidClient->getAppFd();
+    if (appFd < 0) {
+        LOGE("openvpn_wrapper_get_app_fd: Invalid app FD (tunnel not started yet?)");
+        return -1;
+    }
+    
+    LOGI("openvpn_wrapper_get_app_fd: Retrieved app FD: %d", appFd);
+    return appFd;
+#else
+    LOGW("openvpn_wrapper_get_app_fd: OPENVPN_EXTERNAL_TUN_FACTORY not enabled");
+    return -1;
 #endif
 }
 
