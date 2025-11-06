@@ -22,11 +22,11 @@ class VpnConnectionManager(
     private val vpnService: VpnService? = null,
     private val clientFactory: ((String) -> OpenVpnClient)? = null
 ) {
-    // Load native library for FIFO creation
+    // Load native library for socketpair creation
     init {
         try {
             System.loadLibrary("openvpn-jni")
-            Log.d(TAG, "Native library loaded for FIFO support")
+            Log.d(TAG, "Native library loaded for socketpair support")
         } catch (e: UnsatisfiedLinkError) {
             Log.e(TAG, "Failed to load native library", e)
         }
@@ -36,11 +36,12 @@ class VpnConnectionManager(
     private var baseTunFileDescriptor: Int = -1  // Base TUN file descriptor from VpnEngineService (will be duplicated per connection)
     private var vpnInterface: android.os.ParcelFileDescriptor? = null  // Original PFD for duplicating
     private var connectionStateListener: ((Boolean) -> Unit)? = null  // true = has connecting connections, false = all connected or none connecting
-    private val pipeWriteFds = ConcurrentHashMap<String, Int>()  // tunnelId -> pipe write FD for writing packets
-    private val pipeWritePfds = ConcurrentHashMap<String, android.os.ParcelFileDescriptor>()  // tunnelId -> PFD for write FD (keep open)
+    // Socketpair file descriptors (SOCK_SEQPACKET for packet-oriented TUN emulation)
+    private val pipeWriteFds = ConcurrentHashMap<String, Int>()  // tunnelId -> socketpair Kotlin-side FD for writing packets
+    private val pipeWritePfds = ConcurrentHashMap<String, android.os.ParcelFileDescriptor>()  // tunnelId -> PFD for Kotlin FD (keep open)
     private val pipeReadPfds = ConcurrentHashMap<String, android.os.ParcelFileDescriptor>()  // tunnelId -> PFD for read FD (keep open)
-    private val pipeWriters = ConcurrentHashMap<String, java.io.FileOutputStream>()  // tunnelId -> pipe writer
-    private val pipeReaders = ConcurrentHashMap<String, kotlinx.coroutines.Job>()  // tunnelId -> pipe reader coroutine job
+    private val pipeWriters = ConcurrentHashMap<String, java.io.FileOutputStream>()  // tunnelId -> socket writer (for sending to OpenVPN)
+    private val pipeReaders = ConcurrentHashMap<String, kotlinx.coroutines.Job>()  // tunnelId -> socket reader coroutine job (for receiving from OpenVPN)
     private val pipeReaderScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     
     private var tunnelIpCallback: ((String, String, Int) -> Unit)? = null  // Callback for tunnel IP addresses
@@ -110,13 +111,13 @@ class VpnConnectionManager(
                     }
                 }
                 
-                // CRITICAL: Create pipes (unnamed pipes) for each tunnel to enable packet filtering
-                // Since we can't filter packets from the same TUN device, we create separate pipes
+                // CRITICAL: Create socketpairs (SOCK_SEQPACKET) for each tunnel to enable packet filtering
+                // Since we can't filter packets from the same TUN device, we create separate socketpairs
                 // for each tunnel. We read from TUN ourselves, route packets, and write to the
-                // appropriate pipe. OpenVPN 3 reads from its pipe (doesn't know it's not a TUN!).
+                // appropriate socketpair. OpenVPN 3 reads from its socketpair (packet-oriented, emulates TUN).
                 val connectionFd = try {
-                    // Create pipes using JNI (native code)
-                    // Returns the read FD for OpenVPN 3
+                    // Create socketpair using JNI (native code)
+                    // Returns the OpenVPN 3 side FD (packet-oriented, SOCK_SEQPACKET)
                     val pipeReadFd = createPipe(tunnelId)
                     if (pipeReadFd >= 0) {
                             // Get the Kotlin FD (socket pair is bidirectional - same FD for read/write)
@@ -138,8 +139,8 @@ class VpnConnectionManager(
                                 
                                 pipeReadFd
                             } else {
-                            Log.w(TAG, "Failed to get pipe FDs for tunnel $tunnelId, falling back to TUN FD duplication")
-                            // Fallback to TUN FD duplication if pipe creation fails
+                            Log.w(TAG, "Failed to get socketpair FDs for tunnel $tunnelId, falling back to TUN FD duplication")
+                            // Fallback to TUN FD duplication if socketpair creation fails
                             if (baseTunFileDescriptor >= 0 && vpnInterface != null) {
                                 try {
                                     val duplicatedPfd = vpnInterface!!.dup()
@@ -157,8 +158,8 @@ class VpnConnectionManager(
                             }
                         }
                     } else {
-                        // Fallback if pipe creation failed
-                        Log.w(TAG, "Failed to create pipes for tunnel $tunnelId, falling back to TUN FD duplication")
+                        // Fallback if socketpair creation failed
+                        Log.w(TAG, "Failed to create socketpair for tunnel $tunnelId, falling back to TUN FD duplication")
                         if (baseTunFileDescriptor >= 0 && vpnInterface != null) {
                             try {
                                 val duplicatedPfd = vpnInterface!!.dup()
@@ -176,7 +177,7 @@ class VpnConnectionManager(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error creating pipes for tunnel $tunnelId: ${e.message}", e)
+                    Log.e(TAG, "Error creating socketpair for tunnel $tunnelId: ${e.message}", e)
                     // Fallback to TUN FD duplication
                     val fallbackFd = if (baseTunFileDescriptor >= 0 && vpnInterface != null) {
                         try {
