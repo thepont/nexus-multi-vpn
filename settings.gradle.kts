@@ -18,5 +18,6 @@ dependencyResolutionManagement {
 rootProject.name = "MultiRegionVPN"
 include(":app")
 
-// OpenVPN 3 is integrated via native C++ (JNI), not as a Gradle module
-// Removed ics-openvpn dependency - using OpenVPN 3 C++ library instead
+// Include ics-openvpn library for OpenVPN support
+// This replaces the previous OpenVPN 3 ClientAPI integration
+include(":ics-openvpn:main")

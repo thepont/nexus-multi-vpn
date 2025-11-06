@@ -220,10 +220,10 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     
-    // OpenVPN Implementation - Using OpenVPN 3 C++ via JNI
-    // Native library is built via CMake (see src/main/cpp/CMakeLists.txt)
-    // The old ics-openvpn dependency has been replaced with native implementation
-    // implementation(project(":openvpn")) // REMOVED - using native OpenVPN 3 instead
+    // OpenVPN Implementation - Using ics-openvpn (proven Android-native library)
+    // This replaces the previous OpenVPN 3 ClientAPI integration which had issues
+    // with custom TUN FD handling on Android
+    implementation(project(":ics-openvpn:main"))
     
     // BouncyCastle for cryptographic operations (used by OpenVPN)
     // Note: ics-openvpn may already include BouncyCastle, but we'll keep these for compatibility
