@@ -840,46 +840,39 @@ class NordVpnE2ETest {
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("🧹 Cleaning up...")
         
-        // Stop the VPN service
-        try {
-            val stopToggle = device.wait(
-                Until.findObject(By.res(appContext.packageName, "start_service_toggle")),
-                2000
-            )
-            if (stopToggle != null && stopToggle.isChecked) {
-                println("   Stopping VPN service...")
-                stopToggle.click()
-                Thread.sleep(2000) // Give it time to stop
-            }
-        } catch (e: Exception) {
-            println("   ⚠️  Could not stop VPN: ${e.message}")
-        }
-
-        // Also try to stop via service intent
-        try {
-            val stopIntent = Intent(appContext, VpnEngineService::class.java).apply {
-                action = VpnEngineService.ACTION_STOP
-            }
-            appContext.startService(stopIntent)
-        } catch (e: Exception) {
-            println("   ⚠️  Could not stop VPN service: ${e.message}")
-        }
-
-        // CRITICAL: Explicitly close all VPN connections and clean up native resources
+        // CRITICAL: Close VPN connections FIRST before stopping service
+        // This prevents race conditions and multiple disconnects
+        var connectionsClosed = false
         try {
             val connectionManager = VpnConnectionManager.getInstance()
             println("   Closing all VPN connections...")
             connectionManager.closeAll()
+            connectionsClosed = true
             println("   ✅ All VPN connections closed")
             
-            // Wait longer for native resources to be freed
+            // Wait for native resources to be freed
             // Socket pairs, OpenVPN 3 sessions, and file descriptors need time to clean up
-            Thread.sleep(3000)
+            Thread.sleep(2000)
             println("   ✅ Native resources cleanup complete")
         } catch (e: IllegalStateException) {
             println("   VpnConnectionManager not initialized (no connections to close)")
         } catch (e: Exception) {
             println("   ⚠️  Could not close VPN connections: ${e.message}")
+            e.printStackTrace()
+        }
+
+        // Now stop the service (only if connections were already closed)
+        if (connectionsClosed) {
+            try {
+                val stopIntent = Intent(appContext, VpnEngineService::class.java).apply {
+                    action = VpnEngineService.ACTION_STOP
+                }
+                appContext.startService(stopIntent)
+                Thread.sleep(1000) // Brief wait for service to stop
+                println("   ✅ VPN service stopped")
+            } catch (e: Exception) {
+                println("   ⚠️  Could not stop VPN service: ${e.message}")
+            }
         }
 
         // Clean up the database

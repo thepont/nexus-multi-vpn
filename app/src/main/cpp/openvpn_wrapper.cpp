@@ -57,7 +57,7 @@ using namespace openvpn::ClientAPI;
 // Note: OpenVPNClient already inherits from ExternalTun::Factory, so we just override its methods
 class AndroidOpenVPNClient : public OpenVPNClient {
 public:
-    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), vpnService_(nullptr), tunFd_(-1), session_(nullptr), ipAddressCallback_(nullptr), dnsCallback_(nullptr), sessionJavaVM_(nullptr)
+    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), vpnService_(nullptr), tunFd_(-1), session_(nullptr), ipAddressCallback_(nullptr), dnsCallback_(nullptr), sessionJavaVM_(nullptr), destroying_(false)
 #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
         , customTunClientFactory_(nullptr), factoryCreated_(false)
 #endif
@@ -66,12 +66,21 @@ public:
     }
     
     virtual ~AndroidOpenVPNClient() {
+        // Mark as destroyed to prevent callback access during cleanup
+        destroying_ = true;
+        
         // Cleanup will be done by OpenVPNClient destructor
         // OpenVPN 3 owns and deletes the factory - we just null our pointer
 #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
         customTunClientFactory_ = nullptr;
         factoryCreated_ = false;
 #endif
+        
+        // Clear callback pointers to prevent dangling references
+        ipAddressCallback_ = nullptr;
+        dnsCallback_ = nullptr;
+        sessionJavaVM_ = nullptr;
+        
         LOGI("AndroidOpenVPNClient destroyed");
     }
     
@@ -236,6 +245,7 @@ private:
     jobject dnsCallback_;  // Global reference to Kotlin DNS callback object
     JavaVM* sessionJavaVM_;  // JavaVM from session for callback
     std::string tunnelId_;  // Tunnel ID from session
+    std::atomic<bool> destroying_;  // Flag to prevent callback access during destruction
     
 #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
     // Store the custom TUN client factory for app FD retrieval
@@ -356,7 +366,8 @@ private:
         
         // Notify Kotlin about the IP address via callback
         // Use stored callback info from session (set via setSession/updateSessionCallbackInfo)
-        if (ipAddressCallback_ && sessionJavaVM_ && !tunnelId_.empty()) {
+        // Check destroying_ flag to prevent accessing deleted callbacks during cleanup
+        if (!destroying_ && ipAddressCallback_ && sessionJavaVM_ && !tunnelId_.empty()) {
             JNIEnv* env = nullptr;
             jint result = sessionJavaVM_->GetEnv((void**)&env, JNI_VERSION_1_6);
             if (result == JNI_EDETACHED) {
@@ -448,7 +459,8 @@ private:
             }
             
             // Notify Kotlin about DNS servers via callback
-            if (dnsCallback_ && sessionJavaVM_ && !tunnelId_.empty() && !dnsAddresses.empty()) {
+            // Check destroying_ flag to prevent accessing deleted callbacks during cleanup
+            if (!destroying_ && dnsCallback_ && sessionJavaVM_ && !tunnelId_.empty() && !dnsAddresses.empty()) {
                 JNIEnv* env = nullptr;
                 jint result = sessionJavaVM_->GetEnv((void**)&env, JNI_VERSION_1_6);
                 if (result == JNI_EDETACHED) {
@@ -740,12 +752,23 @@ struct OpenVpnSession {
             }
         }
         
-        // Wait for connection thread to finish
+        // Wait for connection thread to finish - this ensures no more events will fire
         if (connection_thread.joinable()) {
             connection_thread.join();
         }
         
-        // Clean up JNI callback references
+        // Delete client FIRST - this sets destroying_ flag preventing callback access
+        // and ensures OpenVPN 3 stops processing events
+        if (androidClient) {
+            delete androidClient;
+            androidClient = nullptr;
+            client = nullptr;
+        }
+        
+        // Brief delay to ensure any in-flight JNI calls complete
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        // Now safe to clean up JNI callback references
         if (ipAddressCallback && javaVM) {
             JNIEnv* env = nullptr;
             if (javaVM->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_OK) {
@@ -766,13 +789,6 @@ struct OpenVpnSession {
                 javaVM->DetachCurrentThread();
             }
             dnsCallback = nullptr;
-        }
-        
-        // Delete client (androidClient is the actual instance)
-        if (androidClient) {
-            delete androidClient;
-            androidClient = nullptr;
-            client = nullptr;
         }
     }
 #else
