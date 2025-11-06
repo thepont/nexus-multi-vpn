@@ -20,9 +20,9 @@ android {
     defaultConfig {
         externalNativeBuild {
             cmake {
+                // Build type will be set per build variant
                 arguments += listOf(
-                    "-DANDROID_STL=c++_shared",
-                    "-DCMAKE_BUILD_TYPE=Release"
+                    "-DANDROID_STL=c++_shared"
                 )
                 // Enable vcpkg if VCPKG_ROOT environment variable is set
                 // Usage: export VCPKG_ROOT=/path/to/vcpkg
@@ -33,30 +33,55 @@ android {
                 // vcpkg chainloading: vcpkg's toolchain file will chainload Android's toolchain
                 // CRITICAL: VCPKG_CHAINLOAD_TOOLCHAIN_FILE must be set BEFORE vcpkg.cmake is processed
                 // So we set it as a command-line argument which CMake processes before toolchain files
-                if (System.getenv("VCPKG_ROOT") != null) {
-                    val vcpkgRoot = System.getenv("VCPKG_ROOT")
-                    
-                    // Get Android NDK directory (not the toolchain file path yet)
-                    val androidNdkDir = System.getenv("ANDROID_NDK") ?: 
-                                       System.getenv("ANDROID_NDK_HOME") ?: 
-                                       "${android.ndkDirectory}"
-                    
-                    // Construct the full path to android.toolchain.cmake
-                    val androidToolchainFile = "$androidNdkDir/build/cmake/android.toolchain.cmake"
-                    
-                    // CRITICAL: Set chainload file FIRST, before CMAKE_TOOLCHAIN_FILE
-                    // This ensures vcpkg.cmake can find it when it processes the chainload
-                    // The path must be the full path to android.toolchain.cmake, not just the NDK directory
-                    arguments += listOf(
-                        "-DUSE_VCPKG=ON",
-                        "-DVCPKG_TARGET_TRIPLET=arm64-android",
-                        "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$androidToolchainFile"
-                    )
-                    
-                    // Set vcpkg toolchain file - this will be processed by CMake
-                    // and vcpkg.cmake will include the chainloaded Android toolchain
+                // Only enable vcpkg if VCPKG_ROOT is set AND the file exists
+                val vcpkgRoot = System.getenv("VCPKG_ROOT")
+                if (vcpkgRoot != null) {
                     val vcpkgToolchain = "$vcpkgRoot/scripts/buildsystems/vcpkg.cmake"
-                    arguments += listOf("-DCMAKE_TOOLCHAIN_FILE=$vcpkgToolchain")
+                    val vcpkgToolchainFile = file(vcpkgToolchain)
+                    if (vcpkgToolchainFile.exists()) {
+                            // Get Android NDK directory (not the toolchain file path yet)
+                            // Use the actual NDK path from Gradle, which is more reliable
+                            val androidNdkDir = "${android.ndkDirectory}"
+                            
+                            // Construct the full path to android.toolchain.cmake
+                            // Android NDK has the toolchain file at: <ndk>/build/cmake/android.toolchain.cmake
+                            val androidToolchainFile = "$androidNdkDir/build/cmake/android.toolchain.cmake"
+                            
+                            // Verify the file exists before using it
+                            val androidToolchainFileObj = file(androidToolchainFile)
+                            if (androidToolchainFileObj.exists()) {
+                                // CRITICAL: Set chainload file FIRST, before CMAKE_TOOLCHAIN_FILE
+                                // This ensures vcpkg.cmake can find it when it processes the chainload
+                                // The path must be the full path to android.toolchain.cmake, not just the NDK directory
+                                arguments += listOf(
+                                    "-DUSE_VCPKG=ON",
+                                    "-DVCPKG_TARGET_TRIPLET=arm64-android",
+                                    "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$androidToolchainFile"
+                                )
+                            } else {
+                                // Fallback: try to find it in common locations
+                                val fallbackPaths = listOf(
+                                    "${System.getenv("ANDROID_NDK")}/build/cmake/android.toolchain.cmake",
+                                    "${System.getenv("ANDROID_NDK_HOME")}/build/cmake/android.toolchain.cmake",
+                                    "${System.getenv("ANDROID_HOME")}/ndk-bundle/build/cmake/android.toolchain.cmake"
+                                )
+                                val foundPath = fallbackPaths.firstOrNull { file(it).exists() }
+                                if (foundPath != null) {
+                                    arguments += listOf(
+                                        "-DUSE_VCPKG=ON",
+                                        "-DVCPKG_TARGET_TRIPLET=arm64-android",
+                                        "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$foundPath"
+                                    )
+                                } else {
+                                    // If we can't find it, skip vcpkg for this build
+                                    println("Warning: Could not find android.toolchain.cmake, skipping vcpkg")
+                                }
+                            }
+                        
+                        // Set vcpkg toolchain file - this will be processed by CMake
+                        // and vcpkg.cmake will include the chainloaded Android toolchain
+                        arguments += listOf("-DCMAKE_TOOLCHAIN_FILE=$vcpkgToolchain")
+                    }
                 }
                 cppFlags += listOf(
                     "-std=c++20",  // Required for OpenVPN 3
@@ -128,6 +153,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Debug builds don't require vcpkg - use pre-built libraries or skip native build
+            // This allows faster iteration during development
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -208,6 +237,9 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.51.1")
     ksp("com.google.dagger:hilt-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    
+    // LocalBroadcastManager (for error broadcasting - deprecated but still functional)
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
     
     // Testing
     testImplementation("junit:junit:4.13.2")

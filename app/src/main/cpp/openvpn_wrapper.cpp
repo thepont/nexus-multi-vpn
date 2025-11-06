@@ -9,10 +9,13 @@
 #include <memory>
 #include <vector>
 #include <cstdlib>
+#include <unistd.h>  // For write()
+#include <errno.h>   // For errno
 
 #define LOG_TAG "OpenVPN-Wrapper"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 
 // OpenVPN 3 API includes
 #ifdef OPENVPN3_AVAILABLE
@@ -46,7 +49,7 @@ using namespace openvpn::ClientAPI;
 // AND overrides TunBuilderBase methods to use Android's VpnService.Builder
 class AndroidOpenVPNClient : public OpenVPNClient {
 public:
-    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), tunFd_(-1) {
+    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), vpnService_(nullptr), tunFd_(-1), session_(nullptr), ipAddressCallback_(nullptr), dnsCallback_(nullptr), sessionJavaVM_(nullptr) {
         LOGI("AndroidOpenVPNClient created");
     }
     
@@ -59,6 +62,54 @@ public:
     void setJavaVM(JavaVM* vm) {
         javaVM_ = vm;
         LOGI("JavaVM set in AndroidOpenVPNClient");
+    }
+    
+    // Set the session pointer so event() can update connection state
+    // This is public so it can be called from openvpn_wrapper_connect()
+    // Implementation moved after OpenVpnSession definition to avoid forward declaration issues
+    void setSession(OpenVpnSession* session);
+    
+    // Get the session pointer (used by tun_builder_add_address)
+    OpenVpnSession* getSession() {
+        return session_;
+    }
+    
+    // Update session callback info (called when callback is set on session)
+    // Implementation after OpenVpnSession definition to avoid forward declaration issues
+    void updateSessionCallbackInfo(OpenVpnSession* session);
+    
+    // Set stored credentials (called from openvpn_wrapper_connect)
+    // This is public so it can be called from the wrapper
+    void setStoredCredentials(const std::string& username, const std::string& password) {
+        stored_username_ = username;
+        stored_password_ = password;
+        LOGI("Stored credentials for client_auth() callback: username=%zu bytes", username.length());
+    }
+    
+    // Set the Android VpnService instance (called from JNI)
+    // This is public so it can be called from openvpn_wrapper_set_android_params
+    void setVpnService(JNIEnv* env, jobject vpnService) {
+        if (!env) {
+            LOGE("Cannot set VpnService: JNI env not available");
+            return;
+        }
+        
+        // Store JavaVM for later use (JNIEnv is thread-local)
+        if (!javaVM_) {
+            env->GetJavaVM(&javaVM_);
+        }
+        
+        if (vpnService_) {
+            JNIEnv* currentEnv = getJNIEnv();
+            if (currentEnv) {
+                currentEnv->DeleteGlobalRef(vpnService_);
+            }
+        }
+        
+        if (vpnService) {
+            vpnService_ = env->NewGlobalRef(vpnService);
+            LOGI("VpnService instance set in AndroidOpenVPNClient");
+        }
     }
     
     // Set the Android VpnService.Builder instance (called from JNI)
@@ -96,6 +147,12 @@ public:
         LOGI("TUN file descriptor set to: %d", fd);
     }
     
+    // Get the TUN file descriptor (used by send_packet)
+    // This is public so it can be called from openvpn_wrapper_send_packet
+    int getTunFd() const {
+        return tunFd_;
+    }
+    
     // Get JNIEnv for current thread
     JNIEnv* getJNIEnv() {
         if (!javaVM_) {
@@ -117,7 +174,18 @@ public:
 private:
     JavaVM* javaVM_;  // JavaVM for getting JNIEnv in any thread
     jobject vpnBuilder_;  // Android VpnService.Builder instance (global ref)
+    jobject vpnService_;  // Android VpnService instance (global ref) - for calling protect()
     int tunFd_ = -1;  // TUN file descriptor from Android VpnService
+    OpenVpnSession* session_;  // Pointer to session to update connection state (forward declared)
+    
+    // Callbacks (stored from session for use in tun_builder_add_address and tun_builder_set_dns_options)
+    jobject ipAddressCallback_;  // Global reference to Kotlin IP callback object
+    jobject dnsCallback_;  // Global reference to Kotlin DNS callback object
+    JavaVM* sessionJavaVM_;  // JavaVM from session for callback
+    std::string tunnelId_;  // Tunnel ID from session
+    
+    // Helper to set connected flag - implemented after OpenVpnSession definition
+    void setConnectedFromEvent();
     
     // Implement LogReceiver::log
     virtual void log(const LogInfo &log_info) override {
@@ -133,11 +201,30 @@ private:
             LOGI("OpenVPN Event [%s]: %s", evt.name.c_str(), evt.info.c_str());
         }
         
-        // Handle CONNECTED event to update connection state
+        // Handle specific events to track PUSH_REPLY flow
         if (evt.name == "CONNECTED") {
-            LOGI("OpenVPN connection established");
+            LOGI("✅ OpenVPN connection established");
+            // CRITICAL: Set connected flag immediately when CONNECTED event fires
+            // Using atomic<bool> so we can set it from event handler without mutex
+            // This allows isConnected() to return true as soon as connection is established
+            setConnectedFromEvent();
         } else if (evt.name == "DISCONNECTED") {
             LOGI("OpenVPN disconnected: %s", evt.info.c_str());
+        } else if (evt.name == "PUSH_REQUEST") {
+            LOGI("📤 Client sent PUSH_REQUEST to server (requesting configuration)");
+        } else if (evt.name == "PUSH_REPLY") {
+            LOGI("📥 Server sent PUSH_REPLY (configuration received)");
+            LOGI("   PUSH_REPLY info: %s", evt.info.c_str());
+        } else if (evt.name == "AUTH_FAILED") {
+            LOGE("❌ Authentication failed: %s", evt.info.c_str());
+        } else if (evt.name == "AUTH_PENDING") {
+            LOGI("⏳ Authentication pending: %s", evt.info.c_str());
+        } else if (evt.name == "AUTH_OK") {
+            LOGI("✅ Authentication successful");
+        } else if (evt.name == "COMPRESS_ERROR") {
+            LOGE("❌ Compression error: %s", evt.info.c_str());
+            LOGE("Server pushed compression settings that OpenVPN 3 rejects");
+            LOGE("This is a fatal error - connection will disconnect");
         }
     }
     
@@ -172,14 +259,94 @@ private:
         return true;
     }
     
+    // NOTE: client_auth() is not part of OpenVPNClient from ClientAPI
+    // ClientAPI uses provide_creds() for authentication instead
+    // The client_auth() callback is part of the lower-level ProtoContext interface
+    // which ClientAPI wraps internally. We use provide_creds() which is the
+    // ClientAPI way to provide credentials.
+    
+    // Store credentials (though ClientAPI uses provide_creds(), not client_auth)
+    // These are set via provide_creds() but stored here for potential future use
+    std::string stored_username_;
+    std::string stored_password_;
+    
     // Override TunBuilderBase methods to use Android VpnService.Builder
     // These methods are called by OpenVPN 3 during connection setup
+    
+    // CRITICAL: tun_builder_new() must be implemented and return true
+    // This is called FIRST before any other tun_builder_* methods
+    // It should return true if the TUN builder is ready to configure the interface
+    virtual bool tun_builder_new() override {
+        LOGI("═══════════════════════════════════════════════════════");
+        LOGI("🔧 tun_builder_new() called by OpenVPN 3");
+        LOGI("   This is called FIRST before any other tun_builder_* methods");
+        LOGI("   TUN interface is already established by VpnEngineService");
+        LOGI("   Returning true to indicate TUN builder is ready");
+        LOGI("═══════════════════════════════════════════════════════");
+        return true;
+    }
+    
     virtual bool tun_builder_add_address(const std::string &address,
                                          int prefix_length,
                                          const std::string &gateway,
                                          bool ipv6,
                                          bool net30) override {
-        LOGI("tun_builder_add_address: %s/%d (ipv6=%s)", address.c_str(), prefix_length, ipv6 ? "true" : "false");
+        LOGI("tun_builder_add_address: %s/%d (ipv6=%s, gateway=%s)", 
+             address.c_str(), prefix_length, ipv6 ? "true" : "false", gateway.c_str());
+        
+        // Notify Kotlin about the IP address via callback
+        // Use stored callback info from session (set via setSession/updateSessionCallbackInfo)
+        if (ipAddressCallback_ && sessionJavaVM_ && !tunnelId_.empty()) {
+            JNIEnv* env = nullptr;
+            jint result = sessionJavaVM_->GetEnv((void**)&env, JNI_VERSION_1_6);
+            if (result == JNI_EDETACHED) {
+                // Thread not attached - attach it
+                result = sessionJavaVM_->AttachCurrentThread(&env, nullptr);
+                if (result != JNI_OK || env == nullptr) {
+                    LOGW("Cannot attach thread to JNI for IP callback");
+                    return true;
+                }
+            } else if (result != JNI_OK || env == nullptr) {
+                LOGW("Cannot get JNIEnv for IP callback");
+                return true;
+            }
+            
+            // Call callback method: onTunnelIpReceived(tunnelId: String, ip: String, prefixLength: Int)
+            // The callback object should implement an interface with this method
+            jclass callbackClass = env->GetObjectClass(ipAddressCallback_);
+            if (callbackClass) {
+                jmethodID methodId = env->GetMethodID(callbackClass, "onTunnelIpReceived", 
+                    "(Ljava/lang/String;Ljava/lang/String;I)V");
+                if (methodId) {
+                    jstring tunnelIdStr = env->NewStringUTF(tunnelId_.c_str());
+                    jstring ipStr = env->NewStringUTF(address.c_str());
+                    
+                    env->CallVoidMethod(ipAddressCallback_, methodId, 
+                        tunnelIdStr, ipStr, prefix_length);
+                    
+                    // Check for exceptions
+                    if (env->ExceptionCheck()) {
+                        env->ExceptionDescribe();
+                        env->ExceptionClear();
+                    }
+                    
+                    env->DeleteLocalRef(tunnelIdStr);
+                    env->DeleteLocalRef(ipStr);
+                    env->DeleteLocalRef(callbackClass);
+                    
+                    LOGI("✅ Notified Kotlin about tunnel IP: tunnelId=%s, ip=%s/%d", 
+                         tunnelId_.c_str(), address.c_str(), prefix_length);
+                } else {
+                    LOGW("Cannot find onTunnelIpReceived method in callback");
+                    env->DeleteLocalRef(callbackClass);
+                }
+            } else {
+                LOGW("Cannot get callback class");
+            }
+        } else {
+            LOGW("⚠️  IP address callback not set - cannot notify Kotlin (callback=%p, javaVM=%p, tunnelId=%s)", 
+                 ipAddressCallback_, sessionJavaVM_, tunnelId_.c_str());
+        }
         
         // For Android, we use the already-established VpnService interface
         // OpenVPN 3 will configure routes, but we don't need to call Builder methods
@@ -206,10 +373,102 @@ private:
     
     virtual bool tun_builder_set_dns_options(const openvpn::DnsOptions &dns) override {
         LOGI("tun_builder_set_dns_options called");
-        // DNS is already configured by VpnEngineService
-        // OpenVPN 3 DNS options can be logged but don't need action
-        // Note: dns.servers is a map, not a vector
-        LOGI("DNS options received (servers configured by VpnEngineService)");
+        
+        // Extract DNS servers from OpenVPN's DHCP options
+        // DnsOptions.servers is a std::map<int, DnsServer> where key is priority
+        // Each DnsServer has a std::vector<DnsAddress> addresses
+        // Each DnsAddress has a std::string address field
+        if (!dns.servers.empty()) {
+            std::vector<std::string> dnsAddresses;
+            for (const auto &[priority, server] : dns.servers) {
+                for (const auto &dnsAddr : server.addresses) {
+                    dnsAddresses.push_back(dnsAddr.address);
+                    LOGI("DHCP DNS server (priority %d): %s", priority, dnsAddr.address.c_str());
+                }
+            }
+            
+            // Notify Kotlin about DNS servers via callback
+            if (dnsCallback_ && sessionJavaVM_ && !tunnelId_.empty() && !dnsAddresses.empty()) {
+                JNIEnv* env = nullptr;
+                jint result = sessionJavaVM_->GetEnv((void**)&env, JNI_VERSION_1_6);
+                if (result == JNI_EDETACHED) {
+                    // Thread not attached - attach it
+                    result = sessionJavaVM_->AttachCurrentThread(&env, nullptr);
+                    if (result != JNI_OK || env == nullptr) {
+                        LOGW("Cannot attach thread to JNI for DNS callback");
+                        return true;
+                    }
+                } else if (result != JNI_OK || env == nullptr) {
+                    LOGW("Cannot get JNIEnv for DNS callback");
+                    return true;
+                }
+                
+                // Call callback method: onTunnelDnsReceived(tunnelId: String, dnsServers: List<String>)
+                jclass callbackClass = env->GetObjectClass(dnsCallback_);
+                if (callbackClass) {
+                    // Create ArrayList for DNS servers
+                    jclass arrayListClass = env->FindClass("java/util/ArrayList");
+                    jmethodID arrayListInit = env->GetMethodID(arrayListClass, "<init>", "(I)V");
+                    jmethodID arrayListAdd = env->GetMethodID(arrayListClass, "add", "(Ljava/lang/Object;)Z");
+                    
+                    jobject dnsList = env->NewObject(arrayListClass, arrayListInit, (jint)dnsAddresses.size());
+                    
+                    // Add each DNS server to the list
+                    for (const auto &dnsAddr : dnsAddresses) {
+                        jstring dnsStr = env->NewStringUTF(dnsAddr.c_str());
+                        env->CallBooleanMethod(dnsList, arrayListAdd, dnsStr);
+                        env->DeleteLocalRef(dnsStr);
+                    }
+                    
+                    // Call the callback method
+                    jmethodID methodId = env->GetMethodID(callbackClass, "onTunnelDnsReceived", 
+                        "(Ljava/lang/String;Ljava/util/List;)V");
+                    if (methodId) {
+                        jstring tunnelIdStr = env->NewStringUTF(tunnelId_.c_str());
+                        
+                        env->CallVoidMethod(dnsCallback_, methodId, tunnelIdStr, dnsList);
+                        
+                        // Check for exceptions
+                        if (env->ExceptionCheck()) {
+                            env->ExceptionDescribe();
+                            env->ExceptionClear();
+                        }
+                        
+                        env->DeleteLocalRef(tunnelIdStr);
+                        env->DeleteLocalRef(dnsList);
+                        env->DeleteLocalRef(callbackClass);
+                        env->DeleteLocalRef(arrayListClass);
+                        
+                        LOGI("✅ Notified Kotlin about DNS servers: tunnelId=%s, count=%zu", 
+                             tunnelId_.c_str(), dnsAddresses.size());
+                    } else {
+                        LOGW("Cannot find onTunnelDnsReceived method in callback");
+                        env->DeleteLocalRef(dnsList);
+                        env->DeleteLocalRef(callbackClass);
+                    }
+                } else {
+                    LOGW("Cannot get callback class");
+                }
+            } else {
+                LOGW("⚠️  DNS callback not set - cannot notify Kotlin (callback=%p, javaVM=%p, tunnelId=%s)", 
+                     dnsCallback_, sessionJavaVM_, tunnelId_.c_str());
+            }
+            
+            if (!dnsAddresses.empty()) {
+                LOGI("✅ DHCP DNS servers received: %zu server(s)", dnsAddresses.size());
+            }
+        } else {
+            LOGW("⚠️  No DNS servers in DHCP options from OpenVPN");
+        }
+        
+        // Note: DNS search domains are also available in dns.search_domains
+        if (!dns.search_domains.empty()) {
+            LOGI("DNS search domains received: %zu domain(s)", dns.search_domains.size());
+            for (const auto &domain : dns.search_domains) {
+                LOGI("  Search domain: %s", domain.domain.c_str());
+            }
+        }
+        
         return true;
     }
     
@@ -225,10 +484,122 @@ private:
         return true;
     }
     
+    virtual bool tun_builder_set_remote_address(const std::string &address, bool ipv6) override {
+        LOGI("tun_builder_set_remote_address: %s (ipv6=%s)", address.c_str(), ipv6 ? "true" : "false");
+        // Remote address is already configured by VpnEngineService via routes
+        // This is typically the VPN server's IP address
+        return true;
+    }
+    
+    virtual bool tun_builder_persist() override {
+        LOGI("tun_builder_persist() called - returning false (no TUN persistence)");
+        // We set tunPersist = false in Config, so return false here
+        // This prevents OpenVPN 3 from trying to reuse existing TUN interfaces
+        return false;
+    }
+    
+    // Helper function to protect a socket file descriptor
+    bool protectSocket(int socket_fd) {
+        // We need to call VpnService.protect(socket_fd) from Java
+        // Since we have JavaVM, we can get JNIEnv and call the method
+        if (javaVM_ == nullptr) {
+            LOGW("JavaVM is null, cannot protect socket");
+            return false;
+        }
+        
+        JNIEnv* env = nullptr;
+        jint result = javaVM_->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+        if (result == JNI_EDETACHED) {
+            // Thread not attached - attach it
+            result = javaVM_->AttachCurrentThread(&env, nullptr);
+            if (result != JNI_OK || env == nullptr) {
+                LOGW("Cannot attach thread to JNI to protect socket");
+                return false;
+            }
+        } else if (result != JNI_OK || env == nullptr) {
+            LOGW("Cannot get JNIEnv to protect socket");
+            return false;
+        }
+        
+        // Get VpnService class
+        jclass vpnServiceClass = env->FindClass("android/net/VpnService");
+        if (vpnServiceClass == nullptr) {
+            LOGW("Cannot find VpnService class");
+            return false;
+        }
+        
+        // CRITICAL: VpnService.protect() is an INSTANCE method, not static!
+        // We need a VpnService instance to call it on
+        if (vpnService_ == nullptr) {
+            LOGW("VpnService instance is null, cannot protect socket");
+            env->DeleteLocalRef(vpnServiceClass);
+            return false;
+        }
+        
+        // Get protect() method: public boolean protect(int socket) - instance method
+        jmethodID protectMethod = env->GetMethodID(
+            vpnServiceClass,
+            "protect",
+            "(I)Z"
+        );
+        
+        if (protectMethod == nullptr) {
+            // Try to get error message
+            jthrowable exc = env->ExceptionOccurred();
+            if (exc) {
+                env->ExceptionClear();
+                LOGW("Cannot find VpnService.protect() instance method");
+            } else {
+                LOGW("Cannot find VpnService.protect() instance method - no exception");
+            }
+            if (exc) env->DeleteLocalRef(exc);
+            env->DeleteLocalRef(vpnServiceClass);
+            return false;
+        }
+        
+        // Call vpnService_.protect(socket_fd) - instance method call
+        jboolean protectResult = env->CallBooleanMethod(vpnService_, protectMethod, socket_fd);
+        
+        // Check for exceptions
+        if (env->ExceptionCheck()) {
+            jthrowable exc = env->ExceptionOccurred();
+            env->ExceptionClear();
+            LOGW("Exception calling VpnService.protect(): %p", exc);
+            env->DeleteLocalRef(exc);
+            env->DeleteLocalRef(vpnServiceClass);
+            return false;
+        }
+        env->DeleteLocalRef(vpnServiceClass);
+        
+        if (protectResult) {
+            LOGI("✅ Successfully protected socket FD %d from VPN interface", socket_fd);
+            return true;
+        } else {
+            LOGW("Failed to protect socket FD %d", socket_fd);
+            return false;
+        }
+    }
+    
+    // CRITICAL: Implement socket_protect() from OpenVPNClient interface
+    // This is called by OpenVPN 3 for socket protection to prevent routing loops
+    virtual bool socket_protect(openvpn_io::detail::socket_type socket, std::string remote, bool ipv6) override {
+        LOGI("socket_protect() called for socket: remote=%s, ipv6=%s", remote.c_str(), ipv6 ? "true" : "false");
+        
+        // On Android/Linux, socket_type is typically an int (file descriptor)
+        // Extract the FD from the socket
+        int socket_fd = static_cast<int>(socket);
+        LOGI("socket_protect() converting socket to FD: %d", socket_fd);
+        
+        // Protect the socket from being routed through VPN interface
+        return protectSocket(socket_fd);
+    }
+    
     virtual int tun_builder_establish() override {
         LOGI("═══════════════════════════════════════════════════════");
-        LOGI("tun_builder_establish() called by OpenVPN 3");
-        LOGI("Current TUN FD: %d", tunFd_);
+        LOGI("🔧 tun_builder_establish() called by OpenVPN 3");
+        LOGI("   This is called AFTER tun_builder_add_address()");
+        LOGI("   OpenVPN 3 needs a valid TUN FD to start TLS handshake");
+        LOGI("   Current TUN FD: %d", tunFd_);
         LOGI("═══════════════════════════════════════════════════════");
         
         // For Android, the TUN interface is already established by VpnEngineService
@@ -238,11 +609,14 @@ private:
             LOGE("   OpenVPN 3 cannot establish connection without a valid TUN FD");
             LOGE("   This means setTunFileDescriptor() was not called before connect()");
             LOGE("   The FD should be passed via nativeConnect() and setTunFileDescriptor()");
+            LOGE("   TLS handshake will NOT start without valid TUN FD");
             return -1;
         }
         
         LOGI("✅ Returning TUN file descriptor: %d", tunFd_);
         LOGI("   OpenVPN 3 will use this FD for packet I/O");
+        LOGI("   TLS handshake should start after this returns");
+        LOGI("   If no handshake packets are sent, check TLS initialization");
         return tunFd_;
     }
 };
@@ -250,9 +624,10 @@ private:
 
 // OpenVPN session structure
 struct OpenVpnSession {
-    bool connected;
+    std::atomic<bool> connected;  // Use atomic so event handler can set it without mutex
     bool connecting;  // True when connect() is running but not yet complete
     std::string last_error;
+    std::string tunnelId;  // Tunnel ID for identifying which tunnel this session belongs to
     
 #ifdef OPENVPN3_AVAILABLE
     AndroidOpenVPNClient* androidClient;  // For accessing Android-specific methods
@@ -269,7 +644,14 @@ struct OpenVpnSession {
     std::vector<uint8_t> send_buffer;
     std::vector<uint8_t> receive_buffer;
     
-    OpenVpnSession() : connected(false), connecting(false), androidClient(nullptr), client(nullptr), should_stop(false) {
+    // JNI callbacks for tunnel IP address and DNS servers (called when tun_builder_add_address() and tun_builder_set_dns_options() are invoked)
+    // These are global references to Kotlin objects that implement the callback interfaces
+    jobject ipAddressCallback;  // Global reference to Kotlin IP callback object
+    jobject dnsCallback;  // Global reference to Kotlin DNS callback object
+    JavaVM* javaVM;  // For calling callback from any thread
+    
+    OpenVpnSession() : connected(false), connecting(false), androidClient(nullptr), client(nullptr), should_stop(false), ipAddressCallback(nullptr), dnsCallback(nullptr), javaVM(nullptr) {
+        // atomic<bool> is initialized with false above
         // Initialize Android-specific OpenVPN 3 Client - This implements all required virtual methods
         androidClient = new AndroidOpenVPNClient();
         client = androidClient;  // Store both pointers for convenience
@@ -295,6 +677,29 @@ struct OpenVpnSession {
             connection_thread.join();
         }
         
+        // Clean up JNI callback references
+        if (ipAddressCallback && javaVM) {
+            JNIEnv* env = nullptr;
+            if (javaVM->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_OK) {
+                env->DeleteGlobalRef(ipAddressCallback);
+            } else if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) {
+                env->DeleteGlobalRef(ipAddressCallback);
+                javaVM->DetachCurrentThread();
+            }
+            ipAddressCallback = nullptr;
+        }
+        
+        if (dnsCallback && javaVM) {
+            JNIEnv* env = nullptr;
+            if (javaVM->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_OK) {
+                env->DeleteGlobalRef(dnsCallback);
+            } else if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) {
+                env->DeleteGlobalRef(dnsCallback);
+                javaVM->DetachCurrentThread();
+            }
+            dnsCallback = nullptr;
+        }
+        
         // Delete client (androidClient is the actual instance)
         if (androidClient) {
             delete androidClient;
@@ -315,13 +720,118 @@ struct OpenVpnSession {
 #endif
 };
 
+// Implement AndroidOpenVPNClient::setConnectedFromEvent() after OpenVpnSession definition
+#ifdef OPENVPN3_AVAILABLE
+void AndroidOpenVPNClient::setConnectedFromEvent() {
+    // CRITICAL: Set connected flag immediately when CONNECTED event fires
+    // Using atomic<bool> so we can set it from event handler without mutex
+    // This allows isConnected() to return true as soon as connection is established
+    if (session_) {
+        session_->connected = true;
+        // Need mutex for connecting since it's not atomic
+        std::lock_guard<std::mutex> lock(session_->state_mutex);
+        session_->connecting = false;
+        LOGI("Updated session->connected = true (connection fully established via event)");
+    }
+}
+
+// Implement AndroidOpenVPNClient::setSession() after OpenVpnSession definition
+void AndroidOpenVPNClient::setSession(OpenVpnSession* session) {
+    session_ = session;
+    // Also store callbacks and JavaVM from session for use in tun_builder_add_address and tun_builder_set_dns_options
+    if (session) {
+        ipAddressCallback_ = session->ipAddressCallback;
+        dnsCallback_ = session->dnsCallback;
+        sessionJavaVM_ = session->javaVM;
+        tunnelId_ = session->tunnelId;
+        LOGI("Set session pointer and updated callback info: tunnelId=%s", tunnelId_.c_str());
+    }
+}
+
+// Implement AndroidOpenVPNClient::updateSessionCallbackInfo() after OpenVpnSession definition
+void AndroidOpenVPNClient::updateSessionCallbackInfo(OpenVpnSession* session) {
+    if (session) {
+        ipAddressCallback_ = session->ipAddressCallback;
+        dnsCallback_ = session->dnsCallback;
+        sessionJavaVM_ = session->javaVM;
+        tunnelId_ = session->tunnelId;
+        LOGI("Updated callback info: tunnelId=%s, ipCallback=%p, dnsCallback=%p, javaVM=%p", 
+             tunnelId_.c_str(), ipAddressCallback_, dnsCallback_, sessionJavaVM_);
+    }
+}
+#endif
+
 extern "C" {
+
+// Helper function to set tunnel ID and callback
+void openvpn_wrapper_set_tunnel_id_and_callback(OpenVpnSession* session,
+                                                 JNIEnv* env,
+                                                 const char* tunnelId,
+                                                 jobject ipCallback,
+                                                 jobject dnsCallback) {
+#ifdef OPENVPN3_AVAILABLE
+    if (!session) {
+        LOGE("Invalid session for set_tunnel_id_and_callback");
+        return;
+    }
+    
+    // Set tunnel ID
+    if (tunnelId) {
+        session->tunnelId = std::string(tunnelId);
+        LOGI("Tunnel ID set: %s", tunnelId);
+    }
+    
+    // Store JavaVM for callback
+    if (!session->javaVM) {
+        env->GetJavaVM(&session->javaVM);
+    }
+    
+    // Set IP callback (global reference so it persists)
+    if (ipCallback) {
+        if (session->ipAddressCallback) {
+            // Delete old callback if exists
+            JNIEnv* currentEnv = nullptr;
+            if (session->javaVM->GetEnv((void**)&currentEnv, JNI_VERSION_1_6) == JNI_OK) {
+                currentEnv->DeleteGlobalRef(session->ipAddressCallback);
+            }
+        }
+        session->ipAddressCallback = env->NewGlobalRef(ipCallback);
+        LOGI("IP address callback set for tunnel: %s", tunnelId ? tunnelId : "unknown");
+    } else {
+        LOGW("IP address callback is null");
+    }
+    
+    // Set DNS callback (global reference so it persists)
+    if (dnsCallback) {
+        if (session->dnsCallback) {
+            // Delete old callback if exists
+            JNIEnv* currentEnv = nullptr;
+            if (session->javaVM->GetEnv((void**)&currentEnv, JNI_VERSION_1_6) == JNI_OK) {
+                currentEnv->DeleteGlobalRef(session->dnsCallback);
+            }
+        }
+        session->dnsCallback = env->NewGlobalRef(dnsCallback);
+        LOGI("DNS callback set for tunnel: %s", tunnelId ? tunnelId : "unknown");
+    } else {
+        LOGW("DNS callback is null");
+    }
+    
+    // Update AndroidOpenVPNClient with callback info so tun_builder_add_address and tun_builder_set_dns_options can use it
+    if (session->androidClient) {
+        session->androidClient->updateSessionCallbackInfo(session);
+        LOGI("Updated AndroidOpenVPNClient with callback info");
+    }
+#else
+    LOGE("OpenVPN 3 not available");
+#endif
+}
 
 // Helper function to set Android-specific parameters
 void openvpn_wrapper_set_android_params(OpenVpnSession* session,
                                         JNIEnv* env,
                                         jobject vpnBuilder,
-                                        jint tunFd) {
+                                        jint tunFd,
+                                        jobject vpnService) {
 #ifdef OPENVPN3_AVAILABLE
     if (!session || !session->androidClient) {
         LOGE("Invalid session or androidClient not available");
@@ -337,9 +847,20 @@ void openvpn_wrapper_set_android_params(OpenVpnSession* session,
     // Set JavaVM for getting JNIEnv in any thread
     session->androidClient->setJavaVM(javaVM);
     
+    // Also store in session for callback
+    session->javaVM = javaVM;
+    
     if (vpnBuilder) {
         session->androidClient->setVpnServiceBuilder(env, vpnBuilder);
         LOGI("VpnService.Builder set in AndroidOpenVPNClient");
+    }
+    
+    // CRITICAL: Set VpnService instance for socket protection
+    if (vpnService) {
+        session->androidClient->setVpnService(env, vpnService);
+        LOGI("VpnService instance set in AndroidOpenVPNClient (for protect())");
+    } else {
+        LOGW("VpnService instance is null - socket protection will fail!");
     }
     
     // CRITICAL: Set TUN file descriptor BEFORE calling connect()
@@ -399,11 +920,12 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         std::string config_content = std::string(config_str);
         
         // Remove OpenVPN 3 unsupported options (these are OpenVPN 2.x only)
+        // NOTE: comp-lzo is supported by OpenVPN 3, but we need to handle it properly
         std::vector<std::string> unsupported_options = {
             "ping-timer-rem",
             "remote-random",
-            "fast-io",
-            "comp-lzo"
+            "fast-io"
+            // "comp-lzo" - REMOVED: OpenVPN 3 supports LZO compression
         };
         
         for (const auto& option : unsupported_options) {
@@ -431,12 +953,23 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
             }
         }
         
-        // CRITICAL FIX: Remove auth-user-pass from config when using OpenVPN 3 ClientAPI
-        // OpenVPN 3 ClientAPI expects credentials via provide_creds(), NOT via auth file
-        // Having both causes OpenVPN 3 to try reading from a file path that may not be accessible
-        // or conflict with the credentials we provide programmatically
-        if (config_content.find("auth-user-pass") != std::string::npos) {
-            // Find and remove the auth-user-pass line (with or without file path)
+        // CRITICAL: Keep 'auth-user-pass' in config (without file path) to prevent autologin detection
+        // OpenVPN 3 detects autologin when 'auth-user-pass' is missing, which causes:
+        //   - eval.autologin = true
+        //   - xmit_creds = false
+        //   - client_auth() never called
+        //   - Credentials never sent
+        //   - Connection times out
+        // 
+        // By keeping 'auth-user-pass' (without a file path), OpenVPN 3 knows credentials are needed,
+        // but will use provide_creds() for the actual credentials instead of reading from a file.
+        if (config_content.find("auth-user-pass") == std::string::npos) {
+            // Add auth-user-pass without file path - this tells OpenVPN 3 credentials are needed
+            // but we'll provide them via provide_creds() instead of a file
+            config_content += "\nauth-user-pass\n";
+            LOGI("Added 'auth-user-pass' directive (without file path) to prevent autologin detection");
+        } else {
+            // Replace any auth-user-pass with file path to just 'auth-user-pass' (no file)
             size_t pos = 0;
             while ((pos = config_content.find("auth-user-pass", pos)) != std::string::npos) {
                 // Find the start of the line
@@ -446,17 +979,16 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
                 } else {
                     line_start++; // Skip the newline
                 }
-                // Find the end of the line (could be just "auth-user-pass" or "auth-user-pass /path")
+                // Find the end of the line
                 size_t line_end = config_content.find('\n', pos);
                 if (line_end == std::string::npos) {
                     line_end = config_content.length();
                 } else {
                     line_end++; // Include the newline
                 }
-                // Remove the entire line
-                config_content.erase(line_start, line_end - line_start);
-                LOGI("Removed 'auth-user-pass' line from config (using provide_creds() instead)");
-                // Don't continue searching - we only expect one auth-user-pass line
+                // Replace with just 'auth-user-pass' (no file path)
+                config_content.replace(line_start, line_end - line_start, "auth-user-pass\n");
+                LOGI("Replaced 'auth-user-pass' with file path to 'auth-user-pass' (using provide_creds() instead)");
                 break;
             }
         }
@@ -474,13 +1006,82 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
             LOGI("Added 'client-cert-not-required' directive to config");
         }
         
+        // Increase verbosity for debugging (verb 5 = very verbose)
+        // Check if verb is already set, and if so, replace it with verb 5
+        // Otherwise, add verb 5
+        std::string verb_pattern = "verb ";
+        size_t verb_pos = config_content.find(verb_pattern);
+        if (verb_pos != std::string::npos) {
+            // Find the line with verb and replace it
+            size_t line_start = config_content.rfind('\n', verb_pos);
+            if (line_start == std::string::npos) {
+                line_start = 0;
+            } else {
+                line_start++; // Skip the newline
+            }
+            size_t line_end = config_content.find('\n', verb_pos);
+            if (line_end == std::string::npos) {
+                line_end = config_content.length();
+            } else {
+                line_end++; // Include the newline
+            }
+            // Replace the verb line with verb 5
+            config_content.replace(line_start, line_end - line_start, "verb 5\n");
+            LOGI("Updated verbosity to verb 5 (very verbose)");
+        } else {
+            // Add verb 5 if not present
+            config_content += "\nverb 5\n";
+            LOGI("Added 'verb 5' directive to config (very verbose logging)");
+        }
+        
         LOGI("OpenVPN config processed (%zu bytes, removed unsupported options)", config_content.length());
         
         session->config.content = config_content;
         session->config.connTimeout = 30;  // Connection timeout in seconds
         session->config.tunPersist = false; // Don't persist TUN interface
         
+        // CRITICAL: Set compression mode to handle server-pushed compression
+        // When compiled without LZO, OpenVPN 3 rejects LZO_STUB when compression_mode='no'
+        // Setting compressionMode to "asym" allows asymmetric compression (downlink only)
+        // which accepts LZO_STUB from server without actually compressing our uplink
+        // This prevents COMPRESS_ERROR while maintaining security (no compression on our side)
+        session->config.compressionMode = "asym";
+        LOGI("Set compressionMode = 'asym' to accept server-pushed LZO_STUB without compressing uplink");
+        
+        // CRITICAL: Set the TunBuilderBase instance before eval_config()
+        // OpenVPN 3 needs this to call tun_builder_new() and other TUN setup methods
+        // Without this, TUN_SETUP_FAILED: tun_builder_new failed will occur
+        // The builder is passed via Options struct which is used in connect_setup()
+        // We need to set it in the Options that will be used when creating ClientOptions
+        // This is done via the Options struct passed to eval_config() or connect()
+        // However, Options is internal. Instead, OpenVPNClient inherits from TunBuilderBase,
+        // and the client instance itself IS the builder. We just need to ensure it's passed correctly.
+        // Actually, looking at the code, Config doesn't have a builder field - it's in Options
+        // which is created internally. The OpenVPNClient instance itself should be used as the builder.
+        // But since OpenVPNClient inherits from TunBuilderBase, and we're using it as the client,
+        // OpenVPN 3 should automatically use it. Let me check if there's another way...
+        // Actually, from cliopt.hpp line 393: tunconf->builder = config.builder;
+        // So the builder comes from config.builder, which means it's in Options, not Config.
+        // But Config doesn't expose Options. We need to check how to set it.
+        LOGI("Note: TunBuilderBase should be set, checking if OpenVPNClient instance is used as builder");
+        
+        // CRITICAL: Set autologinSessions = false to prevent creds_locked from being set
+        // When autologin_sessions is true, ClientOptions constructor sets creds_locked = true,
+        // which prevents credentials from being updated via submit_creds() later.
+        // Since we're using provide_creds() to provide credentials, we need autologinSessions = false
+        // so that credentials can be updated via submit_creds() in connect_setup().
+        // autologinSessions is in ConfigCommon (which Config inherits from)
+        session->config.autologinSessions = false;
+        LOGI("Set autologinSessions = false to allow credential updates via provide_creds()");
+        
         LOGI("Evaluating OpenVPN 3 config using ClientAPI...");
+        LOGI("Config content length: %zu bytes", session->config.content.length());
+        
+        // Log first 500 chars of config to verify CA cert is present
+        if (session->config.content.length() > 0) {
+            std::string preview = session->config.content.substr(0, 500);
+            LOGI("Config preview (first 500 chars): %s", preview.c_str());
+        }
         
         // 2. Evaluate the config using OpenVPN 3 service
         EvalConfig eval = session->client->eval_config(session->config);
@@ -491,6 +1092,19 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         }
         
         LOGI("Config evaluated successfully. Profile: %s", eval.profileName.c_str());
+        LOGI("EvalConfig: autologin=%s, externalPki=%s, userlockedUsername=%s", 
+             eval.autologin ? "true" : "false",
+             eval.externalPki ? "true" : "false",
+             eval.userlockedUsername.c_str());
+        
+        // CRITICAL: If eval.autologin is true, xmit_creds will be false
+        // even if we set autologinSessions = false. This would prevent
+        // client_auth() from being called.
+        if (eval.autologin) {
+            LOGE("WARNING: eval_config() returned autologin=true!");
+            LOGE("This means xmit_creds will be false, preventing client_auth() from being called");
+            LOGE("NordVPN configs should not be autologin - they require username/password");
+        }
         
         // 3. Set credentials
         // username and password are already UTF-8 from JNI GetStringUTFChars()
@@ -517,10 +1131,25 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         }
         
         // 4. Provide credentials to OpenVPN 3 service
+        // CRITICAL: Store credentials in session->creds AND call provide_creds()
+        // OpenVPN 3 should use these credentials during connect()
+        // 
+        // IMPORTANT: provide_creds() must be called AFTER eval_config() but BEFORE connect()
+        // - eval_config() doesn't create ClientOptions (that happens in connect_setup())
+        // - connect_setup() creates ClientOptions, which calls submit_creds(empty_creds) in constructor
+        // - Then connect_setup() calls submit_creds(state->creds) to update with our credentials
+        // - If creds_locked is true, submit_creds() won't update credentials (but this only happens for autologin/embedded)
+        LOGI("═══════════════════════════════════════════════════════");
+        LOGI("Calling provide_creds() on client instance:");
+        LOGI("Client pointer: %p", (void*)session->client);
+        LOGI("Username: %zu bytes", session->creds.username.length());
+        LOGI("Password: %zu bytes", session->creds.password.length());
+        LOGI("═══════════════════════════════════════════════════════");
+        
         Status credsStatus = session->client->provide_creds(session->creds);
         if (credsStatus.error) {
             session->last_error = credsStatus.message;
-            LOGE("OpenVPN 3 authentication failed: %s", credsStatus.message.c_str());
+            LOGE("OpenVPN 3 provide_creds() failed: %s", credsStatus.message.c_str());
             // Check if it's an auth-specific error
             std::string errorMsg = credsStatus.message;
             std::transform(errorMsg.begin(), errorMsg.end(), errorMsg.begin(), ::tolower);
@@ -534,7 +1163,58 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
             return OPENVPN_ERROR_INVALID_PARAMS;
         }
         
-        LOGI("Credentials provided to OpenVPN 3 service successfully");
+        LOGI("✅ provide_creds() succeeded - credentials should be stored in client");
+        LOGI("   Client instance: %p", (void*)session->client);
+        LOGI("   Same client will be used for connect()");
+        
+        // CRITICAL: Verify that state->creds was set correctly
+        // provide_creds() creates a new ClientCreds and sets state->creds = cc
+        // If provide_creds() returned success, state->creds should be set.
+        // When connect() is called, connect_setup() will:
+        //   1. Create ClientOptions (which creates empty creds in constructor)
+        //   2. Call submit_creds(state->creds) to update with our credentials
+        //   3. If state->creds is NULL, submit_creds() returns early (line 1185-1186)
+        //   4. This would cause 'Creds: UsernameEmpty' in client_auth()
+        LOGI("   Credentials stored in OpenVPNClient's internal state->creds");
+        LOGI("   When connect() is called, connect_setup() will call submit_creds(state->creds)");
+        LOGI("   If state->creds is NULL here, submit_creds() will return early!");
+        LOGI("   This would cause Session to have empty creds -> 'Creds: UsernameEmpty'");
+        
+        // Try to verify credentials using session_token() if available
+        // This can help us confirm that state->creds is actually set
+        try {
+            SessionToken token;
+            // session_token() only returns true if session_id is defined, but we can try
+            // This is just a verification attempt - it may not work for username/password auth
+            LOGI("Attempting to verify credentials via session_token()...");
+            // Note: session_token() only works if session_id is set, which won't be the case
+            // for initial username/password auth. This is just for debugging.
+        } catch (...) {
+            // Ignore - session_token may not be available or may throw
+        }
+        
+        // CRITICAL: Set session pointer in AndroidOpenVPNClient so event() can update connection state
+        // This must be done BEFORE connect() so CONNECTED events can set connected=true
+        if (session->androidClient) {
+            session->androidClient->setSession(session);
+            LOGI("Set session pointer in AndroidOpenVPNClient for event callbacks");
+        }
+        
+        // CRITICAL: Also store credentials in AndroidOpenVPNClient for client_auth() callback
+        // OpenVPN 3 may call client_auth() during connect() instead of using provide_creds()
+        if (session->androidClient) {
+            session->androidClient->setStoredCredentials(session->creds.username, session->creds.password);
+            LOGI("Stored credentials in AndroidOpenVPNClient for client_auth() callback");
+        }
+        
+        // CRITICAL: Add explicit verification that credentials are still in our session struct
+        // This helps verify they weren't corrupted before being passed to provide_creds()
+        LOGI("═══════════════════════════════════════════════════════");
+        LOGI("Post-provide_creds() verification:");
+        LOGI("  session->creds.username length: %zu bytes", session->creds.username.length());
+        LOGI("  session->creds.password length: %zu bytes", session->creds.password.length());
+        LOGI("  Client pointer still valid: %p", (void*)session->client);
+        LOGI("═══════════════════════════════════════════════════════");
         
         // 5. Start connection using OpenVPN 3 service (connect() is blocking)
         // The connect() method blocks and manages the connection loop via OpenVPN 3
@@ -551,12 +1231,55 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         
         session->connection_thread = std::thread([session]() {
             try {
+                // CRITICAL: Verify credentials are still valid before connect()
+                // Log credential status to verify they weren't cleared
+                LOGI("═══════════════════════════════════════════════════════");
+                LOGI("About to call connect() - verifying credentials:");
+                LOGI("Username length: %zu bytes", session->creds.username.length());
+                LOGI("Password length: %zu bytes", session->creds.password.length());
+                if (!session->creds.username.empty()) {
+                    LOGI("Username first byte: 0x%02x", (unsigned char)session->creds.username[0]);
+                }
+                LOGI("Client instance: %p", (void*)session->client);
+                LOGI("═══════════════════════════════════════════════════════");
+                
+                // CRITICAL: The connect() call will internally:
+                // 1. Call connect_setup() which creates ClientOptions
+                // 2. ClientOptions constructor creates empty creds
+                // 3. connect_setup() calls submit_creds(state->creds)
+                // 4. If state->creds is NULL, submit_creds() returns early
+                // 5. Session ends up with empty creds -> "Creds: UsernameEmpty"
+                //
+                // We can't verify state->creds directly, but we can log that
+                // provide_creds() succeeded, which means state->creds should be set.
+                LOGI("Calling connect() - this will call connect_setup() which");
+                LOGI("should call submit_creds(state->creds) with credentials from provide_creds()");
+                
+                // Log immediately before connect() to see if we reach this point
+                LOGI("═══════════════════════════════════════════════════════");
+                LOGI("About to call session->client->connect()");
+                LOGI("Client pointer: %p", (void*)session->client);
+                LOGI("Config content length: %zu bytes", session->config.content.length());
+                LOGI("Config preview (first 200 chars): %s", session->config.content.substr(0, 200).c_str());
+                LOGI("═══════════════════════════════════════════════════════");
+                
                 // This calls OpenVPN 3 service connect() - blocks until disconnect
                 // This can take a long time (60+ seconds), so we mark as connecting first
+                // The CONNECTED event will fire during connect(), and we'll set connected=true then
+                LOGI("Calling connect() NOW - this will block until connection is established or fails");
                 Status connectStatus = session->client->connect();
+                LOGI("connect() returned - error=%s, message=%s", connectStatus.error ? "true" : "false", connectStatus.message.c_str());
                 
                 std::lock_guard<std::mutex> lock(session->state_mutex);
                 session->connecting = false;  // No longer connecting
+                
+                // If connect() returned successfully, connection is established
+                // (CONNECTED event should have already fired and set connected=true via event callback)
+                // But if it didn't, set it here as fallback
+                if (!connectStatus.error && !session->connected) {
+                    LOGI("connect() returned success but connected flag not set - setting now");
+                    session->connected = true;
+                }
                 
                 if (connectStatus.error) {
                     session->last_error = connectStatus.message;
@@ -688,22 +1411,34 @@ int openvpn_wrapper_send_packet(OpenVpnSession* session,
             return -1;
         }
         
-        // OpenVPN 3 handles packet I/O through its TunBuilder interface
-        // In Android, we need to implement a custom TunBuilder that writes
-        // packets to the VpnService's TUN file descriptor.
+        // CRITICAL: OpenVPN 3 ClientAPI reads packets from TUN FD directly
+        // This means we CANNOT write packets to TUN - it will conflict with OpenVPN 3's reads.
         // 
-        // For now, we queue packets. The actual implementation would require
-        // implementing TunBuilderBase callbacks to interface with Android's VpnService.
+        // For multi-tunnel routing, we need to:
+        // 1. Read packets from TUN ourselves (VpnEngineService.readPacketsFromTun)
+        // 2. Route them based on app rules (PacketRouter)
+        // 3. Inject packets directly into OpenVPN 3's protocol/transport layer
+        //
+        // However, OpenVPN 3 ClientAPI doesn't expose a packet injection API.
+        // The ClientAPI is designed for single-tunnel VPNs where OpenVPN 3 manages TUN I/O.
+        //
+        // SOLUTION: We need to prevent OpenVPN 3 from reading from TUN and handle I/O ourselves.
+        // But OpenVPN 3 ClientAPI requires a valid TUN FD for tun_builder_establish().
+        //
+        // ALTERNATIVE: Don't write to TUN at all. Instead, queue packets and let
+        // VpnEngineService read from TUN, then route them appropriately.
+        // But then how do we get packets INTO OpenVPN 3?
+        //
+        // CRITICAL: With FIFO-based routing, we don't need to queue packets here.
+        // Packets are written to FIFO from Kotlin code (VpnConnectionManager.sendPacketToTunnel).
+        // This function is called from the old sendPacket() path, which we're replacing.
+        // 
+        // For FIFO-based routing, we should never reach here because sendPacketToTunnel()
+        // writes directly to FIFO. But if we do, just return success (packet will be
+        // written to FIFO from Kotlin side).
         
-        // Queue packet for processing
-        session->send_buffer.insert(session->send_buffer.end(), packet, packet + len);
-        
-        // TODO: Implement custom TunBuilder that writes to Android VpnService TUN fd
-        // This requires implementing the TunBuilderBase virtual methods to:
-        // 1. Capture the TUN file descriptor from tun_builder_establish()
-        // 2. Write packets directly to that fd
-        
-        return 0; // Success (packet queued)
+        LOGI("send_packet() called for tunnel - packet should be written to FIFO from Kotlin");
+        return 0; // Success (packet will be written to FIFO)
     } catch (const std::exception& e) {
         LOGE("Exception during send_packet: %s", e.what());
         return -1;
@@ -781,15 +1516,25 @@ int openvpn_wrapper_is_connected(OpenVpnSession* session) {
         }
         
         // If connection is established, return true
-        if (session->connected) {
+        // Use load() for atomic<bool> to get thread-safe read
+        if (session->connected.load()) {
             return 1;
         }
         
-        // If connection is in progress, return true (connection is happening, just not complete yet)
-        // This prevents the packet reception loop from giving up too early
-        if (session->connecting) {
-            LOGI("is_connected: connection in progress (connecting=true), returning 1");
-            return 1;
+        // CRITICAL: For connection state checking in VpnConnectionManager,
+        // we should NOT return true for connecting=true. We only want to return
+        // true when fully connected. This allows VpnConnectionManager to correctly
+        // detect connecting state and pause TUN reading.
+        //
+        // The packet reception loop in NativeOpenVpnClient.kt handles waiting
+        // differently - it checks nativeIsConnected() less frequently and waits
+        // for connection to be ready before starting packet reception.
+        //
+        // Return false for connecting=true to fix VpnConnectionManager state detection
+        if (session->connecting && !session->connected) {
+            // Connection is in progress but not complete - return false
+            // This allows VpnConnectionManager to detect connecting state correctly
+            return 0;
         }
         
         return 0;

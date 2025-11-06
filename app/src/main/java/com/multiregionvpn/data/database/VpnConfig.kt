@@ -15,3 +15,4 @@ data class VpnConfig(
     val templateId: String, // e.g., "nordvpn"
     val serverHostname: String // e.g., "uk1860.nordvpn.com"
 )
+

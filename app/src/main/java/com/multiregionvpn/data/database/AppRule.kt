@@ -25,3 +25,4 @@ data class AppRule(
     val packageName: String, // e.g., "com.bbc.iplayer"
     val vpnConfigId: String? // e.g., "uuid-12345". Null means "Direct Internet".
 )
+

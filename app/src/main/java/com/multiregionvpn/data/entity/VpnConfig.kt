@@ -12,3 +12,4 @@ data class VpnConfig(
     val templateId: String,
     val serverHostname: String
 )
+

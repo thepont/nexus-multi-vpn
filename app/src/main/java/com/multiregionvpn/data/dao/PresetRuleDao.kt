@@ -20,3 +20,4 @@ interface PresetRuleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(presetRules: List<PresetRule>)
 }
+

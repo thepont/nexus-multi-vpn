@@ -4,10 +4,12 @@ import android.content.Context
 import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.rule.GrantPermissionRule
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.multiregionvpn.core.VpnEngineService
+import com.multiregionvpn.core.VpnConnectionManager
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
@@ -24,14 +26,32 @@ import org.junit.runner.RunWith
 import java.util.UUID
 
 /**
- * Comprehensive E2E test suite that validates VPN routing functionality.
- * Tests three scenarios:
- * 1. Routing to UK VPN
- * 2. Routing to FR VPN  
+ * Test Suite 1: NordVpnE2ETest.kt (The "Live" Test)
+ * 
+ * Purpose: End-to-end (E2E) "black-box" validation that the entire application pipeline
+ * works with the live, production NordVPN API and authentication system.
+ * 
+ * This test validates:
+ * 1. Routing to UK VPN (using real NordVPN servers)
+ * 2. Routing to FR VPN (using real NordVPN servers)
  * 3. Routing to Direct Internet (no rule)
+ * 
+ * Status: Retained as-is - provides production environment validation.
  */
 @RunWith(AndroidJUnit4::class)
-class VpnRoutingTest {
+class NordVpnE2ETest {
+
+    // Grant runtime permissions automatically before each test
+    // Note: VPN permission (BIND_VPN_SERVICE) is special and requires VpnService.prepare() which shows a system dialog.
+    // GrantPermissionRule only works for runtime permissions, not for special permissions like VPN.
+    // We'll handle VPN permission separately via the permission dialog.
+    @get:Rule
+    val grantPermissionRule: GrantPermissionRule = GrantPermissionRule.grant(
+        android.Manifest.permission.INTERNET,
+        android.Manifest.permission.ACCESS_NETWORK_STATE,
+        // Note: BIND_VPN_SERVICE, FOREGROUND_SERVICE, and FOREGROUND_SERVICE_DATA_SYNC are not runtime permissions
+        // and cannot be granted via GrantPermissionRule. They must be granted via manifest or system dialogs.
+    )
 
     private lateinit var settingsRepo: SettingsRepository
 
@@ -41,13 +61,19 @@ class VpnRoutingTest {
     private lateinit var defaultCountry: String
 
     // --- Test Configuration ---
-    private val TEST_PACKAGE_NAME = "com.multiregionvpn.test" // Test runner package
+    // CRITICAL: Use test instrumentation package name (com.multiregionvpn.test), NOT target app package
+    // The test runner's HTTP calls must be routed through VPN, so we need the test package
+    // - targetContext.packageName = "com.multiregionvpn" (the app being tested)
+    // - context.packageName = "com.multiregionvpn.test" (the test instrumentation runner)
+    private val TEST_PACKAGE_NAME = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.packageName
     private val UK_VPN_ID = "test-uk-${UUID.randomUUID().toString().take(8)}"
     private val FR_VPN_ID = "test-fr-${UUID.randomUUID().toString().take(8)}"
     
-    // Use known NordVPN server hostnames (these are public and don't require auth)
-    private val UK_SERVER_HOSTNAME = "uk1234.nordvpn.com" // Example UK server
-    private val FR_SERVER_HOSTNAME = "fr1234.nordvpn.com" // Example FR server
+    // Real NordVPN server hostnames - these are actual servers that exist
+    // Format: {country_code}{number}.nordvpn.com
+    // Using servers from API recommendations that are confirmed to exist
+    private val UK_SERVER_HOSTNAME = "uk1827.nordvpn.com" // Real UK server (from API recommendations)
+    private val FR_SERVER_HOSTNAME = "fr985.nordvpn.com" // Real FR server (from API recommendations)
 
     @Before
     fun setup() = runBlocking {
@@ -59,6 +85,22 @@ class VpnRoutingTest {
         // Note: App data should be cleared before running tests via:
         // adb shell pm clear com.multiregionvpn
 
+        // Pre-approve VPN permission using appops (App Operations)
+        // This is the recommended way to grant VPN permission for integration tests.
+        // Command: adb shell appops set <package.name> ACTIVATE_VPN allow
+        // This makes VpnService.prepare() return null immediately (permission already granted).
+        // NOTE: This should ideally be run before tests via CI/CD script, but we try here too.
+        try {
+            // Use UiAutomator's shell command execution
+            val appopsCommand = "appops set ${appContext.packageName} ACTIVATE_VPN allow"
+            val result = device.executeShellCommand(appopsCommand)
+            println("✅ VPN permission pre-approved via appops: $result")
+        } catch (e: Exception) {
+            println("⚠️  Could not pre-approve VPN permission via appops: ${e.message}")
+            println("   This may need to be run manually: adb shell appops set ${appContext.packageName} ACTIVATE_VPN allow")
+            println("   The test will try to handle the permission dialog instead")
+        }
+        
         // Initialize repository manually (without Hilt for E2E tests)
         val database = AppDatabase.getDatabase(appContext)
         settingsRepo = SettingsRepository(
@@ -164,12 +206,14 @@ class VpnRoutingTest {
         // WHEN: The VPN service is started
         startVpnEngine()
 
-        // Verify tunnel connection before checking IP
+        // Verify tunnel is FULLY READY for routing (connected + IP + DNS)
         val tunnelId = "nordvpn_UK"
-        verifyTunnelConnected(tunnelId, timeoutMs = 60000)
+        verifyTunnelReadyForRouting(tunnelId, timeoutMs = 120000)
         
         // THEN: Our IP should be in the UK
-        delay(5000) // Wait for routing to stabilize
+        // No additional delays needed - verifyTunnelReadyForRouting ensures everything is ready
+        println("⏳ Making HTTP request to verify routing...")
+        println("   Tunnel is fully ready - connection, IP, and DNS are all configured")
         val vpnIpInfo = IpCheckService.api.getIpInfo()
         println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
         println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
@@ -196,12 +240,14 @@ class VpnRoutingTest {
         // WHEN: The VPN service is started
         startVpnEngine()
 
-        // Verify tunnel connection before checking IP
+        // Verify tunnel is FULLY READY for routing (connected + IP + DNS)
         val tunnelId = "nordvpn_FR"
-        verifyTunnelConnected(tunnelId, timeoutMs = 60000)
+        verifyTunnelReadyForRouting(tunnelId, timeoutMs = 120000)
         
         // THEN: Our IP should be in France
-        delay(5000) // Wait for routing to stabilize
+        // No additional delays needed - verifyTunnelReadyForRouting ensures everything is ready
+        println("⏳ Making HTTP request to verify routing...")
+        println("   Tunnel is fully ready - connection, IP, and DNS are all configured")
         val vpnIpInfo = IpCheckService.api.getIpInfo()
         println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
         println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
@@ -272,9 +318,85 @@ class VpnRoutingTest {
     /**
      * Starts the VPN engine by clicking the toggle in the UI and handling system dialogs.
      * Uses improved permission handling logic from VpnToggleTest.
+     * 
+     * NOTE: If UI toggle doesn't work, we fall back to directly starting the service.
      */
     private fun startVpnEngine() = runBlocking {
         println("🔌 Starting VPN engine...")
+        
+        // Check VPN permission status
+        // If appops was used to pre-approve VPN, VpnService.prepare() will return null immediately.
+        // Otherwise, we'll need to handle the permission dialog.
+        println("   Checking VPN permission status...")
+        val vpnPermissionIntent = android.net.VpnService.prepare(appContext)
+        if (vpnPermissionIntent != null) {
+            println("   ⚠️  VPN permission NOT pre-approved - permission dialog will appear")
+            println("   Attempting to grant via permission dialog...")
+            println("   NOTE: For CI/CD, run: adb shell appops set ${appContext.packageName} ACTIVATE_VPN allow")
+            
+            // Launch permission dialog
+            try {
+                appContext.startActivity(vpnPermissionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                delay(5000) // Wait longer for dialog to appear
+                
+                // Handle permission dialog using UiAutomator
+                handlePermissionDialog()
+                delay(3000) // Wait for permission to be granted
+                
+                // Verify permission was granted
+                val checkAfter = android.net.VpnService.prepare(appContext)
+                if (checkAfter != null) {
+                    println("   ⚠️  VPN permission still not granted after dialog handling")
+                    println("   VPN interface establishment will likely fail")
+                    println("   Recommendation: Run 'adb shell appops set ${appContext.packageName} ACTIVATE_VPN allow' before tests")
+                } else {
+                    println("   ✅ VPN permission granted successfully via dialog")
+                }
+            } catch (e: Exception) {
+                println("   ⚠️  Error handling VPN permission: ${e.message}")
+                // Continue anyway - might already be granted
+            }
+        } else {
+            println("   ✅ VPN permission already pre-approved (appops ACTIVATE_VPN allow worked!)")
+        }
+        
+        // Now try direct service start (bypass UI for reliability)
+        try {
+            println("   Attempting direct service start (bypassing UI)...")
+            val startIntent = Intent(appContext, VpnEngineService::class.java).apply {
+                action = VpnEngineService.ACTION_START
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                appContext.startForegroundService(startIntent)
+            } else {
+                appContext.startService(startIntent)
+            }
+            println("   ✅ Direct service start sent - waiting for VPN to initialize...")
+            delay(5000) // Wait for service to start
+            
+            // Check if service is actually running
+            val serviceRunning = try {
+                val connectionManager = VpnConnectionManager.getInstance()
+                true
+            } catch (e: Exception) {
+                false
+            }
+            
+            if (serviceRunning) {
+                println("   ✅ VPN service started successfully via direct intent")
+                delay(10000) // Give time for VPN interface to establish
+                return@runBlocking
+            } else {
+                println("   ⚠️  Service started but VpnConnectionManager not yet initialized")
+                // Continue - it might initialize soon
+            }
+        } catch (e: Exception) {
+            println("   ⚠️  Direct service start failed: ${e.message}")
+            println("   Falling back to UI toggle method...")
+        }
+        
+        // Fallback: Use UI toggle method
+        println("   Using UI toggle method...")
         
         // Ensure MainActivity is launched
         launchMainActivity()
@@ -315,9 +437,46 @@ class VpnRoutingTest {
         
         assertNotNull("❌ Could not find 'start_service_toggle' in UI. Is MainActivity displayed?", startToggle)
 
-        // Click the toggle using bounds center (better for Compose Switch)
-        if (!startToggle!!.isChecked) {
-            println("   Clicking VPN toggle...")
+        // Check toggle state and ensure it's OFF before clicking
+        val toggleState = startToggle!!.isChecked
+        println("   VPN toggle current state: ${if (toggleState) "ON (checked)" else "OFF (unchecked)"}")
+        
+        if (toggleState) {
+            // Toggle is already ON - this means VPN is already running
+            // We need to turn it OFF first, then ON again to restart it
+            println("   ⚠️  Toggle is already ON - turning OFF first, then ON again")
+            val bounds = startToggle.visibleBounds
+            if (bounds.width() > 0 && bounds.height() > 0) {
+                device.click(bounds.centerX(), bounds.centerY())
+                println("   Clicked toggle to turn OFF at center: (${bounds.centerX()}, ${bounds.centerY()})")
+            } else {
+                startToggle.click()
+                println("   Clicked toggle to turn OFF directly")
+            }
+            // Wait for the stop action to complete
+            delay(2000)
+            
+            // Now click again to turn it ON
+            val toggleAfterStop = device.wait(
+                Until.findObject(By.res(appContext.packageName, "start_service_toggle")),
+                3000
+            )
+            if (toggleAfterStop != null && !toggleAfterStop.isChecked) {
+                println("   Clicking toggle again to turn ON...")
+                val bounds2 = toggleAfterStop.visibleBounds
+                if (bounds2.width() > 0 && bounds2.height() > 0) {
+                    device.click(bounds2.centerX(), bounds2.centerY())
+                    println("   Clicked toggle to turn ON at center: (${bounds2.centerX()}, ${bounds2.centerY()})")
+                } else {
+                    toggleAfterStop.click()
+                    println("   Clicked toggle to turn ON directly")
+                }
+            } else {
+                println("   ⚠️  Could not find toggle after stop, or it's still checked")
+            }
+        } else {
+            // Toggle is OFF - click to turn ON
+            println("   Clicking VPN toggle to turn ON...")
             val bounds = startToggle.visibleBounds
             if (bounds.width() > 0 && bounds.height() > 0) {
                 device.click(bounds.centerX(), bounds.centerY())
@@ -326,21 +485,25 @@ class VpnRoutingTest {
                 startToggle.click()
                 println("   Clicked toggle directly")
             }
-        } else {
-            println("   VPN toggle already enabled")
         }
 
         // Wait a moment for permission dialog to appear (if needed)
-        delay(1000)
+        delay(2000)  // Increased wait time for Compose to process the click
 
         // Handle VPN permission dialog if needed
         if (permissionIntent != null) {
             println("   Handling VPN permission dialog...")
             handlePermissionDialog()
+            // Wait a bit after granting permission for the service to start
+            delay(2000)
         } else {
             println("   Permission already granted, skipping dialog")
         }
 
+        // Verify that ACTION_START was sent by checking logs
+        println("   Checking if VPN service received ACTION_START...")
+        delay(1000)
+        
         // Wait for the VPN to start and establish interface
         println("   Waiting 15 seconds for VPN engine to initialize and establish interface...")
         delay(15000) // Give enough time for VPN interface establishment and VpnConnectionManager initialization
@@ -349,27 +512,69 @@ class VpnRoutingTest {
     
     /**
      * Handles the VPN permission dialog with multiple strategies.
+     * VPN permission requires user confirmation via a system dialog.
      */
     private fun handlePermissionDialog() = runBlocking {
         println("   Waiting for VPN permission dialog...")
+        delay(1000) // Give dialog time to appear
         
-        var allowButton = device.wait(
-            Until.findObject(By.text("OK")),
-            3000
+        // Try multiple button texts and resource IDs
+        val buttonTexts = listOf("OK", "Allow", "Accept", "Yes")
+        val buttonResources = listOf(
+            "android:id/button1",
+            "android:id/positiveButton",
+            "com.android.permissioncontroller:id/grant_dialog_button_allow"
         )
         
-        if (allowButton == null) {
+        var allowButton: androidx.test.uiautomator.UiObject2? = null
+        
+        // Try button texts first
+        for (text in buttonTexts) {
             allowButton = device.wait(
-                Until.findObject(By.text("Allow")),
-                3000
+                Until.findObject(By.text(text)),
+                2000
             )
+            if (allowButton != null) {
+                println("   Found permission dialog button: '$text'")
+                break
+            }
         }
         
+        // Try resource IDs if text search failed
         if (allowButton == null) {
-            allowButton = device.wait(
-                Until.findObject(By.res("android:id/button1")),
-                3000
+            for (resId in buttonResources) {
+                allowButton = device.wait(
+                    Until.findObject(By.res(resId)),
+                    2000
+                )
+                if (allowButton != null) {
+                    println("   Found permission dialog button by resource: '$resId'")
+                    break
+                }
+            }
+        }
+        
+        // Try clicking by coordinates if we can find the dialog
+        if (allowButton == null) {
+            // Sometimes the dialog appears but we can't find the button
+            // Try to find any clickable element in the dialog area
+            val dialog = device.wait(
+                Until.findObject(By.pkg("com.android.permissioncontroller")),
+                2000
             )
+            if (dialog != null) {
+                println("   Found permission dialog window, trying to click OK area...")
+                // Click in the center-right area where OK buttons typically are
+                val bounds = dialog.visibleBounds
+                if (bounds.width() > 0 && bounds.height() > 0) {
+                    val clickX = bounds.right - 100
+                    val clickY = bounds.bottom - 100
+                    device.click(clickX, clickY)
+                    println("   Clicked dialog at ($clickX, $clickY)")
+                    delay(1000)
+                    return@runBlocking
+                }
+            }
         }
         
         if (allowButton == null) {
@@ -404,27 +609,41 @@ class VpnRoutingTest {
     }
     
     /**
-     * Verifies that a VPN tunnel is connected, waiting up to timeoutMs milliseconds.
-     * Throws AssertionError if tunnel doesn't connect.
+     * Verifies that a VPN tunnel is fully ready for routing, waiting up to timeoutMs milliseconds.
+     * This checks:
+     * 1. OpenVPN connection is established
+     * 2. Tunnel IP address has been assigned via DHCP
+     * 3. DNS servers have been configured
+     * 
+     * Throws AssertionError if tunnel doesn't become ready.
      */
-    private fun verifyTunnelConnected(tunnelId: String, timeoutMs: Long = 60000) {
-        println("🔍 Verifying tunnel connection: $tunnelId")
+    private fun verifyTunnelReadyForRouting(tunnelId: String, timeoutMs: Long = 120000) {
+        println("🔍 Verifying tunnel is ready for routing: $tunnelId")
+        println("   Waiting for: OpenVPN connection + IP assignment + DNS configuration")
         
         val startTime = System.currentTimeMillis()
-        var connected = false
+        var ready = false
         
         while (System.currentTimeMillis() - startTime < timeoutMs) {
             try {
-                // Try to access VpnConnectionManager to check tunnel status
-                // Note: We need to get the instance through the service or app context
+                // Try to access VpnConnectionManager to check tunnel readiness
                 val connectionManager = com.multiregionvpn.core.VpnConnectionManager.getInstance()
                 
-                if (connectionManager.isTunnelConnected(tunnelId)) {
-                    connected = true
-                    println("   ✅ Tunnel $tunnelId is connected!")
+                if (connectionManager.isTunnelReadyForRouting(tunnelId)) {
+                    ready = true
+                    println("   ✅ Tunnel $tunnelId is FULLY READY for routing!")
+                    println("      - OpenVPN connection: ✅")
+                    println("      - IP address assigned: ✅")
+                    println("      - DNS configured: ✅")
                     break
                 } else {
-                    println("   ⏳ Tunnel $tunnelId not connected yet... (${(System.currentTimeMillis() - startTime)/1000}s)")
+                    // Show partial readiness status
+                    val connected = connectionManager.isTunnelConnected(tunnelId)
+                    if (connected) {
+                        println("   ⏳ Tunnel $tunnelId connected, waiting for IP + DNS... (${(System.currentTimeMillis() - startTime)/1000}s)")
+                    } else {
+                        println("   ⏳ Tunnel $tunnelId connecting... (${(System.currentTimeMillis() - startTime)/1000}s)")
+                    }
                     Thread.sleep(2000) // Check every 2 seconds
                 }
             } catch (e: IllegalStateException) {
@@ -432,23 +651,22 @@ class VpnRoutingTest {
                 println("   ⏳ VpnConnectionManager not initialized yet... (${(System.currentTimeMillis() - startTime)/1000}s)")
                 Thread.sleep(2000)
             } catch (e: Exception) {
-                println("   ⚠️  Error checking tunnel status: ${e.message}")
+                println("   ⚠️  Error checking tunnel readiness: ${e.message}")
                 Thread.sleep(2000)
             }
         }
         
-        if (!connected) {
+        if (!ready) {
             // Capture diagnostics before failing
-            captureDiagnostics("tunnel_not_connected_$tunnelId")
+            captureDiagnostics("tunnel_not_ready_$tunnelId")
             
             throw AssertionError(
-                "❌ Tunnel $tunnelId did not connect within ${timeoutMs/1000} seconds.\n" +
-                "This usually means:\n" +
-                "1. OpenVPN 3 native library isn't working\n" +
-                "2. VPN credentials are invalid\n" +
-                "3. VPN server is unreachable\n" +
-                "4. Configuration is incorrect\n" +
-                "\nCheck logcat for details: adb logcat -s VpnConnectionManager NativeOpenVpnClient"
+                "❌ Tunnel $tunnelId did not become ready for routing within ${timeoutMs/1000} seconds.\n" +
+                "The tunnel may be:\n" +
+                "1. Not connected (OpenVPN 3 connection failed)\n" +
+                "2. Connected but IP not assigned (DHCP issue)\n" +
+                "3. Connected with IP but DNS not configured (DNS push issue)\n" +
+                "\nCheck logcat for details: adb logcat -s VpnConnectionManager NativeOpenVpnClient VpnEngineService"
             )
         }
     }

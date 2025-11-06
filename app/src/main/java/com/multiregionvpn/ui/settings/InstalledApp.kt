@@ -9,3 +9,4 @@ data class InstalledApp(
     val icon: android.graphics.drawable.Drawable
 )
 
+

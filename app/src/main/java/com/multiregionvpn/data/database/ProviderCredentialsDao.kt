@@ -10,3 +10,4 @@ interface ProviderCredentialsDao {
     @Query("SELECT * FROM provider_credentials WHERE templateId = :templateId LIMIT 1")
     suspend fun get(templateId: String): ProviderCredentials?
 }
+

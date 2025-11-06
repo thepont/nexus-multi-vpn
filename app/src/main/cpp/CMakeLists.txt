@@ -130,150 +130,159 @@ elseif(USE_VCPKG)
 endif()
 
 if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
-    message(STATUS "Resolving OpenVPN 3 dependencies...")
+    # Check if we can actually build OpenVPN 3
+    # If USE_VCPKG is enabled but vcpkg isn't available, disable OpenVPN 3
+    if(USE_VCPKG AND (NOT DEFINED ENV{VCPKG_ROOT} OR NOT EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"))
+        message(WARNING "vcpkg requested but not available - disabling OpenVPN 3")
+        set(ENABLE_OPENVPN3 OFF CACHE BOOL "Enable OpenVPN 3" FORCE)
+    endif()
     
-    if(USE_VCPKG)
-        message(STATUS "Using vcpkg for dependencies")
-        message(STATUS "Dependencies (lz4, fmt, asio, mbedtls) will be provided by vcpkg")
-        # vcpkg will handle all dependencies automatically via vcpkg.json manifest
-        # CRITICAL: Pre-find packages to ensure targets exist before OpenVPN 3 tries to find them
-        # OpenVPN 3's find_package calls will use Find*.cmake modules, but we can ensure
-        # vcpkg targets exist first
+    # Only proceed if OpenVPN 3 is still enabled after the check above
+    if(ENABLE_OPENVPN3)
+        message(STATUS "Resolving OpenVPN 3 dependencies...")
         
-        # When vcpkg is enabled, ensure packages are accessible via CMAKE_PREFIX_PATH
-        # vcpkg should set this automatically, but we ensure packages directory is included
-        # Get the triplet from cache (set by our vcpkg setup code above)
-        if(DEFINED ENV{VCPKG_ROOT})
-            set(VCPKG_ROOT_VAL "$ENV{VCPKG_ROOT}")
-            # Try to get triplet from cache, or use default
-            if(DEFINED VCPKG_TARGET_TRIPLET)
-                set(VCPKG_TRIPLET "${VCPKG_TARGET_TRIPLET}")
-            else()
-                # Default to arm64-android for arm64-v8a
-                if(ANDROID_ABI STREQUAL "arm64-v8a")
-                    set(VCPKG_TRIPLET "arm64-android")
-                elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
-                    set(VCPKG_TRIPLET "arm-android")
-                elseif(ANDROID_ABI STREQUAL "x86_64")
-                    set(VCPKG_TRIPLET "x64-android")
-                elseif(ANDROID_ABI STREQUAL "x86")
-                    set(VCPKG_TRIPLET "x86-android")
+        if(USE_VCPKG)
+            message(STATUS "Using vcpkg for dependencies")
+            message(STATUS "Dependencies (lz4, fmt, asio, mbedtls) will be provided by vcpkg")
+            # vcpkg will handle all dependencies automatically via vcpkg.json manifest
+            # CRITICAL: Pre-find packages to ensure targets exist before OpenVPN 3 tries to find them
+            # OpenVPN 3's find_package calls will use Find*.cmake modules, but we can ensure
+            # vcpkg targets exist first
+            
+            # When vcpkg is enabled, ensure packages are accessible via CMAKE_PREFIX_PATH
+            # vcpkg should set this automatically, but we ensure packages directory is included
+            # Get the triplet from cache (set by our vcpkg setup code above)
+            if(DEFINED ENV{VCPKG_ROOT})
+                set(VCPKG_ROOT_VAL "$ENV{VCPKG_ROOT}")
+                # Try to get triplet from cache, or use default
+                if(DEFINED VCPKG_TARGET_TRIPLET)
+                    set(VCPKG_TRIPLET "${VCPKG_TARGET_TRIPLET}")
                 else()
-                    set(VCPKG_TRIPLET "arm64-android")
+                    # Default to arm64-android for arm64-v8a
+                    if(ANDROID_ABI STREQUAL "arm64-v8a")
+                        set(VCPKG_TRIPLET "arm64-android")
+                    elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+                        set(VCPKG_TRIPLET "arm-android")
+                    elseif(ANDROID_ABI STREQUAL "x86_64")
+                        set(VCPKG_TRIPLET "x64-android")
+                    elseif(ANDROID_ABI STREQUAL "x86")
+                        set(VCPKG_TRIPLET "x86-android")
+                    else()
+                        set(VCPKG_TRIPLET "arm64-android")
+                    endif()
+                endif()
+                
+                # Add packages directory to CMAKE_PREFIX_PATH so CONFIG mode can find them
+                # This is needed because vcpkg's manifest mode uses packages/ directory
+                list(APPEND CMAKE_PREFIX_PATH "${VCPKG_ROOT_VAL}/packages/fmt_${VCPKG_TRIPLET}")
+                list(APPEND CMAKE_PREFIX_PATH "${VCPKG_ROOT_VAL}/packages/lz4_${VCPKG_TRIPLET}")
+                list(APPEND CMAKE_PREFIX_PATH "${VCPKG_ROOT_VAL}/packages/mbedtls_${VCPKG_TRIPLET}")
+                message(STATUS "Added vcpkg packages directories to CMAKE_PREFIX_PATH (triplet: ${VCPKG_TRIPLET})")
+                
+                # Also manually include config files if find_package doesn't work
+                # This ensures targets exist even if CMAKE_PREFIX_PATH isn't enough
+                set(FMT_CONFIG "${VCPKG_ROOT_VAL}/packages/fmt_${VCPKG_TRIPLET}/share/fmt/fmt-config.cmake")
+                set(LZ4_CONFIG "${VCPKG_ROOT_VAL}/packages/lz4_${VCPKG_TRIPLET}/share/lz4/lz4Config.cmake")
+                set(MBEDTLS_CONFIG "${VCPKG_ROOT_VAL}/packages/mbedtls_${VCPKG_TRIPLET}/share/mbedtls/MbedTLSConfig.cmake")
+                
+                if(EXISTS "${FMT_CONFIG}" AND NOT TARGET fmt::fmt)
+                    message(STATUS "Manually including fmt-config.cmake")
+                    include("${FMT_CONFIG}")
+                endif()
+                if(EXISTS "${LZ4_CONFIG}" AND NOT TARGET lz4::lz4)
+                    message(STATUS "Manually including lz4Config.cmake")
+                    include("${LZ4_CONFIG}")
+                endif()
+                if(EXISTS "${MBEDTLS_CONFIG}" AND NOT TARGET MbedTLS::mbedtls)
+                    message(STATUS "Manually including MbedTLSConfig.cmake")
+                    include("${MBEDTLS_CONFIG}")
                 endif()
             endif()
             
-            # Add packages directory to CMAKE_PREFIX_PATH so CONFIG mode can find them
-            # This is needed because vcpkg's manifest mode uses packages/ directory
-            list(APPEND CMAKE_PREFIX_PATH "${VCPKG_ROOT_VAL}/packages/fmt_${VCPKG_TRIPLET}")
-            list(APPEND CMAKE_PREFIX_PATH "${VCPKG_ROOT_VAL}/packages/lz4_${VCPKG_TRIPLET}")
-            list(APPEND CMAKE_PREFIX_PATH "${VCPKG_ROOT_VAL}/packages/mbedtls_${VCPKG_TRIPLET}")
-            message(STATUS "Added vcpkg packages directories to CMAKE_PREFIX_PATH (triplet: ${VCPKG_TRIPLET})")
+            # Pre-find packages to ensure targets exist before OpenVPN 3 tries to find them
+            # This helps when OpenVPN 3's find_package runs in subdirectory scope
+            find_package(fmt CONFIG QUIET)
+            find_package(lz4 CONFIG QUIET)
+            find_package(MbedTLS CONFIG QUIET)
             
-            # Also manually include config files if find_package doesn't work
-            # This ensures targets exist even if CMAKE_PREFIX_PATH isn't enough
-            set(FMT_CONFIG "${VCPKG_ROOT_VAL}/packages/fmt_${VCPKG_TRIPLET}/share/fmt/fmt-config.cmake")
-            set(LZ4_CONFIG "${VCPKG_ROOT_VAL}/packages/lz4_${VCPKG_TRIPLET}/share/lz4/lz4Config.cmake")
-            set(MBEDTLS_CONFIG "${VCPKG_ROOT_VAL}/packages/mbedtls_${VCPKG_TRIPLET}/share/mbedtls/MbedTLSConfig.cmake")
-            
-            if(EXISTS "${FMT_CONFIG}" AND NOT TARGET fmt::fmt)
-                message(STATUS "Manually including fmt-config.cmake")
-                include("${FMT_CONFIG}")
-            endif()
-            if(EXISTS "${LZ4_CONFIG}" AND NOT TARGET lz4::lz4)
-                message(STATUS "Manually including lz4Config.cmake")
-                include("${LZ4_CONFIG}")
-            endif()
-            if(EXISTS "${MBEDTLS_CONFIG}" AND NOT TARGET MbedTLS::mbedtls)
-                message(STATUS "Manually including MbedTLSConfig.cmake")
-                include("${MBEDTLS_CONFIG}")
-            endif()
-        endif()
-        
-        # Pre-find packages to ensure targets exist before OpenVPN 3 tries to find them
-        # This helps when OpenVPN 3's find_package runs in subdirectory scope
-        find_package(fmt CONFIG QUIET)
-        find_package(lz4 CONFIG QUIET)
-        find_package(MbedTLS CONFIG QUIET)
-        
-        message(STATUS "Pre-found vcpkg packages:")
-        if(TARGET fmt::fmt)
-            message(STATUS "  fmt::fmt: found")
-        else()
-            message(STATUS "  fmt::fmt: NOT found")
-        endif()
-        if(TARGET lz4::lz4)
-            message(STATUS "  lz4::lz4: found")
-        else()
-            message(STATUS "  lz4::lz4: NOT found")
-        endif()
-        if(TARGET MbedTLS::mbedtls)
-            message(STATUS "  MbedTLS::mbedtls: found")
-        else()
-            message(STATUS "  MbedTLS::mbedtls: NOT found")
-        endif()
-    else()
-        message(STATUS "Using FetchContent for dependencies (vcpkg not available)")
-        
-        # 1. fmt - Header-only formatting library
-        FetchContent_Declare(
-            fmt
-            GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-            GIT_TAG 10.2.1  # Stable version
-            GIT_SHALLOW TRUE
-        )
-        
-        # 2. asio - Header-only async I/O (standalone version)
-        FetchContent_Declare(
-            asio
-            GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
-            GIT_TAG asio-1-28-2  # Latest stable
-            GIT_SHALLOW TRUE
-        )
-        
-        # 3. lz4 - Compression library
-        FetchContent_Declare(
-            lz4
-            GIT_REPOSITORY https://github.com/lz4/lz4.git
-            GIT_TAG v1.9.4  # Stable version
-            GIT_SHALLOW TRUE
-        )
-        
-        # Make dependencies available via FetchContent
-        message(STATUS "Fetching fmt library...")
-        FetchContent_MakeAvailable(fmt)
-        
-        message(STATUS "Fetching asio library...")
-        FetchContent_MakeAvailable(asio)
-        
-        message(STATUS "Fetching lz4 library...")
-        FetchContent_MakeAvailable(lz4)
-        
-        # CRITICAL: Set lz4 variables in cache IMMEDIATELY after FetchContent
-        # OpenVPN 3's find_package(lz4) runs in subdirectory scope and can't see the target.
-        # We MUST set LZ4_INCLUDE_DIR and LZ4_LIBRARY in CACHE so Findlz4.cmake can use them.
-        if(TARGET lz4::lz4)
-            # Get include directory from target
-            get_target_property(LZ4_INCLUDES lz4::lz4 INTERFACE_INCLUDE_DIRECTORIES)
-            if(LZ4_INCLUDES)
-                list(GET LZ4_INCLUDES 0 LZ4_INC_DIR)
-                set(LZ4_INCLUDE_DIR ${LZ4_INC_DIR} CACHE PATH "lz4 include directory" FORCE)
+            message(STATUS "Pre-found vcpkg packages:")
+            if(TARGET fmt::fmt)
+                message(STATUS "  fmt::fmt: found")
             else()
-                # Fallback to source directory
-                set(LZ4_INCLUDE_DIR ${lz4_SOURCE_DIR}/lib CACHE PATH "lz4 include directory" FORCE)
+                message(STATUS "  fmt::fmt: NOT found")
             endif()
+            if(TARGET lz4::lz4)
+                message(STATUS "  lz4::lz4: found")
+            else()
+                message(STATUS "  lz4::lz4: NOT found")
+            endif()
+            if(TARGET MbedTLS::mbedtls)
+                message(STATUS "  MbedTLS::mbedtls: found")
+            else()
+                message(STATUS "  MbedTLS::mbedtls: NOT found")
+            endif()
+        else()
+            message(STATUS "Using FetchContent for dependencies (vcpkg not available)")
+                
+            # 1. fmt - Header-only formatting library
+            FetchContent_Declare(
+                fmt
+                GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+                GIT_TAG 10.2.1  # Stable version
+                GIT_SHALLOW TRUE
+            )
             
-            # Set library path that will exist after build
-            set(LZ4_LIBRARY "${lz4_BINARY_DIR}/liblz4.a" CACHE FILEPATH "lz4 library" FORCE)
-            set(LZ4_FOUND TRUE CACHE BOOL "lz4 found" FORCE)
+            # 2. asio - Header-only async I/O (standalone version)
+            FetchContent_Declare(
+                asio
+                GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+                GIT_TAG asio-1-28-2  # Latest stable
+                GIT_SHALLOW TRUE
+            )
             
-            mark_as_advanced(FORCE LZ4_INCLUDE_DIR LZ4_LIBRARY)
+            # 3. lz4 - Compression library
+            FetchContent_Declare(
+                lz4
+                GIT_REPOSITORY https://github.com/lz4/lz4.git
+                GIT_TAG v1.9.4  # Stable version
+                GIT_SHALLOW TRUE
+            )
             
-            message(STATUS "✅ Set lz4 cache variables after FetchContent:")
-            message(STATUS "  LZ4_INCLUDE_DIR: ${LZ4_INCLUDE_DIR}")
-            message(STATUS "  LZ4_LIBRARY: ${LZ4_LIBRARY}")
+            # Make dependencies available via FetchContent
+            message(STATUS "Fetching fmt library...")
+            FetchContent_MakeAvailable(fmt)
+            
+            message(STATUS "Fetching asio library...")
+            FetchContent_MakeAvailable(asio)
+            
+            message(STATUS "Fetching lz4 library...")
+            FetchContent_MakeAvailable(lz4)
+            
+            # CRITICAL: Set lz4 variables in cache IMMEDIATELY after FetchContent
+            # OpenVPN 3's find_package(lz4) runs in subdirectory scope and can't see the target.
+            # We MUST set LZ4_INCLUDE_DIR and LZ4_LIBRARY in CACHE so Findlz4.cmake can use them.
+            if(TARGET lz4::lz4)
+                # Get include directory from target
+                get_target_property(LZ4_INCLUDES lz4::lz4 INTERFACE_INCLUDE_DIRECTORIES)
+                if(LZ4_INCLUDES)
+                    list(GET LZ4_INCLUDES 0 LZ4_INC_DIR)
+                    set(LZ4_INCLUDE_DIR ${LZ4_INC_DIR} CACHE PATH "lz4 include directory" FORCE)
+                else()
+                    # Fallback to source directory
+                    set(LZ4_INCLUDE_DIR ${lz4_SOURCE_DIR}/lib CACHE PATH "lz4 include directory" FORCE)
+                endif()
+                
+                # Set library path that will exist after build
+                set(LZ4_LIBRARY "${lz4_BINARY_DIR}/liblz4.a" CACHE FILEPATH "lz4 library" FORCE)
+                set(LZ4_FOUND TRUE CACHE BOOL "lz4 found" FORCE)
+                
+                mark_as_advanced(FORCE LZ4_INCLUDE_DIR LZ4_LIBRARY)
+                
+                message(STATUS "✅ Set lz4 cache variables after FetchContent:")
+                message(STATUS "  LZ4_INCLUDE_DIR: ${LZ4_INCLUDE_DIR}")
+                message(STATUS "  LZ4_LIBRARY: ${LZ4_LIBRARY}")
+            endif()
         endif()
-    endif()
     
     # OpenVPN 3's Findlz4.cmake:
     # Line 1: find_path(LZ4_INCLUDE_DIR NAMES lz4.h)
@@ -540,8 +549,8 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
     message(STATUS "mbedTLS target available: mbedTLS::mbedTLS")
     message(STATUS "OpenVPN 3 will use find_package(mbedTLS) since pkg-config won't find it on Android")
     
-    # Define that OpenVPN 3 is available
-    add_compile_definitions(OPENVPN3_AVAILABLE)
+    # Define that OpenVPN 3 is available (will be set later if CAN_BUILD_OPENVPN3 is true)
+    # Note: This is now set conditionally after CAN_BUILD_OPENVPN3 check
     
     # Include directories for dependencies
     include_directories(${fmt_SOURCE_DIR}/include)
@@ -607,49 +616,87 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
         message(STATUS "        can't see it. Findlz4 will create IMPORTED target from file path.")
     endif()
     
-    message(STATUS "Adding OpenVPN 3 as subdirectory...")
-    message(STATUS "CMAKE_MODULE_PATH (for Find*.cmake): ${CMAKE_MODULE_PATH}")
-    message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
-    message(STATUS "Available targets: asio::asio, lz4::lz4, fmt::fmt, mbedTLS::mbedTLS")
-    
-    # Disable OpenVPN 3 tests - we only need the library, not test executables
-    # This prevents errors in test/ovpncli/CMakeLists.txt
-    set(BUILD_TESTING OFF CACHE BOOL "Build testing" FORCE)
-    
-    # CRITICAL: OpenVPN 3's CMakeLists.txt sets CMAKE_MODULE_PATH with its own cmake/ directory
-    # which means its Findlz4.cmake will be found FIRST, not ours.
-    # Solution: Temporarily override CMAKE_MODULE_PATH in OpenVPN 3's scope.
-    # We'll do this by setting a variable that OpenVPN 3's CMakeLists can check,
-    # OR by setting CMAKE_MODULE_PATH globally before add_subdirectory.
-    #
-    # Actually, we can't easily override OpenVPN 3's CMAKE_MODULE_PATH assignment.
-    # Better solution: Patch OpenVPN 3's findcoredeps.cmake to check for our variables first.
-    # OR: Make sure LZ4 variables are set in a way that find_library won't override them.
-    #
-    # The real fix: OpenVPN 3's find_library() will clear our cache if it doesn't find the file.
-    # We need to prevent find_library from running, or make it find something.
-    # Let's try setting CMAKE_LIBRARY_PATH so find_library can find our lz4:
-    list(APPEND CMAKE_LIBRARY_PATH "${lz4_BINARY_DIR}")
-    
-    add_subdirectory(${OPENVPN3_DIR} ${CMAKE_BINARY_DIR}/openvpn3 EXCLUDE_FROM_ALL)
-    
-    # Include OpenVPN 3 headers (must come after add_subdirectory)
-    include_directories(${OPENVPN3_DIR})
-    include_directories(${OPENVPN3_DIR}/client)
-    
-    # NOTE: openvpn-jni library is defined later in this file (after this if block)
-    # Don't try to link to it here - all linking happens after add_library() call
-    
-    message(STATUS "✅ OpenVPN 3 dependencies resolved:")
-    message(STATUS "   • fmt: ${fmt_SOURCE_DIR}")
-    message(STATUS "   • asio: ${asio_SOURCE_DIR}")
-    message(STATUS "   • lz4: ${lz4_SOURCE_DIR}")
-    if(OpenSSL_FOUND)
-        message(STATUS "   • OpenSSL: ${OPENSSL_VERSION}")
-    else()
-        message(STATUS "   • OpenSSL: Using Android built-in")
-    endif()
-    message(STATUS "   • OpenVPN 3: ${OPENVPN3_DIR}")
+        # Check if dependencies are actually available before adding OpenVPN 3 subdirectory
+        # This must be done AFTER FetchContent_MakeAvailable (if using FetchContent)
+        # or after checking vcpkg targets (if using vcpkg)
+        set(CAN_BUILD_OPENVPN3 TRUE)
+        
+        if(USE_VCPKG)
+            # Check if vcpkg targets exist
+            if(NOT TARGET lz4::lz4)
+                message(WARNING "lz4::lz4 target not found from vcpkg - cannot build OpenVPN 3")
+                set(CAN_BUILD_OPENVPN3 FALSE)
+            endif()
+        else()
+            # Using FetchContent - dependencies should have been fetched above
+            # Check if they actually exist
+            if(NOT TARGET lz4::lz4)
+                message(WARNING "lz4::lz4 target not found after FetchContent - cannot build OpenVPN 3")
+                set(CAN_BUILD_OPENVPN3 FALSE)
+            endif()
+        endif()
+        
+        if(CAN_BUILD_OPENVPN3)
+            message(STATUS "Adding OpenVPN 3 as subdirectory...")
+            message(STATUS "CMAKE_MODULE_PATH (for Find*.cmake): ${CMAKE_MODULE_PATH}")
+            message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+            message(STATUS "Available targets: asio::asio, lz4::lz4, fmt::fmt, mbedTLS::mbedTLS")
+            
+            # Disable OpenVPN 3 tests - we only need the library, not test executables
+            # This prevents errors in test/ovpncli/CMakeLists.txt
+            set(BUILD_TESTING OFF CACHE BOOL "Build testing" FORCE)
+            
+            # CRITICAL: OpenVPN 3's CMakeLists.txt sets CMAKE_MODULE_PATH with its own cmake/ directory
+            # which means its Findlz4.cmake will be found FIRST, not ours.
+            # Solution: Temporarily override CMAKE_MODULE_PATH in OpenVPN 3's scope.
+            # We'll do this by setting a variable that OpenVPN 3's CMakeLists can check,
+            # OR by setting CMAKE_MODULE_PATH globally before add_subdirectory.
+            #
+            # Actually, we can't easily override OpenVPN 3's CMAKE_MODULE_PATH assignment.
+            # Better solution: Patch OpenVPN 3's findcoredeps.cmake to check for our variables first.
+            # OR: Make sure LZ4 variables are set in a way that find_library won't override them.
+            #
+            # The real fix: OpenVPN 3's find_library() will clear our cache if it doesn't find the file.
+            # We need to prevent find_library from running, or make it find something.
+            # Let's try setting CMAKE_LIBRARY_PATH so find_library can find our lz4:
+            list(APPEND CMAKE_LIBRARY_PATH "${lz4_BINARY_DIR}")
+            
+            add_subdirectory(${OPENVPN3_DIR} ${CMAKE_BINARY_DIR}/openvpn3 EXCLUDE_FROM_ALL)
+            
+            # Include OpenVPN 3 headers (must come after add_subdirectory)
+            include_directories(${OPENVPN3_DIR})
+            include_directories(${OPENVPN3_DIR}/client)
+            
+            # NOTE: openvpn-jni library is defined later in this file (after this if block)
+            # Don't try to link to it here - all linking happens after add_library() call
+            
+            message(STATUS "✅ OpenVPN 3 dependencies resolved:")
+            if(DEFINED fmt_SOURCE_DIR)
+                message(STATUS "   • fmt: ${fmt_SOURCE_DIR}")
+            endif()
+            if(DEFINED asio_SOURCE_DIR)
+                message(STATUS "   • asio: ${asio_SOURCE_DIR}")
+            endif()
+            if(DEFINED lz4_SOURCE_DIR)
+                message(STATUS "   • lz4: ${lz4_SOURCE_DIR}")
+            endif()
+            if(OpenSSL_FOUND)
+                message(STATUS "   • OpenSSL: ${OPENSSL_VERSION}")
+            else()
+                message(STATUS "   • OpenSSL: Using Android built-in")
+            endif()
+            message(STATUS "   • OpenVPN 3: ${OPENVPN3_DIR}")
+        else()
+            message(WARNING "Cannot build OpenVPN 3 - dependencies not available")
+            message(WARNING "Building stub library without OpenVPN 3 support")
+            set(ENABLE_OPENVPN3 OFF)
+        endif()  # CAN_BUILD_OPENVPN3
+        
+        # Define that OpenVPN 3 is available (only if we successfully set it up)
+        if(CAN_BUILD_OPENVPN3)
+            add_compile_definitions(OPENVPN3_AVAILABLE)
+        endif()
+    endif()  # ENABLE_OPENVPN3 (inner check at line 141)
     
 elseif(ENABLE_OPENVPN3)
     message(WARNING "OpenVPN 3 not found at ${OPENVPN3_DIR} or build failed.")
@@ -671,82 +718,108 @@ add_library(
 
 # Link dependencies (only if OpenVPN 3 was enabled)
 if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
-    # NOTE: We'll let add_corelibrary_dependencies handle linking to fmt, asio, lz4, mbedTLS
-    # to avoid mixing keyword and plain signatures in target_link_libraries
-    # add_corelibrary_dependencies uses plain signature (target_link_libraries(target lib))
-    message(STATUS "Libraries (fmt, asio, lz4, mbedTLS) will be linked via add_corelibrary_dependencies")
+    # Check if required dependencies are available
+    # If vcpkg is enabled, check if targets exist
+    # If not using vcpkg, dependencies should come from FetchContent (but FETCH_OPENVPN3 is OFF by default)
+    set(DEPS_AVAILABLE TRUE)
     
-    target_compile_definitions(openvpn-jni PRIVATE
-        ASIO_STANDALONE
-        ASIO_HEADER_ONLY
-        ASIO_NO_DEPRECATED
-    )
-    
-    # OpenVPN 3 doesn't create a library - it uses add_core_dependencies to add sources directly
-    # However, add_core_dependencies calls add_corelibrary_dependencies which tries to find
-    # dependencies that may not be available in our scope. Instead, we'll manually call
-    # add_corelibrary_dependencies with the right setup.
-    message(STATUS "Adding OpenVPN 3 core dependencies to openvpn-jni target")
-    
-    # Set CORE_DIR for OpenVPN 3's findcoredeps (it expects this)
-    set(CORE_DIR "${OPENVPN3_DIR}" CACHE PATH "OpenVPN 3 core directory")
-    
-    # Include OpenVPN 3's findcoredeps.cmake which provides add_corelibrary_dependencies function
-    # Use the one from OpenVPN 3 (not our custom module path) since we've already set up dependencies
-    include("${OPENVPN3_DIR}/cmake/findcoredeps.cmake")
-    
-    # Override add_ssl_library function AFTER include so our version takes precedence
-    # OpenVPN 3's original function tries pkg-config which fails on Android
-    function(add_ssl_library target)
-        if(USE_MBEDTLS)
-            # Use vcpkg target directly - it's already available
-            if(TARGET mbedTLS::mbedTLS)
-                target_link_libraries(${target} mbedTLS::mbedTLS)  # Use plain signature to match add_corelibrary_dependencies
-                target_compile_definitions(${target} PRIVATE -DUSE_MBEDTLS)
-                message(STATUS "Linked mbedTLS::mbedTLS to ${target} (vcpkg override)")
-            elseif(TARGET MbedTLS::mbedtls)
-                # Create alias if needed
-                add_library(mbedTLS::mbedTLS ALIAS MbedTLS::mbedtls)
-                target_link_libraries(${target} mbedTLS::mbedTLS)  # Use plain signature
-                target_compile_definitions(${target} PRIVATE -DUSE_MBEDTLS)
-                message(STATUS "Linked MbedTLS::mbedtls (via alias) to ${target} (vcpkg override)")
-            else()
-                message(FATAL_ERROR "mbedTLS target not found - cannot link SSL library")
-            endif()
-        else()
-            message(FATAL_ERROR "OpenSSL not supported on Android - must use mbedTLS")
+    if(USE_VCPKG)
+        # Check if vcpkg targets exist
+        if(NOT TARGET lz4::lz4)
+            message(WARNING "lz4::lz4 target not found - OpenVPN 3 dependencies may not be available")
+            message(WARNING "Building stub library without OpenVPN 3 support")
+            set(DEPS_AVAILABLE FALSE)
         endif()
-    endfunction()
-    
-    # Set OPENVPN_PLAT for Android (OpenVPN 3 expects this)
-    set(OPENVPN_PLAT "linux" CACHE STRING "OpenVPN platform" FORCE)
-    
-    # Ensure mbedTLS target is available
-    if(USE_VCPKG AND TARGET MbedTLS::mbedtls AND NOT TARGET mbedTLS::mbedTLS)
-        add_library(mbedTLS::mbedTLS ALIAS MbedTLS::mbedtls)
-        message(STATUS "Created mbedTLS::mbedTLS alias for OpenVPN 3")
+    elseif(NOT FETCH_OPENVPN3)
+        # Not using vcpkg and not fetching OpenVPN 3 - dependencies won't be available
+        message(WARNING "OpenVPN 3 enabled but no dependency source (vcpkg or FetchContent) - building stub")
+        set(DEPS_AVAILABLE FALSE)
     endif()
     
-    # Call add_corelibrary_dependencies directly - this sets up includes, compile definitions, and links
-    # Note: We've overridden add_ssl_library to use vcpkg targets correctly
-    add_corelibrary_dependencies(openvpn-jni)
-    
-    # Fix pthread linking - Android doesn't need -lpthread, it's part of libc++
-    # OpenVPN 3's findcoredeps adds -lpthread for UNIX, but Android doesn't need it
-    # Remove the pthread link if it was added
-    get_target_property(linked_libs openvpn-jni LINK_LIBRARIES)
-    if(linked_libs)
-        list(REMOVE_ITEM linked_libs "pthread")
-        set_target_properties(openvpn-jni PROPERTIES LINK_LIBRARIES "${linked_libs}")
-    endif()
-    
-    # Add the data_epoch.cpp source that add_core_dependencies normally adds
-    target_sources(openvpn-jni PRIVATE "${CORE_DIR}/openvpn/crypto/data_epoch.cpp")
-    
-    # Also add the client implementation source (ovpncli.cpp) which contains OpenVPNClient implementation
-    target_sources(openvpn-jni PRIVATE "${OPENVPN3_DIR}/client/ovpncli.cpp")
-    
-    message(STATUS "OpenVPN 3 core sources and client implementation added to openvpn-jni")
+    if(DEPS_AVAILABLE)
+        # NOTE: We'll let add_corelibrary_dependencies handle linking to fmt, asio, lz4, mbedTLS
+        # to avoid mixing keyword and plain signatures in target_link_libraries
+        # add_corelibrary_dependencies uses plain signature (target_link_libraries(target lib))
+        message(STATUS "Libraries (fmt, asio, lz4, mbedTLS) will be linked via add_corelibrary_dependencies")
+        
+        target_compile_definitions(openvpn-jni PRIVATE
+            ASIO_STANDALONE
+            ASIO_HEADER_ONLY
+            ASIO_NO_DEPRECATED
+        )
+        
+        # OpenVPN 3 doesn't create a library - it uses add_core_dependencies to add sources directly
+        # However, add_core_dependencies calls add_corelibrary_dependencies which tries to find
+        # dependencies that may not be available in our scope. Instead, we'll manually call
+        # add_corelibrary_dependencies with the right setup.
+        message(STATUS "Adding OpenVPN 3 core dependencies to openvpn-jni target")
+        
+        # Set CORE_DIR for OpenVPN 3's findcoredeps (it expects this)
+        set(CORE_DIR "${OPENVPN3_DIR}" CACHE PATH "OpenVPN 3 core directory")
+        
+        # Include OpenVPN 3's findcoredeps.cmake which provides add_corelibrary_dependencies function
+        # Use the one from OpenVPN 3 (not our custom module path) since we've already set up dependencies
+        include("${OPENVPN3_DIR}/cmake/findcoredeps.cmake")
+        
+        # Override add_ssl_library function AFTER include so our version takes precedence
+        # OpenVPN 3's original function tries pkg-config which fails on Android
+        function(add_ssl_library target)
+            if(USE_MBEDTLS)
+                # Use vcpkg target directly - it's already available
+                if(TARGET mbedTLS::mbedTLS)
+                    target_link_libraries(${target} mbedTLS::mbedTLS)  # Use plain signature to match add_corelibrary_dependencies
+                    target_compile_definitions(${target} PRIVATE -DUSE_MBEDTLS)
+                    message(STATUS "Linked mbedTLS::mbedTLS to ${target} (vcpkg override)")
+                elseif(TARGET MbedTLS::mbedtls)
+                    # Create alias if needed
+                    add_library(mbedTLS::mbedTLS ALIAS MbedTLS::mbedtls)
+                    target_link_libraries(${target} mbedTLS::mbedTLS)  # Use plain signature
+                    target_compile_definitions(${target} PRIVATE -DUSE_MBEDTLS)
+                    message(STATUS "Linked MbedTLS::mbedtls (via alias) to ${target} (vcpkg override)")
+                else()
+                    message(FATAL_ERROR "mbedTLS target not found - cannot link SSL library")
+                endif()
+            else()
+                message(FATAL_ERROR "OpenSSL not supported on Android - must use mbedTLS")
+            endif()
+        endfunction()
+        
+        # Set OPENVPN_PLAT for Android (OpenVPN 3 expects this)
+        set(OPENVPN_PLAT "linux" CACHE STRING "OpenVPN platform" FORCE)
+        
+        # Ensure mbedTLS target is available
+        if(USE_VCPKG AND TARGET MbedTLS::mbedtls AND NOT TARGET mbedTLS::mbedTLS)
+            add_library(mbedTLS::mbedTLS ALIAS MbedTLS::mbedtls)
+            message(STATUS "Created mbedTLS::mbedTLS alias for OpenVPN 3")
+        endif()
+        
+        # Call add_corelibrary_dependencies directly - this sets up includes, compile definitions, and links
+        # Note: We've overridden add_ssl_library to use vcpkg targets correctly
+        add_corelibrary_dependencies(openvpn-jni)
+        
+        # Fix pthread linking - Android doesn't need -lpthread, it's part of libc++
+        # OpenVPN 3's findcoredeps adds -lpthread for UNIX, but Android doesn't need it
+        # Remove the pthread link if it was added
+        get_target_property(linked_libs openvpn-jni LINK_LIBRARIES)
+        if(linked_libs)
+            list(REMOVE_ITEM linked_libs "pthread")
+            set_target_properties(openvpn-jni PROPERTIES LINK_LIBRARIES "${linked_libs}")
+        endif()
+        
+        # Add the data_epoch.cpp source that add_core_dependencies normally adds
+        target_sources(openvpn-jni PRIVATE "${CORE_DIR}/openvpn/crypto/data_epoch.cpp")
+        
+        # Also add the client implementation source (ovpncli.cpp) which contains OpenVPNClient implementation
+        target_sources(openvpn-jni PRIVATE "${OPENVPN3_DIR}/client/ovpncli.cpp")
+        
+        message(STATUS "OpenVPN 3 core sources and client implementation added to openvpn-jni")
+    else()
+        # Dependencies not available - build stub library without OpenVPN 3
+        message(STATUS "Building stub library without OpenVPN 3 (dependencies not available)")
+        target_compile_definitions(openvpn-jni PRIVATE
+            OPENVPN3_AVAILABLE=0
+        )
+    endif()  # DEPS_AVAILABLE
 endif()
 
 # Link Android libraries

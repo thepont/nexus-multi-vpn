@@ -39,3 +39,4 @@ TEST_FILE=${1:-.maestro/01_test_full_config_flow.yaml}
 echo "Running Maestro test: $TEST_FILE"
 maestro test "$TEST_FILE"
 
+

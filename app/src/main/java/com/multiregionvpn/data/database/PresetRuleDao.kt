@@ -14,3 +14,4 @@ interface PresetRuleDao {
     @Query("SELECT * FROM preset_rules WHERE packageName = :packageName LIMIT 1")
     suspend fun findByPackageName(packageName: String): PresetRule?
 }
+

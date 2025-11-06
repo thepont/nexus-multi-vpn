@@ -24,3 +24,4 @@ interface AppRuleDao {
     @Query("DELETE FROM app_rule WHERE packageName = :packageName")
     suspend fun deleteByPackageName(packageName: String)
 }
+

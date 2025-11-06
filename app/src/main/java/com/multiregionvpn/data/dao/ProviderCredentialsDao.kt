@@ -18,3 +18,4 @@ interface ProviderCredentialsDao {
     @Update
     suspend fun update(providerCredentials: ProviderCredentials)
 }
+

@@ -13,3 +13,4 @@ data class PresetRule(
     val packageName: String, // e.g., "com.bbc.iplayer"
     val targetRegionId: String // e.g., "UK"
 )
+

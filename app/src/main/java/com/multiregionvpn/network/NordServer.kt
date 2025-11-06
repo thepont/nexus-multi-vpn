@@ -12,3 +12,4 @@ data class NordServer(
     val load: Int?,
     val features: List<String>?
 )
+

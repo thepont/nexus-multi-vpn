@@ -9,3 +9,4 @@ data class PresetRule(
     val packageName: String,
     val targetRegionId: String
 )
+

@@ -1,0 +1,21 @@
+═══════════════════════════════════════════════════════
+QUICK GUIDE: Regenerate NordVPN Service Credentials
+═══════════════════════════════════════════════════════
+
+1. Go to: https://my.nordaccount.com/dashboard/nordvpn/
+
+2. Look for "Service Credentials" section (NOT your login credentials)
+
+3. Click "Generate New Service Credentials" or "Regenerate"
+
+4. Copy the NEW username and password (24 chars each)
+
+5. Update .env file:
+   NORDVPN_USERNAME=<paste new username>
+   NORDVPN_PASSWORD=<paste new password>
+   
+   (No quotes, no spaces around =)
+
+6. Test: cd test-nordvpn-creds && ./test.sh
+
+═══════════════════════════════════════════════════════

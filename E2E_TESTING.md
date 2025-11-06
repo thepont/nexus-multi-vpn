@@ -180,3 +180,4 @@ All dependencies are already configured in `app/build.gradle.kts`.
 - VPN connections are **real** - you're actually connecting to NordVPN servers
 - The test package name (`com.multiregionvpn.test`) is hardcoded and should match the test instrumentation package
 
+

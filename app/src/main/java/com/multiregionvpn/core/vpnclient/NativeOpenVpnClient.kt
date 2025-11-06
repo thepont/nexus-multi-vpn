@@ -8,6 +8,33 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
+ * Callback interface for receiving tunnel IP addresses from OpenVPN DHCP.
+ * This is called from native code when tun_builder_add_address() is invoked.
+ */
+interface TunnelIpCallback {
+    /**
+     * Called when OpenVPN assigns an IP address to a tunnel via DHCP.
+     * @param tunnelId The tunnel identifier (e.g., "nordvpn_UK")
+     * @param ip The IP address assigned (e.g., "10.100.0.2")
+     * @param prefixLength The subnet prefix length (e.g., 16 for /16)
+     */
+    fun onTunnelIpReceived(tunnelId: String, ip: String, prefixLength: Int)
+}
+
+/**
+ * Callback interface for receiving DNS servers from OpenVPN DHCP.
+ * This is called from native code when tun_builder_set_dns_options() is invoked.
+ */
+interface TunnelDnsCallback {
+    /**
+     * Called when OpenVPN pushes DNS servers via DHCP options.
+     * @param tunnelId The tunnel identifier (e.g., "nordvpn_UK")
+     * @param dnsServers List of DNS server IP addresses (e.g., ["103.86.96.100", "103.86.99.100"])
+     */
+    fun onTunnelDnsReceived(tunnelId: String, dnsServers: List<String>)
+}
+
+/**
  * Native OpenVPN client implementation using OpenVPN 3 C++ library via JNI.
  * 
  * This replaces RealOpenVpnClient and uses the native OpenVPN 3 library
@@ -16,7 +43,10 @@ import java.util.concurrent.atomic.AtomicLong
 class NativeOpenVpnClient(
     private val context: Context,
     private val vpnService: VpnService,
-    private val tunFd: Int = -1  // Optional: TUN file descriptor if already available
+    private val tunFd: Int = -1,  // Optional: TUN file descriptor if already available
+    private val tunnelId: String? = null,  // Tunnel ID for identifying this connection
+    private val ipCallback: TunnelIpCallback? = null,  // Callback for IP address notifications
+    private val dnsCallback: TunnelDnsCallback? = null  // Callback for DNS server notifications
 ) : OpenVpnClient {
 
     private val connected = AtomicBoolean(false)
@@ -59,7 +89,8 @@ class NativeOpenVpnClient(
         username: String,
         password: String,
         vpnBuilder: android.net.VpnService.Builder?,  // Pass VpnService.Builder for TunBuilderBase
-        tunFd: Int  // File descriptor of already-established TUN interface
+        tunFd: Int,  // File descriptor of already-established TUN interface
+        vpnService: android.net.VpnService  // Pass VpnService instance for protect() calls
     ): Long // Returns session handle (0 = error)
 
     @JvmName("nativeDisconnect")
@@ -77,7 +108,14 @@ class NativeOpenVpnClient(
     @JvmName("nativeGetLastError")
     private external fun nativeGetLastError(sessionHandle: Long): String
 
+    @JvmName("nativeSetTunnelIdAndCallback")
+    private external fun nativeSetTunnelIdAndCallback(sessionHandle: Long, tunnelId: String, ipCallback: TunnelIpCallback, dnsCallback: TunnelDnsCallback?)
+
     override suspend fun connect(ovpnConfig: String, authFilePath: String?): Boolean {
+        // NOTE: We don't need to call protect() here anymore
+        // OpenVPN 3 will call tun_builder_protect() for each socket it creates
+        // This is handled in the native C++ wrapper (AndroidOpenVPNClient::tun_builder_protect())
+        
         return withContext(Dispatchers.IO) {
             try {
                 Log.i(TAG, "═══════════════════════════════════════════════════════")
@@ -179,9 +217,9 @@ class NativeOpenVpnClient(
                 // OpenVPN 3 will use TunBuilderBase methods we override
                 val builder: android.net.VpnService.Builder? = null
                 
-                // Call native connect with VpnService.Builder and TUN FD
+                // Call native connect with VpnService.Builder, TUN FD, and VpnService instance
                 val handle = try {
-                    nativeConnect(ovpnConfig, username, password, builder, finalTunFd)
+                    nativeConnect(ovpnConfig, username, password, builder, finalTunFd, vpnService)
                 } catch (e: UnsatisfiedLinkError) {
                     Log.e(TAG, "❌ UnsatisfiedLinkError - native library not loaded properly", e)
                     lastError = "Native library not loaded: ${e.message}"
@@ -230,15 +268,70 @@ class NativeOpenVpnClient(
                 }
 
                 sessionHandle.set(handle)
-                connected.set(true)
                 
-                Log.i(TAG, "✅ Native OpenVPN connection established!")
+                // Set tunnel ID and callbacks if provided
+                // This must be done AFTER nativeConnect() succeeds (session is created)
+                // but BEFORE connection completes (so we can receive IP address and DNS)
+                if (tunnelId != null && ipCallback != null) {
+                    try {
+                        nativeSetTunnelIdAndCallback(handle, tunnelId, ipCallback, dnsCallback)
+                        Log.d(TAG, "✅ Tunnel ID and callbacks set: tunnelId=$tunnelId")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to set tunnel ID and callbacks: ${e.message}")
+                        // Continue anyway - connection can still work without callbacks
+                    }
+                }
+                
+                // CRITICAL: Do NOT set connected=true here!
+                // nativeConnect() returns successfully when connection is STARTED, not when it completes.
+                // The connection completes asynchronously in the background thread.
+                // We'll set connected=true when nativeIsConnected() actually returns true.
+                // For now, keep connected=false and poll for actual connection completion.
+                connected.set(false)
+                
+                Log.i(TAG, "✅ Native OpenVPN connection STARTED (completing asynchronously)")
                 Log.i(TAG, "   Session handle: $handle")
-                Log.i(TAG, "   Connection status: ${nativeIsConnected(handle)}")
-
-                // Start receiving packets
+                Log.i(TAG, "   Connection will complete in background thread")
+                
+                // Start a coroutine to monitor connection status and set connected=true when ready
                 connectionScope.launch {
-                    startPacketReception()
+                    var attempts = 0
+                    val maxAttempts = 120 // 2 minutes
+                    while (attempts < maxAttempts && sessionHandle.get() != 0L) {
+                        delay(1000) // Check every second
+                        attempts++
+                        
+                        val isConnected = try {
+                            nativeIsConnected(handle)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error checking connection status: ${e.message}")
+                            false
+                        }
+                        
+                        if (attempts % 10 == 0) {
+                            Log.d(TAG, "Connection status check (attempt $attempts/$maxAttempts): isConnected=$isConnected")
+                        }
+                        
+                        if (isConnected) {
+                            // Connection actually established - set connected flag
+                            connected.set(true)
+                            Log.i(TAG, "✅ OpenVPN connection FULLY ESTABLISHED (after $attempts seconds)")
+                            Log.i(TAG, "   Session handle: $handle")
+                            Log.i(TAG, "   Native isConnected() returned: true")
+                            
+                            // Now start receiving packets
+                            startPacketReception()
+                            return@launch
+                        }
+                    }
+                    
+                    if (attempts >= maxAttempts) {
+                        Log.w(TAG, "❌ Connection monitoring timed out after $maxAttempts seconds")
+                        Log.w(TAG, "   Session handle: $handle")
+                        Log.w(TAG, "   Final isConnected() check: ${try { nativeIsConnected(handle) } catch (e: Exception) { "error: ${e.message}" }}")
+                        // Connection might have failed or is stuck
+                        connected.set(false)
+                    }
                 }
 
                 Log.i(TAG, "═══════════════════════════════════════════════════════")

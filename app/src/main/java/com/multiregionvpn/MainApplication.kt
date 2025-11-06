@@ -7,3 +7,4 @@ import dagger.hilt.android.HiltAndroidApp
 class MainApplication : Application() {
     // Hilt will handle all initialization
 }
+

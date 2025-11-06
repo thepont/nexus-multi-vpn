@@ -34,3 +34,4 @@ interface VpnConfigDao {
     @Query("DELETE FROM vpn_config WHERE id = :id")
     suspend fun deleteById(id: String)
 }
+

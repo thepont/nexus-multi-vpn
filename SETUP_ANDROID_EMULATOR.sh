@@ -59,3 +59,4 @@ echo "Add to ~/.bashrc:"
 echo "  export ANDROID_HOME=$ANDROID_HOME"
 echo "  export PATH=\$PATH:\$ANDROID_HOME/emulator:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/cmdline-tools/latest/bin"
 
+

@@ -89,3 +89,4 @@ Make sure:
 - Android emulator is running
 - App has VPN permissions granted
 
+

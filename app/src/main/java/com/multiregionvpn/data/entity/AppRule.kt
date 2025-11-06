@@ -20,3 +20,4 @@ data class AppRule(
     val packageName: String,
     val vpnConfigId: String
 )
+

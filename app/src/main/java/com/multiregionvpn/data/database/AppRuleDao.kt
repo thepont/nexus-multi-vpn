@@ -20,3 +20,4 @@ interface AppRuleDao {
     @Query("DELETE FROM app_rules")
     suspend fun clearAll()
 }
+

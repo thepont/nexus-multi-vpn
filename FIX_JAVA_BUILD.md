@@ -37,3 +37,4 @@ export PATH=$JAVA_HOME/bin:$PATH
 
 The `gradle.properties` file already points to Java 17, so once installed, builds should work automatically.
 
+

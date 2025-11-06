@@ -18,6 +18,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.multiregionvpn.core.VpnError
+import com.multiregionvpn.core.VpnEngineService
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -28,9 +35,52 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+    
+    private val errorReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == VpnEngineService.ACTION_VPN_ERROR) {
+                val errorTypeStr = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_TYPE) ?: return
+                val errorMessage = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_MESSAGE) ?: "Unknown error"
+                val errorDetails = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_DETAILS)
+                val tunnelId = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_TUNNEL_ID)
+                val timestamp = intent.getLongExtra(VpnEngineService.EXTRA_ERROR_TIMESTAMP, System.currentTimeMillis())
+                
+                val errorType = try {
+                    VpnError.ErrorType.valueOf(errorTypeStr)
+                } catch (e: Exception) {
+                    VpnError.ErrorType.UNKNOWN
+                }
+                
+                val error = VpnError(
+                    type = errorType,
+                    message = errorMessage,
+                    details = errorDetails,
+                    tunnelId = tunnelId,
+                    timestamp = timestamp
+                )
+                
+                android.util.Log.e("SettingsViewModel", "Received VPN error: ${error.type} - ${error.message}")
+                _uiState.update { it.copy(currentError = error) }
+            }
+        }
+    }
 
     init {
         loadAllData()
+        // Register error receiver
+        LocalBroadcastManager.getInstance(app).registerReceiver(
+            errorReceiver,
+            IntentFilter(VpnEngineService.ACTION_VPN_ERROR)
+        )
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        LocalBroadcastManager.getInstance(app).unregisterReceiver(errorReceiver)
+    }
+    
+    fun clearError() {
+        _uiState.update { it.copy(currentError = null) }
     }
 
     private fun loadAllData() {
@@ -108,6 +158,7 @@ class SettingsViewModel @Inject constructor(
     }
     
     fun startVpn(context: android.content.Context) {
+        android.util.Log.d("SettingsViewModel", "startVpn() called - sending ACTION_START")
         val intent = android.content.Intent(context, com.multiregionvpn.core.VpnEngineService::class.java).apply {
             action = com.multiregionvpn.core.VpnEngineService.ACTION_START
         }
@@ -117,14 +168,17 @@ class SettingsViewModel @Inject constructor(
             context.startService(intent)
         }
         _uiState.update { it.copy(isVpnRunning = true) }
+        android.util.Log.d("SettingsViewModel", "startVpn() completed - isVpnRunning set to true")
     }
     
     fun stopVpn(context: android.content.Context) {
+        android.util.Log.d("SettingsViewModel", "stopVpn() called - sending ACTION_STOP")
         val intent = android.content.Intent(context, com.multiregionvpn.core.VpnEngineService::class.java).apply {
             action = com.multiregionvpn.core.VpnEngineService.ACTION_STOP
         }
         context.startService(intent)
         _uiState.update { it.copy(isVpnRunning = false) }
+        android.util.Log.d("SettingsViewModel", "stopVpn() completed - isVpnRunning set to false")
     }
     
     fun fetchNordVpnServer(regionId: String, callback: (String?) -> Unit) {
@@ -181,5 +235,6 @@ data class SettingsUiState(
     val nordCredentials: ProviderCredentials? = null, // UPDATED
     val installedApps: List<InstalledApp> = emptyList(),
     val isLoading: Boolean = true,
-    val isVpnRunning: Boolean = false
+    val isVpnRunning: Boolean = false,
+    val currentError: VpnError? = null // Current VPN error to display
 )

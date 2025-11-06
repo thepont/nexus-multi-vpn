@@ -7,3 +7,4 @@ class VpnApplication : Application() {
         super.onCreate()
     }
 }
+

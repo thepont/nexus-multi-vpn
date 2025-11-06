@@ -2,3 +2,4 @@
 <resources>
     <style name="Theme.MultiRegionVPN" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>
+

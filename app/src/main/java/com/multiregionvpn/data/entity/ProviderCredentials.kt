@@ -9,3 +9,4 @@ data class ProviderCredentials(
     val templateId: String,
     val token: String
 )
+

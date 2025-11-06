@@ -108,3 +108,4 @@ Maestro tests can be integrated into CI/CD pipelines. Example:
 ```
 
 For more information, visit [Maestro Documentation](https://maestro.mobile.dev/docs/getting-started).
+

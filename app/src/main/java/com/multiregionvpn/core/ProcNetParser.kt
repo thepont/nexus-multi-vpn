@@ -51,8 +51,19 @@ internal class ProcNetParser {
             
             return try {
                 val file = File(procFile)
-                if (!file.exists() || !file.canRead()) {
-                    Log.w(TAG, "Cannot read $procFile")
+                // CRITICAL: /proc/net files exist but canRead() may return false due to SELinux/proc restrictions
+                // However, we can still read them if they exist. Try reading anyway.
+                if (!file.exists()) {
+                    Log.w(TAG, "File does not exist: $procFile")
+                    return null
+                }
+                
+                // Try to read the file even if canRead() returns false
+                // /proc/net files are readable by the app process, but canRead() check may fail
+                try {
+                    file.inputStream().use { it.read() } // Quick read test
+                } catch (e: Exception) {
+                    Log.w(TAG, "Cannot read $procFile: ${e.message}")
                     return null
                 }
                 

@@ -37,6 +37,17 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
                            const char* username,
                            const char* password);
 
+// Set tunnel ID and IP address callback
+// This must be called before connect() to receive tunnel IP addresses
+#ifdef __cplusplus
+#include <jni.h>
+void openvpn_wrapper_set_tunnel_id_and_callback(OpenVpnSession* session,
+                                                 JNIEnv* env,
+                                                 const char* tunnelId,
+                                                 jobject ipCallback,
+                                                 jobject dnsCallback);
+#endif
+
 // Set Android-specific parameters (VpnService.Builder and TUN file descriptor)
 // This must be called before connect() if using Android VpnService
 #ifdef __cplusplus
@@ -44,7 +55,8 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
 void openvpn_wrapper_set_android_params(OpenVpnSession* session,
                                         JNIEnv* env,
                                         jobject vpnBuilder,
-                                        jint tunFd);
+                                        jint tunFd,
+                                        jobject vpnService);
 #endif
 
 // Get last error message from session
