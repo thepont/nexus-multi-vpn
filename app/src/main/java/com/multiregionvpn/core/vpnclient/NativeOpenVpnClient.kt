@@ -111,6 +111,9 @@ class NativeOpenVpnClient(
     @JvmName("nativeSetTunnelIdAndCallback")
     private external fun nativeSetTunnelIdAndCallback(sessionHandle: Long, tunnelId: String, ipCallback: TunnelIpCallback, dnsCallback: TunnelDnsCallback?)
 
+    @JvmName("getAppFd")
+    external fun getAppFd(tunnelId: String): Int  // Get app FD from External TUN Factory
+
     override suspend fun connect(ovpnConfig: String, authFilePath: String?): Boolean {
         // NOTE: We don't need to call protect() here anymore
         // OpenVPN 3 will call tun_builder_protect() for each socket it creates
