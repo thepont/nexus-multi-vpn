@@ -5,6 +5,7 @@ import android.net.VpnService
 import android.util.Log
 import com.multiregionvpn.core.vpnclient.OpenVpnClient
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
+import com.multiregionvpn.core.vpnclient.WireGuardVpnClient
 import com.multiregionvpn.core.vpnclient.AuthenticationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
@@ -72,6 +73,33 @@ class VpnConnectionManager(
      */
     fun setTunnelDnsCallback(callback: (tunnelId: String, dnsServers: List<String>) -> Unit) {
         tunnelDnsCallback = callback
+    }
+    
+    /**
+     * Detect VPN protocol from configuration content.
+     * 
+     * @param config The VPN configuration string
+     * @return "wireguard" or "openvpn"
+     */
+    private fun detectProtocol(config: String): String {
+        val trimmedConfig = config.trimStart()
+        
+        // WireGuard configs start with [Interface] or [Peer]
+        if (trimmedConfig.startsWith("[Interface]") || trimmedConfig.startsWith("[Peer]")) {
+            Log.i(TAG, "Detected protocol: WireGuard")
+            return "wireguard"
+        }
+        
+        // OpenVPN configs contain keywords like 'client', 'remote', 'proto', etc.
+        val openVpnKeywords = listOf("client", "remote ", "proto ", "<ca>", "auth-user-pass")
+        if (openVpnKeywords.any { trimmedConfig.contains(it, ignoreCase = true) }) {
+            Log.i(TAG, "Detected protocol: OpenVPN")
+            return "openvpn"
+        }
+        
+        // Default to OpenVPN if detection fails
+        Log.w(TAG, "Could not detect protocol, defaulting to OpenVPN")
+        return "openvpn"
     }
     
     private fun createClient(tunnelId: String): OpenVpnClient {
