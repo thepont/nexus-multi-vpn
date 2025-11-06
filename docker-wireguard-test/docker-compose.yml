@@ -1,0 +1,90 @@
+version: "3.8"
+
+services:
+  # WireGuard "UK" server
+  wireguard-uk:
+    image: linuxserver/wireguard:latest
+    container_name: wg-test-uk
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+      - SERVERURL=wireguard-uk
+      - SERVERPORT=51822
+      - PEERS=androidclient
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.13.13.0
+      - ALLOWEDIPS=0.0.0.0/0
+    volumes:
+      - ./wireguard-uk:/config
+      - /lib/modules:/lib/modules
+    ports:
+      - "51822:51822/udp"
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+    networks:
+      vpn-test:
+        ipv4_address: 172.25.0.10
+
+  # WireGuard "France" server
+  wireguard-fr:
+    image: linuxserver/wireguard:latest
+    container_name: wg-test-fr
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+      - SERVERURL=wireguard-fr
+      - SERVERPORT=51823
+      - PEERS=androidclient
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.14.14.0
+      - ALLOWEDIPS=0.0.0.0/0
+    volumes:
+      - ./wireguard-fr:/config
+      - /lib/modules:/lib/modules
+    ports:
+      - "51823:51823/udp"
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+    networks:
+      vpn-test:
+        ipv4_address: 172.25.0.20
+
+  # Mock "UK" web server (returns UK identifier)
+  web-uk:
+    image: nginx:alpine
+    container_name: web-uk
+    volumes:
+      - ./web-uk:/usr/share/nginx/html:ro
+    networks:
+      vpn-test:
+        ipv4_address: 172.25.0.11
+    restart: unless-stopped
+
+  # Mock "France" web server (returns FR identifier)
+  web-fr:
+    image: nginx:alpine
+    container_name: web-fr
+    volumes:
+      - ./web-fr:/usr/share/nginx/html:ro
+    networks:
+      vpn-test:
+        ipv4_address: 172.25.0.21
+    restart: unless-stopped
+
+networks:
+  vpn-test:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
