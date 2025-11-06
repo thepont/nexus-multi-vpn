@@ -18,6 +18,6 @@ dependencyResolutionManagement {
 rootProject.name = "MultiRegionVPN"
 include(":app")
 
-// Include ics-openvpn library for OpenVPN support
-// This replaces the previous OpenVPN 3 ClientAPI integration
-include(":ics-openvpn:main")
+// VPN Protocol Support:
+// - WireGuard: Primary protocol (via wireguard-android library)
+// - OpenVPN: Future support (TBD - need to resolve TUN FD polling issue)

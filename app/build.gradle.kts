@@ -220,10 +220,13 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     
-    // OpenVPN Implementation - Using ics-openvpn (proven Android-native library)
-    // This replaces the previous OpenVPN 3 ClientAPI integration which had issues
-    // with custom TUN FD handling on Android
-    implementation(project(":ics-openvpn:main"))
+    // VPN Protocol Support
+    // WireGuard: Primary protocol (fast, modern, excellent multi-tunnel support)
+    implementation("com.wireguard.android:tunnel:1.0.20230706")
+    
+    // OpenVPN: Kept in codebase for future use (currently disabled due to TUN FD polling issue)
+    // Native OpenVPN 3 code is in app/src/main/cpp/ but not actively used
+    // Can be re-enabled once TUN FD polling is fixed or alternative library is integrated
     
     // BouncyCastle for cryptographic operations (used by OpenVPN)
     // Note: ics-openvpn may already include BouncyCastle, but we'll keep these for compatibility
