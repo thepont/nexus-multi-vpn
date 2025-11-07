@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.text.font.FontWeight
@@ -51,19 +52,23 @@ fun AppRulesScreen(
             }
         }
         
-        // Sort by priority (ASCENDING order, so use negative/inverted logic)
+        // Sort by priority (ASCENDING order)
         filtered.sortedWith(compareBy(
-            // 1. Apps WITH rules last (configured apps at top)
+            // 1. Configured apps first (already working)
             { uiState.appRules[it.packageName] == null },
             
-            // 2. Within unconfigured: Geo-blocked apps from OTHER regions first
+            // 2. Within unconfigured: Foreign geo-blocked apps first
             { app ->
                 val recommendedRegion = GeoBlockedApps.getRecommendedRegion(app.packageName)
                 when {
-                    recommendedRegion == null -> 1 // Not geo-blocked (lower priority)
-                    recommendedRegion == "Multiple" -> 0 // Multi-region apps (high priority)
-                    recommendedRegion.equals(userRegion, ignoreCase = true) -> 2 // Local region (deprioritize)
-                    else -> 0 // Foreign region (high priority - needs VPN!)
+                    // Not geo-blocked - lowest priority
+                    recommendedRegion == null -> 3
+                    // Multi-region apps - high priority
+                    recommendedRegion == "Multiple" -> 0
+                    // Foreign region - highest priority (NEEDS VPN!)
+                    !recommendedRegion.equals(userRegion, ignoreCase = true) -> 0
+                    // Local region - still geo-blocked but works locally
+                    else -> 2
                 }
             },
             
@@ -137,6 +142,22 @@ fun SmartAppRuleItem(
         vpnConfigs.find { it.regionId.equals(recommendedRegion, ignoreCase = true) }
     } else null
     
+    // Determine if app is properly configured for its region
+    val isProperlyRouted = if (currentRule != null && recommendedRegion != null) {
+        val currentTunnel = vpnConfigs.find { it.id == currentRule }
+        currentTunnel?.regionId?.equals(recommendedRegion, ignoreCase = true) == true ||
+        recommendedRegion == "Multiple" // Multi-region apps are OK with any tunnel
+    } else {
+        false
+    }
+    
+    // Badge color: Green if working, Gray if needs setup
+    val badgeColor = if (isProperlyRouted) {
+        Color(0xFF4CAF50) // Green - Properly routed
+    } else {
+        Color(0xFF9E9E9E) // Gray - Needs configuration
+    }
+    
     ListItem(
         headlineContent = {
             Row(
@@ -144,7 +165,10 @@ fun SmartAppRuleItem(
             ) {
                 Text(app.name)
                 if (isGeoBlocked) {
-                    Badge {
+                    Badge(
+                        containerColor = badgeColor,
+                        contentColor = Color.White
+                    ) {
                         Text(
                             text = recommendedRegion ?: "GEO",
                             style = MaterialTheme.typography.labelSmall

@@ -67,13 +67,13 @@ object GeoBlockedApps {
         AppInfo("com.nba.gametime", "NBA", "US", "Sports"),
         AppInfo("com.nfl.mobile", "NFL", "US", "Sports"),
         
-        // News
-        AppInfo("com.guardian", "The Guardian", "UK", "News"),
-        AppInfo("com.ft.news", "Financial Times", "UK", "News"),
-        AppInfo("com.nytimes.android", "NY Times", "US", "News"),
+        // News (Multiple regions, different content)
+        AppInfo("com.guardian", "The Guardian", "Multiple", "News"),
+        AppInfo("com.ft.news", "Financial Times", "Multiple", "News"),
+        AppInfo("com.nytimes.android", "NY Times", "Multiple", "News"),
         
-        // UK Services
-        AppInfo("com.britbox.us", "BritBox", "UK", "Streaming"),
+        // UK/US Services (Available in multiple regions, different content)
+        AppInfo("com.britbox.us", "BritBox", "Multiple", "Streaming"),
         AppInfo("air.ITVMediaPlayer", "ITV Player", "UK", "Streaming"),
         
         // France Services
