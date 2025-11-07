@@ -620,29 +620,96 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "✅ VPN interface established with split tunneling")
     }
     
+    /**
+     * Graceful shutdown of VPN service.
+     * 
+     * CRITICAL: This must be called in the correct order to prevent "zombie service" bug:
+     * 1. Stop C++ tunnels FIRST (so they stop reading/writing to FD)
+     * 2. Close VPN interface SECOND (breaks the "black hole")
+     * 3. Stop foreground service THIRD
+     * 4. Call stopSelf() LAST
+     * 
+     * THE BUG: If we call stopSelf() before closing vpnInterface, the VpnService
+     * stays active as a "zombie" - the "key" icon remains and all traffic is
+     * routed to a black hole, blocking all internet.
+     */
     private fun stopVpn() {
+        Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Log.i(TAG, "🛑 SHUTDOWN: Graceful VPN shutdown initiated...")
+        Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
         try {
-            // Close all active tunnels (only if VpnConnectionManager was initialized)
-            serviceScope.launch {
-                try {
-                    VpnConnectionManager.getInstance().closeAll()
-                } catch (e: IllegalStateException) {
-                    // VpnConnectionManager not initialized yet - that's okay
-                    Log.v(TAG, "VpnConnectionManager not initialized, skipping cleanup")
+            // STEP 1: Tell C++ to stop all tunnels and clean up
+            // This stops it from reading/writing to the FD
+            Log.i(TAG, "SHUTDOWN Step 1/4: Closing all tunnels...")
+            try {
+                // Use runBlocking to ensure tunnels are closed BEFORE we close the interface
+                kotlinx.coroutines.runBlocking {
+                    try {
+                        VpnConnectionManager.getInstance().closeAll()
+                        Log.i(TAG, "   ✅ All tunnels closed")
+                    } catch (e: IllegalStateException) {
+                        // VpnConnectionManager not initialized yet - that's okay
+                        Log.i(TAG, "   ℹ️  VpnConnectionManager not initialized, skipping tunnel cleanup")
+                    }
                 }
                 activeTunnels.clear()
                 connectionTracker?.clearAllMappings()
+                Log.i(TAG, "   ✅ Connection tracker cleared")
+            } catch (e: Exception) {
+                Log.e(TAG, "   ❌ Error closing tunnels (continuing with shutdown)", e)
             }
             
-            vpnOutput?.close()
-            vpnOutput = null
-            vpnInterface?.close()
-            vpnInterface = null
-            stopForeground(true)
+            // STEP 2: Close the output stream
+            Log.i(TAG, "SHUTDOWN Step 2/4: Closing VPN output stream...")
+            try {
+                vpnOutput?.close()
+                vpnOutput = null
+                Log.i(TAG, "   ✅ VPN output stream closed")
+            } catch (e: Exception) {
+                Log.e(TAG, "   ❌ Error closing vpnOutput (continuing with shutdown)", e)
+            }
+            
+            // STEP 3: Close the TUN interface
+            // THIS IS THE CRITICAL FIX: It breaks the "black hole" and tells
+            // the OS to stop routing traffic to it
+            Log.i(TAG, "SHUTDOWN Step 3/4: Closing VPN interface...")
+            try {
+                vpnInterface?.close()
+                vpnInterface = null
+                Log.i(TAG, "   ✅ VPN interface closed - traffic no longer blocked!")
+            } catch (e: Exception) {
+                Log.e(TAG, "   ❌ Error closing vpnInterface", e)
+            }
+            
+            // STEP 4: Stop foreground service and remove notification
+            Log.i(TAG, "SHUTDOWN Step 4/4: Stopping foreground service...")
+            try {
+                stopForeground(true)
+                Log.i(TAG, "   ✅ Foreground service stopped, notification removed")
+            } catch (e: Exception) {
+                Log.e(TAG, "   ❌ Error stopping foreground", e)
+            }
+            
+            // STEP 5: Tell Android to stop this service
+            // This will remove the "key" icon
+            Log.i(TAG, "SHUTDOWN Final Step: Calling stopSelf()...")
             stopSelf()
-            Log.d(TAG, "VPN stopped")
+            
+            Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            Log.i(TAG, "✅ SHUTDOWN COMPLETE: VPN gracefully stopped, internet restored")
+            Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping VPN", e)
+            Log.e(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            Log.e(TAG, "❌ SHUTDOWN ERROR: Exception during VPN stop", e)
+            Log.e(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            // Still try to stop the service even if cleanup failed
+            try {
+                stopForeground(true)
+                stopSelf()
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to stop service after error", e2)
+            }
         }
     }
 
