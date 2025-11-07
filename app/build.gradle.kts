@@ -199,6 +199,11 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     
+    // Android TV Compose - D-pad optimized components
+    implementation("androidx.tv:tv-material:1.0.0-alpha10")
+    implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
+    implementation("androidx.leanback:leanback:1.1.0-rc02")
+    
     // Room
     val roomVersion = "2.6.0"
     implementation("androidx.room:room-runtime:$roomVersion")
