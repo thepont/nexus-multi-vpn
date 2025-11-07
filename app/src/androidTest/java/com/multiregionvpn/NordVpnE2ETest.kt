@@ -110,11 +110,24 @@ class NordVpnE2ETest {
             database.presetRuleDao()
         )
 
-        // 1. Clear all old test data
+        // 1. Stop VPN if running from previous test
+        println("🛑 Stopping VPN if running...")
+        try {
+            val stopIntent = Intent(appContext, VpnEngineService::class.java).apply {
+                action = VpnEngineService.ACTION_STOP
+            }
+            appContext.startService(stopIntent)
+            delay(2000)  // Wait for VPN to fully stop
+            println("✅ VPN stopped (or wasn't running)")
+        } catch (e: Exception) {
+            println("⚠️  Could not stop VPN: ${e.message}")
+        }
+        
+        // 2. Clear all old test data
         settingsRepo.clearAllAppRules()
         settingsRepo.clearAllVpnConfigs()
 
-        // 2. Get our baseline IP (Direct Internet) - make call BEFORE VPN starts
+        // 3. Get our baseline IP (Direct Internet) - make call BEFORE VPN starts
         val defaultIpInfo = IpCheckService.api.getIpInfo()
         defaultCountry = defaultIpInfo.normalizedCountryCode ?: "US"
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

@@ -295,7 +295,10 @@ class VpnEngineService : VpnService() {
             val appRules = kotlinx.coroutines.runBlocking {
                 settingsRepository.appRuleDao.getAllRulesList()
             }
-            Log.d(TAG, "App rules found: ${appRules.size}, packages: ${appRules.map { it.packageName }}")
+            Log.i(TAG, "📋 App rules found: ${appRules.size}")
+            appRules.forEach { rule ->
+                Log.i(TAG, "   📱 ${rule.packageName} → ${rule.vpnConfigId ?: "Direct Internet"}")
+            }
             
             // Get unique package names that have VPN rules
             val packagesWithRules = appRules
@@ -480,21 +483,22 @@ class VpnEngineService : VpnService() {
         // - Apps without rules never enter VPN (use normal Android routing)
         // - Multi-tunnel routing STILL WORKS (PacketRouter routes VPN apps to correct tunnel)
         // - Apps without rules get normal internet access
+        Log.i(TAG, "🔒 Adding ${packagesWithRules.size} app(s) to VPN allowed list:")
         packagesWithRules.forEach { packageName ->
             try {
                 builder.addAllowedApplication(packageName)
-                Log.d(TAG, "   ✅ VPN allowed: $packageName")
+                Log.i(TAG, "   ✅ ALLOWED: $packageName")
             } catch (e: Exception) {
-                Log.w(TAG, "   ⚠️  Could not allow $packageName: ${e.message}")
+                Log.e(TAG, "   ❌ FAILED to allow $packageName: ${e.message}")
             }
         }
         
         // CRITICAL: Do NOT disallow our own package!
         // E2E tests (com.multiregionvpn.test) need VPN access
-        Log.d(TAG, "✅ VPN service NOT disallowed - E2E tests need access")
+        Log.i(TAG, "📌 VPN service package NOT disallowed - E2E tests need access")
         
-        Log.i(TAG, "✅ Split tunneling: ${packagesWithRules.size} app(s) use VPN")
-        Log.i(TAG, "   Apps WITHOUT rules use direct internet (bypass VPN entirely)")
+        Log.i(TAG, "✅ Split tunneling configured: ${packagesWithRules.size} app(s) use VPN")
+        Log.i(TAG, "   Apps WITHOUT rules bypass VPN entirely (normal internet)")
         
         // CRITICAL: We need routes for traffic to go through VPN, but adding them
         // before VPN connects creates a routing loop. Solution: Add routes but
