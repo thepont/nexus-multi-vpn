@@ -380,17 +380,34 @@ private:
     
     // Implement LogReceiver::log
     virtual void log(const LogInfo &log_info) override {
-        LOGI("OpenVPN: %s", log_info.text.c_str());
+        // Log everything with appropriate level
+        const char* text = log_info.text.c_str();
+        
+        // Check for transport/data channel related logs
+        if (strstr(text, "TCP/UDP") || strstr(text, "Data Channel") || 
+            strstr(text, "BYTES") || strstr(text, "packet") ||
+            strstr(text, "send") || strstr(text, "recv")) {
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-Transport", "📡 %s", text);
+        }
+        
+        // Also log everything to main OpenVPN log
+        LOGI("OpenVPN: %s", text);
     }
     
     // Implement event callback
     virtual void event(const Event &evt) override {
+        // Log ALL events with detailed information
         if (evt.error) {
-            LOGE("OpenVPN Event [%s]: %s %s", evt.name.c_str(), 
+            LOGE("🔴 OpenVPN Event [%s]: %s %s", evt.name.c_str(), 
                  evt.fatal ? "(FATAL)" : "(non-fatal)", evt.info.c_str());
         } else {
-            LOGI("OpenVPN Event [%s]: %s", evt.name.c_str(), evt.info.c_str());
+            LOGI("🔵 OpenVPN Event [%s]: %s", evt.name.c_str(), evt.info.c_str());
         }
+        
+        // Log additional event details that might help debug transport
+        __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-Events",
+            "Event details: name=%s, error=%d, fatal=%d, info=%s",
+            evt.name.c_str(), evt.error, evt.fatal, evt.info.c_str());
         
         // Handle specific events to track PUSH_REPLY flow
         if (evt.name == "CONNECTED") {
@@ -1487,8 +1504,16 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
                 // This can take a long time (60+ seconds), so we mark as connecting first
                 // The CONNECTED event will fire during connect(), and we'll set connected=true then
                 LOGI("Calling connect() NOW - this will block until connection is established or fails");
+                LOGI("   This method runs OpenVPN's event loop for processing IO");
+                LOGI("   It will return when: connection fails, stop() is called, or reconnect triggered");
                 Status connectStatus = session->client->connect();
-                LOGI("connect() returned - error=%s, message=%s", connectStatus.error ? "true" : "false", connectStatus.message.c_str());
+                LOGI("═══════════════════════════════════════════════════════");
+                LOGI("🔴 connect() RETURNED!");
+                LOGI("   Error: %s", connectStatus.error ? "true" : "false");
+                LOGI("   Message: %s", connectStatus.message.empty() ? "(empty)" : connectStatus.message.c_str());
+                LOGI("   This means OpenVPN's event loop exited");
+                LOGI("   Possible reasons: timeout, no server response, reconnect triggered");
+                LOGI("═══════════════════════════════════════════════════════");
                 
                 std::lock_guard<std::mutex> lock(session->state_mutex);
                 session->connecting = false;  // No longer connecting
