@@ -117,8 +117,19 @@ class SettingsViewModel @Inject constructor(
     
     private fun loadInstalledApps(): List<InstalledApp> {
         val pm = app.packageManager
+        
+        // Get all apps that have a launcher intent (user-facing apps)
+        val launcherIntent = android.content.Intent(android.content.Intent.ACTION_MAIN, null)
+        launcherIntent.addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        
+        val launchableApps = pm.queryIntentActivities(launcherIntent, 0)
+            .map { it.activityInfo.packageName }
+            .toSet()
+        
+        // Get all installed apps and filter to only launchable ones
         return pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 } // Filter out system apps
+            .filter { launchableApps.contains(it.packageName) }
+            .filter { it.packageName != app.packageName } // Exclude our own app
             .map {
                 InstalledApp(
                     name = it.loadLabel(pm).toString(),
