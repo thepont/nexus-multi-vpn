@@ -18,21 +18,18 @@ namespace openvpn {
 /**
  * Custom External TUN Factory Implementation
  * 
- * This is the CORRECT way to provide custom TUN implementations to OpenVPN 3 Core.
- * Instead of hacking TunBuilderBase, we implement ExternalTun::Factory which is
- * explicitly designed for this purpose.
+ * Provides custom TUN implementation to OpenVPN 3 via the ExternalTun::Factory interface.
+ * This allows the application to control packet I/O for multi-tunnel routing.
  * 
  * Architecture Flow:
  * 1. OpenVPN 3 calls new_tun_factory()
- * 2. We return CustomTunClientFactory
+ * 2. Returns CustomTunClientFactory
  * 3. OpenVPN 3 calls factory->new_tun_client_obj()
- * 4. CustomTunClientFactory returns CustomTunClient
+ * 4. Returns CustomTunClient
  * 5. OpenVPN 3 calls client->tun_start()
- * 6. CustomTunClient creates socketpair
- * 7. OpenVPN 3 polls lib_fd in its event loop ✅
- * 8. Our app uses app_fd for packet I/O ✅
- * 
- * This gives us full control over packet routing!
+ * 6. CustomTunClient creates socketpair for bidirectional communication
+ * 7. OpenVPN 3 polls lib_fd in its event loop
+ * 8. Application uses app_fd for packet I/O
  */
 class CustomExternalTunFactory : public ExternalTun::Factory, public RC<thread_unsafe_refcount> {
 public:
