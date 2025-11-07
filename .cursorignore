@@ -177,3 +177,30 @@ SUMMARY.md
 # Temporary test/analysis outputs
 /tmp/
 *.tmp
+
+# ============================================================================
+# C++ Test Framework - DO NOT INDEX
+# ============================================================================
+
+# GoogleTest/GoogleMock (fetched by CMake)
+**/_deps/
+**/googletest-src/
+**/googlemock-src/
+
+# ============================================================================
+# Additional Build Artifacts - DO NOT INDEX
+# ============================================================================
+
+# Lint reports
+lint-results*.html
+lint-results*.xml
+
+# APK outputs
+*.apk
+*.aab
+outputs/
+
+# Profiling data
+*.trace
+*.hprof
+
