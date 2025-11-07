@@ -121,6 +121,7 @@ fun SettingsScreen(
     ) { padding ->
         Column(
             modifier = Modifier
+                .testTag("settings_screen")
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)

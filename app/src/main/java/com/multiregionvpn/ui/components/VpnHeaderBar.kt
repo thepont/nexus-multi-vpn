@@ -44,7 +44,7 @@ fun VpnHeaderBar(
     )
     
     TopAppBar(
-        modifier = modifier,
+        modifier = modifier.testTag("vpn_header_bar"),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
