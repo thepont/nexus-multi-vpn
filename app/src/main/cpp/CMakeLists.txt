@@ -1,5 +1,20 @@
 cmake_minimum_required(VERSION 3.22.1)
 
+# CRITICAL: Set VCPKG_TARGET_TRIPLET BEFORE project() so vcpkg toolchain can use it
+# Android toolchain sets ANDROID_ABI before this CMakeLists is processed
+if(NOT DEFINED VCPKG_TARGET_TRIPLET AND DEFINED ANDROID_ABI)
+    if(ANDROID_ABI STREQUAL "arm64-v8a")
+        set(VCPKG_TARGET_TRIPLET "arm64-android" CACHE STRING "vcpkg triplet" FORCE)
+    elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+        set(VCPKG_TARGET_TRIPLET "arm-android" CACHE STRING "vcpkg triplet" FORCE)
+    elseif(ANDROID_ABI STREQUAL "x86_64")
+        set(VCPKG_TARGET_TRIPLET "x64-android" CACHE STRING "vcpkg triplet" FORCE)
+    elseif(ANDROID_ABI STREQUAL "x86")
+        set(VCPKG_TARGET_TRIPLET "x86-android" CACHE STRING "vcpkg triplet" FORCE)
+    endif()
+    message(STATUS "🎯 Set VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET} for ANDROID_ABI=${ANDROID_ABI}")
+endif()
+
 project("multiregionvpn-native")
 
 # Export compile commands for clang-tidy and other static analysis tools

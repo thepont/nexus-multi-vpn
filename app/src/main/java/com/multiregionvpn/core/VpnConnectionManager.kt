@@ -891,6 +891,58 @@ class VpnConnectionManager(
         Log.d(TAG, "Closed all tunnels")
     }
     
+    /**
+     * Reconnect all active tunnels after a network change.
+     * 
+     * THE ZOMBIE TUNNEL BUG FIX (VpnConnectionManager Path):
+     * This method is called from VpnEngineService when the device's network changes.
+     * It reconnects both OpenVPN and WireGuard tunnels:
+     * 
+     * - OpenVPN: Calls OpenVPN 3's reconnect() via JNI (handled in C++)
+     * - WireGuard: Calls WireGuardVpnClient.reconnect() which does DOWN->UP cycle
+     * 
+     * This ensures all tunnels recover from network changes without user intervention.
+     */
+    suspend fun reconnectAllTunnels() {
+        Log.i(TAG, "═══════════════════════════════════════════════════════")
+        Log.i(TAG, "🔄 VpnConnectionManager: Reconnecting all active tunnels")
+        Log.i(TAG, "═══════════════════════════════════════════════════════")
+        
+        val activeConnections = connections.toList() // Create snapshot to avoid ConcurrentModificationException
+        
+        if (activeConnections.isEmpty()) {
+            Log.i(TAG, "   No active connections to reconnect")
+            return
+        }
+        
+        Log.i(TAG, "   Found ${activeConnections.size} active connection(s) to reconnect")
+        
+        for ((tunnelId, client) in activeConnections) {
+            try {
+                when (client) {
+                    is WireGuardVpnClient -> {
+                        Log.i(TAG, "   🔄 Reconnecting WireGuard tunnel: $tunnelId")
+                        client.reconnect()
+                        Log.i(TAG, "   ✅ WireGuard tunnel $tunnelId reconnected")
+                    }
+                    is NativeOpenVpnClient -> {
+                        // OpenVPN reconnection is handled in C++ via nativeOnNetworkChanged()
+                        // The JNI layer calls reconnectSession() for all active OpenVPN sessions
+                        Log.i(TAG, "   ℹ️  OpenVPN tunnel $tunnelId will be reconnected via C++ layer")
+                    }
+                    else -> {
+                        Log.w(TAG, "   ⚠️  Unknown client type for tunnel $tunnelId: ${client::class.simpleName}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "   ❌ Failed to reconnect tunnel $tunnelId", e)
+            }
+        }
+        
+        Log.i(TAG, "✅ Reconnection sequence complete")
+        Log.i(TAG, "═══════════════════════════════════════════════════════")
+    }
+    
     fun isTunnelConnected(tunnelId: String): Boolean {
         return connections[tunnelId]?.isConnected() == true
     }

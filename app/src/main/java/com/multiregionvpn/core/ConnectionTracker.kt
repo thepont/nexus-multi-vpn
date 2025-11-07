@@ -78,6 +78,38 @@ class ConnectionTracker(
         setUidToTunnel(uid, tunnelId)
         return true
     }
+
+    /**
+     * Clear all mappings for the specified package.
+     */
+    fun clearPackage(packageName: String) {
+        val uid = packageNameToUid.remove(packageName)
+        if (uid != null) {
+            uidToTunnelId.remove(uid)
+            connectionTable.entries.removeIf { it.value.uid == uid }
+            Log.d(TAG, "Cleared connection tracking for package $packageName (uid $uid)")
+        }
+    }
+
+    /**
+     * Clear all mappings (used when rules change or VPN stops).
+     */
+    fun clearAllMappings() {
+        connectionTable.clear()
+        packageNameToUid.clear()
+        uidToTunnelId.clear()
+        Log.d(TAG, "Cleared all connection tracker mappings")
+    }
+
+    /**
+     * Snapshot of current package -> tunnel mappings.
+     */
+    fun getCurrentPackageMappings(): Map<String, String> {
+        return packageNameToUid.mapNotNull { (pkg, uid) ->
+            val tunnel = uidToTunnelId[uid]
+            if (tunnel != null) pkg to tunnel else null
+        }.toMap()
+    }
     
     /**
      * Register a connection: (srcIP, srcPort) -> UID.

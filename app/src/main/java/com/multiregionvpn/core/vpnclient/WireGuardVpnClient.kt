@@ -300,5 +300,60 @@ class WireGuardVpnClient(
         this.onTunnelIpReceived = tunnelIpCallback
         this.onTunnelDnsReceived = tunnelDnsCallback
     }
+    
+    /**
+     * Reconnect the WireGuard tunnel after a network change.
+     * 
+     * THE ZOMBIE TUNNEL BUG FIX (WireGuard Path):
+     * Unlike OpenVPN which needs explicit reconnection, WireGuard's protocol is designed
+     * to handle network roaming automatically through its handshake mechanism.
+     * 
+     * However, for consistency and to force an immediate handshake, we:
+     * 1. Keep the tunnel up (WireGuard handles the rest automatically)
+     * 2. Or optionally do a DOWN->UP cycle to force immediate reconnection
+     * 
+     * WireGuard advantages:
+     * - Stateless protocol - automatically re-establishes connection after network change
+     * - No explicit reconnect needed - next packet triggers handshake
+     * - Built-in roaming support (designed for mobile networks)
+     * 
+     * For now, we'll do a soft reconnect (DOWN->UP) to ensure immediate recovery.
+     */
+    suspend fun reconnect() {
+        withContext(Dispatchers.IO) {
+            try {
+                Log.i(TAG, "🔄 Reconnecting WireGuard tunnel: $tunnelId after network change")
+                
+                val wgTunnel = tunnel
+                val currentConfig = config
+                
+                if (wgTunnel != null && currentConfig != null) {
+                    val goBackend = getBackend(context)
+                    
+                    // Soft reconnect: DOWN -> UP
+                    // This forces a new handshake with the server
+                    Log.d(TAG, "   Step 1: Bringing tunnel DOWN...")
+                    goBackend.setState(wgTunnel, Tunnel.State.DOWN, null)
+                    
+                    // Small delay to ensure clean shutdown
+                    delay(100)
+                    
+                    Log.d(TAG, "   Step 2: Bringing tunnel UP...")
+                    val state = goBackend.setState(wgTunnel, Tunnel.State.UP, currentConfig)
+                    
+                    if (state == Tunnel.State.UP) {
+                        Log.i(TAG, "✅ WireGuard tunnel $tunnelId reconnected successfully")
+                    } else {
+                        Log.e(TAG, "❌ Failed to reconnect WireGuard tunnel: state=$state")
+                    }
+                } else {
+                    Log.w(TAG, "⚠️  Cannot reconnect: tunnel or config is null")
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error reconnecting WireGuard tunnel $tunnelId", e)
+            }
+        }
+    }
 }
 

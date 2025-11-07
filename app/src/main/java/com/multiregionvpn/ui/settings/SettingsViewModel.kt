@@ -301,6 +301,7 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+
 }
 
 data class SettingsUiState(

@@ -50,12 +50,9 @@ android {
                             // Verify the file exists before using it
                             val androidToolchainFileObj = file(androidToolchainFile)
                             if (androidToolchainFileObj.exists()) {
-                                // CRITICAL: Set chainload file FIRST, before CMAKE_TOOLCHAIN_FILE
-                                // This ensures vcpkg.cmake can find it when it processes the chainload
-                                // The path must be the full path to android.toolchain.cmake, not just the NDK directory
+                                // Don't set VCPKG_TARGET_TRIPLET here - let CMakeLists.txt auto-detect based on ANDROID_ABI
                                 arguments += listOf(
                                     "-DUSE_VCPKG=ON",
-                                    "-DVCPKG_TARGET_TRIPLET=arm64-android",
                                     "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$androidToolchainFile"
                                 )
                             } else {
@@ -69,7 +66,6 @@ android {
                                 if (foundPath != null) {
                                     arguments += listOf(
                                         "-DUSE_VCPKG=ON",
-                                        "-DVCPKG_TARGET_TRIPLET=arm64-android",
                                         "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$foundPath"
                                     )
                                 } else {
@@ -92,9 +88,8 @@ android {
         }
         
         ndk {
-            // For now, only build arm64-v8a since vcpkg libraries are built for arm64-android
-            // TODO: Build vcpkg libraries for other ABIs (armeabi-v7a, x86, x86_64) when needed
-            abiFilters += listOf("arm64-v8a")
+            // Build for both ARM architectures - vcpkg libraries built for both triplets
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
     

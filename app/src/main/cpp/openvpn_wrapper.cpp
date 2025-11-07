@@ -1852,4 +1852,54 @@ void openvpn_wrapper_destroy_session(OpenVpnSession* session) {
     delete session;
 }
 
+/**
+ * Reconnect an OpenVPN session after a network change.
+ * 
+ * THE ZOMBIE TUNNEL BUG FIX (Part 3):
+ * This function is called from the JNI layer when the device's network changes.
+ * It forces the OpenVPN 3 client to drop its dead socket and establish a new one
+ * on the new underlying network.
+ * 
+ * OpenVPN 3 provides a `reconnect()` method specifically for this purpose.
+ * It performs a "soft restart" - maintains the session state but establishes
+ * a new TCP/UDP connection.
+ */
+void reconnectSession(OpenVpnSession* session) {
+    if (!session) {
+        LOGE("reconnectSession: NULL session");
+        return;
+    }
+    
+    if (!session->connected && !session->connecting) {
+        LOGI("reconnectSession: Session %s not connected, skipping", session->tunnelId.c_str());
+        return;
+    }
+    
+#ifdef OPENVPN3_AVAILABLE
+    if (session->androidClient) {
+        try {
+            LOGI("reconnectSession: Calling androidClient->reconnect() for tunnel %s", 
+                 session->tunnelId.c_str());
+            
+            // OpenVPN 3's reconnect() performs a "soft restart":
+            // - Maintains session state (keys, compression, etc.)
+            // - Closes old socket
+            // - Establishes new connection on the new underlying network
+            session->androidClient->reconnect(0);  // 0 = reconnect immediately
+            
+            LOGI("reconnectSession: Reconnect successful for tunnel %s", session->tunnelId.c_str());
+        } catch (const std::exception& e) {
+            LOGE("reconnectSession: Exception for tunnel %s: %s", 
+                 session->tunnelId.c_str(), e.what());
+            session->last_error = std::string("Reconnect failed: ") + e.what();
+        }
+    } else {
+        LOGE("reconnectSession: NULL androidClient for tunnel %s", session->tunnelId.c_str());
+    }
+#else
+    LOGI("reconnectSession: OpenVPN 3 not available, skipping reconnect for tunnel %s", 
+         session->tunnelId.c_str());
+#endif
+}
+
 } // extern "C"

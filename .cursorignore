@@ -162,3 +162,18 @@ local.properties
 *~
 .DS_Store
 Thumbs.db
+
+# ============================================================================
+# Large Test/Report Files - DO NOT INDEX
+# ============================================================================
+
+# Test reports and summaries (can be regenerated)
+TEST_RESULTS*.md
+TEST_SUITE*.md
+TEST_STATUS.md
+*_REPORT.md
+SUMMARY.md
+
+# Temporary test/analysis outputs
+/tmp/
+*.tmp

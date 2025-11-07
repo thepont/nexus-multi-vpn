@@ -22,6 +22,9 @@ class AndroidOpenVPNClient;
 OpenVpnSession* openvpn_wrapper_create_session();
 void openvpn_wrapper_destroy_session(OpenVpnSession* session);
 
+// Network change handling (for zombie tunnel bug fix)
+void reconnectSession(OpenVpnSession* session);
+
 // Error codes
 #define OPENVPN_ERROR_SUCCESS 0
 #define OPENVPN_ERROR_INVALID_PARAMS -1

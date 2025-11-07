@@ -77,6 +77,11 @@ extern "C" {
     JNIEXPORT jint JNICALL
     Java_com_multiregionvpn_core_VpnConnectionManager_getPipeReadFd(
             JNIEnv *env, jobject thiz, jstring tunnelId);
+    
+    // JNI function for VpnEngineService network change notification
+    JNIEXPORT void JNICALL
+    Java_com_multiregionvpn_core_VpnEngineService_nativeOnNetworkChanged(
+            JNIEnv *env, jobject thiz);
 }
 
 // Implementation using OpenVPN 3 wrapper
@@ -473,5 +478,54 @@ Java_com_multiregionvpn_core_VpnConnectionManager_getPipeReadFd(
         JNIEnv *env, jobject thiz, jstring tunnelId) {
     // Socket pair is bidirectional - same FD for reading and writing
     return Java_com_multiregionvpn_core_VpnConnectionManager_getPipeWriteFd(env, thiz, tunnelId);
+}
+
+/**
+ * JNI function called when the device's network changes (Wi-Fi <-> 4G).
+ * 
+ * THE ZOMBIE TUNNEL BUG FIX:
+ * This function is called from VpnEngineService.networkCallback.onAvailable().
+ * It propagates the network change event to all active OpenVPN/WireGuard sessions,
+ * forcing them to reconnect and establish new sockets on the new underlying network.
+ * 
+ * Without this, tunnels become "zombies" - the OS keeps sending packets to the VPN,
+ * but they go nowhere because the OpenVPN/WireGuard socket is still bound to the
+ * old (dead) network.
+ */
+JNIEXPORT void JNICALL
+Java_com_multiregionvpn_core_VpnEngineService_nativeOnNetworkChanged(
+        JNIEnv *env, jobject thiz) {
+    LOGI("═══════════════════════════════════════════════════════");
+    LOGI("🌐 JNI: nativeOnNetworkChanged() called");
+    LOGI("═══════════════════════════════════════════════════════");
+    
+    std::lock_guard<std::mutex> lock(sessions_mutex);
+    
+    if (sessions.empty()) {
+        LOGI("   No active sessions to reconnect");
+        return;
+    }
+    
+    LOGI("   Reconnecting %zu active tunnel(s)...", sessions.size());
+    
+    // Iterate through all active sessions and trigger reconnect
+    for (auto& pair : sessions) {
+        const std::string& tunnelId = pair.first;
+        OpenVpnSession* session = pair.second;
+        
+        if (session) {
+            LOGI("   🔄 Reconnecting tunnel: %s", tunnelId.c_str());
+            try {
+                // Call the reconnect method on the OpenVPN client
+                // This will be implemented in openvpn_wrapper.cpp
+                reconnectSession(session);
+                LOGI("   ✅ Reconnect initiated for tunnel: %s", tunnelId.c_str());
+            } catch (const std::exception& e) {
+                LOGE("   ❌ Failed to reconnect tunnel %s: %s", tunnelId.c_str(), e.what());
+            }
+        }
+    }
+    
+    LOGI("✅ JNI: Network change handling complete");
 }
 

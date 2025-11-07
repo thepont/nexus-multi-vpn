@@ -7,7 +7,12 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
+import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -67,6 +72,10 @@ class VpnEngineService : VpnService() {
     private var shouldReestablishInterface = false  // Flag to trigger interface re-establishment
     private var currentAllowedPackages = emptySet<String>()  // Track current allowed apps for split tunneling
     
+    // Network change monitoring
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    
     override fun onCreate() {
         super.onCreate()
         runningInstance = this  // Set static reference for socket protection
@@ -79,6 +88,9 @@ class VpnEngineService : VpnService() {
         } catch (e: Exception) {
             Log.w(TAG, "VpnConnectionManager already initialized or error: ${e.message}")
         }
+        
+        // Register network change listener to detect Wi-Fi <-> 4G switches
+        registerNetworkCallback()
     }
     
     private fun initializePacketRouter() {
@@ -619,6 +631,7 @@ class VpnEngineService : VpnService() {
                     Log.v(TAG, "VpnConnectionManager not initialized, skipping cleanup")
                 }
                 activeTunnels.clear()
+                connectionTracker?.clearAllMappings()
             }
             
             vpnOutput?.close()
@@ -631,6 +644,111 @@ class VpnEngineService : VpnService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping VPN", e)
         }
+    }
+
+    /**
+     * Register network callback to detect network changes (Wi-Fi <-> 4G switches).
+     * 
+     * THE ZOMBIE TUNNEL BUG:
+     * When the device switches networks (e.g., Wi-Fi -> 4G), the OpenVPN/WireGuard client's
+     * socket becomes dead. The OS keeps sending packets to our VpnService, but they go to a
+     * "black hole." The user loses all connectivity but the app still shows "CONNECTED".
+     * 
+     * THE FIX:
+     * 1. onAvailable(): Call setUnderlyingNetworks() to route our sockets through the new network
+     * 2. onAvailable(): Call nativeOnNetworkChanged() to tell C++ router to reconnect tunnels
+     */
+    private fun registerNetworkCallback() {
+        try {
+            connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            
+            networkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    Log.i(TAG, "═══════════════════════════════════════════════════════")
+                    Log.i(TAG, "🌐 NETWORK CHANGE DETECTED: onAvailable()")
+                    Log.i(TAG, "   Network: $network")
+                    Log.i(TAG, "═══════════════════════════════════════════════════════")
+                    
+                    // CRITICAL STEP 1: Route all sockets created by this service through the new network
+                    // This ensures OpenVPN/WireGuard sockets use the new network instead of the old (dead) one
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                        try {
+                            setUnderlyingNetworks(arrayOf(network))
+                            Log.i(TAG, "✅ setUnderlyingNetworks() called - sockets will use new network")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Failed to set underlying networks", e)
+                        }
+                    }
+                    
+                    // CRITICAL STEP 2: Notify both Kotlin and C++ layers to reconnect all active tunnels
+                    // This ensures both OpenVPN (C++) and WireGuard (Kotlin) tunnels are reconnected
+                    
+                    // 2a. Reconnect WireGuard tunnels (handled in Kotlin)
+                    try {
+                        serviceScope.launch {
+                            VpnConnectionManager.getInstance().reconnectAllTunnels()
+                        }
+                        Log.i(TAG, "✅ reconnectAllTunnels() called - WireGuard will reconnect")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Failed to reconnect Kotlin-managed tunnels", e)
+                    }
+                    
+                    // 2b. Reconnect OpenVPN tunnels (handled in C++)
+                    try {
+                        nativeOnNetworkChanged()
+                        Log.i(TAG, "✅ nativeOnNetworkChanged() called - OpenVPN C++ will reconnect")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Failed to notify native layer of network change", e)
+                    }
+                }
+                
+                override fun onLost(network: Network) {
+                    Log.w(TAG, "🌐 NETWORK LOST: $network")
+                }
+            }
+            
+            val networkRequest = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            
+            connectivityManager?.registerNetworkCallback(networkRequest, networkCallback!!)
+            Log.i(TAG, "✅ Network callback registered")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to register network callback", e)
+        }
+    }
+    
+    /**
+     * Unregister network callback when service is destroyed.
+     */
+    private fun unregisterNetworkCallback() {
+        try {
+            networkCallback?.let { callback ->
+                connectivityManager?.unregisterNetworkCallback(callback)
+                Log.i(TAG, "✅ Network callback unregistered")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to unregister network callback", e)
+        }
+    }
+    
+    /**
+     * Native function to notify C++ router of network changes.
+     * This will be implemented in the JNI layer (openvpn_jni.cpp).
+     */
+    private external fun nativeOnNetworkChanged()
+    
+    override fun onDestroy() {
+        Log.i(TAG, "═══════════════════════════════════════════════════════")
+        Log.i(TAG, "🛑 onDestroy() called - VPN service shutting down")
+        Log.i(TAG, "═══════════════════════════════════════════════════════")
+        
+        // Unregister network callback
+        unregisterNetworkCallback()
+        
+        connectionTracker?.clearAllMappings()
+        runningInstance = null
+        super.onDestroy()
     }
     
     /**
@@ -770,6 +888,7 @@ class VpnEngineService : VpnService() {
                 Log.i(TAG, "   📱 ${rule.packageName} → ${rule.vpnConfigId ?: "Direct"}")
             }
             Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            connectionTracker?.clearAllMappings()
             
             // Get packages with VPN rules
             val packagesWithRules = appRules
@@ -1036,21 +1155,6 @@ class VpnEngineService : VpnService() {
             .build()
     }
     
-    override fun onDestroy() {
-        runningInstance = null  // Clear static reference for socket protection
-        super.onDestroy()
-        vpnOutput?.close()
-        vpnInterface?.close()
-        serviceScope.launch {
-            try {
-                VpnConnectionManager.getInstance().closeAll()
-            } catch (e: IllegalStateException) {
-                // VpnConnectionManager not initialized yet - that's okay
-                Log.v(TAG, "VpnConnectionManager not initialized in onDestroy, skipping cleanup")
-            }
-        }
-        serviceScope.cancel()
-    }
     
     /**
      * Called when a tunnel receives DNS servers from OpenVPN DHCP.
@@ -1330,16 +1434,18 @@ class VpnEngineService : VpnService() {
         const val EXTRA_ERROR_DETAILS = "error_details"
         const val EXTRA_ERROR_TUNNEL_ID = "error_tunnel_id"
         const val EXTRA_ERROR_TIMESTAMP = "error_timestamp"
-        
-        // Static reference to running instance for socket protection
+
         @Volatile
         private var runningInstance: VpnEngineService? = null
-        
-        /**
-         * Get the running VPN service instance.
-         * Used by HTTP clients to call protect() on sockets.
-         * Returns null if service is not running.
-         */
+
+        /** Used by HTTP clients to call protect() on sockets. */
         fun getRunningInstance(): VpnEngineService? = runningInstance
+
+        /** For tests and diagnostics. */
+        fun isRunning(): Boolean = runningInstance != null
+
+        fun getConnectionTrackerSnapshot(): Map<String, String> {
+            return runningInstance?.connectionTracker?.getCurrentPackageMappings() ?: emptyMap()
+        }
     }
 }
