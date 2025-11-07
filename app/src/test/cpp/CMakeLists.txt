@@ -38,7 +38,22 @@ target_link_libraries(socketpair_test
 # Register test with CTest
 add_test(NAME SocketpairTests COMMAND socketpair_test)
 
+# Test 2: Bidirectional flow simulation (CRITICAL TEST)
+add_executable(bidirectional_flow_test
+    bidirectional_flow_test.cpp
+)
+
+target_link_libraries(bidirectional_flow_test
+    GTest::gtest
+    GTest::gtest_main
+    pthread  # For std::thread
+)
+
+# Register test with CTest
+add_test(NAME BidirectionalFlowTests COMMAND bidirectional_flow_test)
+
 # Print message
 message(STATUS "C++ unit tests configured:")
 message(STATUS "  - socketpair_test")
+message(STATUS "  - bidirectional_flow_test (CRITICAL)")
 
