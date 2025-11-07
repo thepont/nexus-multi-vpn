@@ -280,7 +280,7 @@ private:
      * Feed packet to OpenVPN for encryption and transmission
      */
     void handle_read(const openvpn_io::error_code& error, std::size_t bytes_read,
-                    std::shared_ptr<std::array<uint8_t, 2048>> read_buf) {
+                     const std::shared_ptr<std::array<uint8_t, 2048>>& read_buf) {
         __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-CustomTUN",
             "📬 handle_read() called: error=%d, bytes_read=%zu, halt=%d",
             error.value(), bytes_read, halt_);
@@ -383,9 +383,9 @@ private:
         std::vector<std::string> dns_servers;
         for (const auto& option : opt) {
             if (option.size() >= 3 && option.ref(0) == "dhcp-option") {
-                std::string opt_type = option.get(1, 32);
+                const std::string& opt_type = option.get(1, 32);
                 if (opt_type == "DNS") {
-                    std::string dns = option.get(2, 256);
+                    const std::string& dns = option.get(2, 256);
                     dns_servers.push_back(dns);
                     OPENVPN_LOG("TUN DNS: " << dns);
                 }
@@ -404,8 +404,8 @@ private:
             try {
                 mtu_ = std::stoi(mtu_opt->get(1, 16));  // max_len = 16 for MTU number
                 OPENVPN_LOG("TUN MTU: " << mtu_);
-            } catch (...) {
-                OPENVPN_LOG("⚠️  Failed to parse MTU, using default: " << mtu_);
+            } catch (const std::exception& e) {
+                OPENVPN_LOG("⚠️  Failed to parse MTU (" << e.what() << "), using default: " << mtu_);
             }
         }
     }

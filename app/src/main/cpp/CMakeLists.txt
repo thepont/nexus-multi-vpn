@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("multiregionvpn-native")
 
+# Export compile commands for clang-tidy and other static analysis tools
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Set C++ standard
 # OpenVPN 3 requires C++20, so we need to use C++20 for our wrapper code too
 set(CMAKE_CXX_STANDARD 20)
