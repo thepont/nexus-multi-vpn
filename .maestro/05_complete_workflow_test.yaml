@@ -114,7 +114,7 @@ appId: "com.multiregionvpn"
 # STEP 5: Start VPN
 # ============================================
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 
 # Handle permission dialog
 - tapOn:
@@ -154,7 +154,7 @@ appId: "com.multiregionvpn"
 # STEP 7: Stop VPN
 # ============================================
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 - wait: 2000
 - assertVisible: "Disconnected"
 

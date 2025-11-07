@@ -22,7 +22,7 @@ appId: "com.multiregionvpn"
 
 # Start VPN
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 - wait: 10000  # Wait for tunnel to connect
 
 # Should show Protected
@@ -65,7 +65,7 @@ appId: "com.multiregionvpn"
 
 # Turn off VPN
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 - wait: 2000
 - assertVisible: "Disconnected"
 

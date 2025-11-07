@@ -9,8 +9,9 @@ appId: "com.multiregionvpn"
 - assertVisible: "Disconnected"  # Status in header
 
 # Test: Toggle VPN ON
+# Tap on the toggle switch by tapping near the status text (top right)
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Top right corner where toggle is
 
 # Handle VPN permission dialog (if appears)
 - tapOn:
@@ -36,7 +37,7 @@ appId: "com.multiregionvpn"
     
 # Test: Toggle VPN OFF
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 
 # Wait for disconnection
 - wait: 2000
@@ -46,14 +47,14 @@ appId: "com.multiregionvpn"
 
 # Test: Toggle ON again (verify it's stable)
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 - wait: 5000
 - assertVisible:
     text: "Connecting...|Protected|Error"
 
 # Toggle OFF to clean up
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 - wait: 2000
 - assertVisible: "Disconnected"
 

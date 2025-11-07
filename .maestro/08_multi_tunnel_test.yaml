@@ -50,7 +50,7 @@ appId: "com.multiregionvpn"
 # STEP 2: Start VPN (should start BOTH tunnels)
 # ============================================
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 - wait: 15000  # Wait for both tunnels to connect
 
 - assertVisible: "Protected"
@@ -100,7 +100,7 @@ appId: "com.multiregionvpn"
 # STEP 6: Stop VPN
 # ============================================
 - tapOn:
-    id: "start_service_toggle"
+    point: "90%,8%"  # Toggle switch in top right
 - wait: 2000
 - assertVisible: "Disconnected"
 
