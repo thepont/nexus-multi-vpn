@@ -290,9 +290,12 @@ class VpnEngineService : VpnService() {
         try {
             // Get all app rules to determine which apps should use VPN
             // This implements proper split tunneling - only apps with rules use VPN
+            // CRITICAL: Use direct database query (not Flow.first()) to ensure we get
+            // committed data, not stale Flow emission
             val appRules = kotlinx.coroutines.runBlocking {
-                settingsRepository.getAllAppRules().first()
+                settingsRepository.appRuleDao.getAllRulesList()
             }
+            Log.d(TAG, "App rules found: ${appRules.size}, packages: ${appRules.map { it.packageName }}")
             
             // Get unique package names that have VPN rules
             val packagesWithRules = appRules

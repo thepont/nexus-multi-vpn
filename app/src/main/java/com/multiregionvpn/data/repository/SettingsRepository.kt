@@ -16,7 +16,7 @@ import javax.inject.Singleton
 @Singleton
 class SettingsRepository @Inject constructor(
     private val vpnConfigDao: VpnConfigDao,
-    private val appRuleDao: AppRuleDao,
+    val appRuleDao: AppRuleDao,  // Public for direct DB queries (bypass Flow caching)
     private val providerCredentialsDao: ProviderCredentialsDao,
     private val presetRuleDao: PresetRuleDao
 ) {

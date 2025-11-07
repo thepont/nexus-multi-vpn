@@ -17,6 +17,9 @@ interface AppRuleDao {
     @Query("SELECT * FROM app_rules")
     fun getAllRules(): Flow<List<AppRule>>
     
+    @Query("SELECT * FROM app_rules")
+    suspend fun getAllRulesList(): List<AppRule>  // Synchronous query for immediate reads
+    
     @Query("DELETE FROM app_rules")
     suspend fun clearAll()
 }

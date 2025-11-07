@@ -202,6 +202,16 @@ class NordVpnE2ETest {
         // GIVEN: A rule routing our test package to the UK VPN
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
+        
+        // CRITICAL: Wait for Room Flow to emit the change
+        // Without this delay, VPN starts before Flow emits updated rules
+        delay(500)
+        
+        // Verify rule was actually saved
+        val savedRule = settingsRepo.getAppRuleByPackageName(TEST_PACKAGE_NAME)
+        println("✓ Verified app rule saved: ${savedRule?.packageName} -> ${savedRule?.vpnConfigId}")
+        assert(savedRule != null) { "App rule was not saved!" }
+        assert(savedRule?.vpnConfigId == UK_VPN_ID) { "App rule has wrong VPN config!" }
 
         // WHEN: The VPN service is started
         startVpnEngine()
@@ -236,6 +246,12 @@ class NordVpnE2ETest {
         // GIVEN: A rule routing our test package to France VPN
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
         println("✓ Created app rule: $TEST_PACKAGE_NAME -> FR VPN")
+        
+        // CRITICAL: Wait for Room Flow to emit
+        delay(500)
+        val savedRule = settingsRepo.getAppRuleByPackageName(TEST_PACKAGE_NAME)
+        println("✓ Verified: ${savedRule?.packageName} -> ${savedRule?.vpnConfigId}")
+        assert(savedRule?.vpnConfigId == FR_VPN_ID)
 
         // WHEN: The VPN service is started
         startVpnEngine()
