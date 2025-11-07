@@ -52,8 +52,22 @@ target_link_libraries(bidirectional_flow_test
 # Register test with CTest
 add_test(NAME BidirectionalFlowTests COMMAND bidirectional_flow_test)
 
+# Test 3: Buffer Headroom Test (covers the OpenVPN fix)
+add_executable(buffer_headroom_test
+    buffer_headroom_test.cpp
+)
+
+target_link_libraries(buffer_headroom_test
+    GTest::gtest
+    GTest::gtest_main
+)
+
+# Register test with CTest
+add_test(NAME BufferHeadroomTests COMMAND buffer_headroom_test)
+
 # Print message
 message(STATUS "C++ unit tests configured:")
 message(STATUS "  - socketpair_test")
 message(STATUS "  - bidirectional_flow_test (CRITICAL)")
+message(STATUS "  - buffer_headroom_test (OpenVPN fix coverage)")
 
