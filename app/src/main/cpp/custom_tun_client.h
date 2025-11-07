@@ -301,13 +301,21 @@ private:
                 
                 __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
                     "   Calling parent_.tun_recv() with %zu byte buffer...", bytes_read);
+                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                    "   Buffer: size=%zu, offset=%zu, capacity=%zu", 
+                    buf.size(), buf.offset(), buf.capacity());
                 
                 // CRITICAL: Call parent_.tun_recv() to feed packet into OpenVPN's pipeline
                 // This is documented in TunClientParent interface (tunbase.hpp line 85)
+                // This should encrypt the packet and send it via UDP to the server
                 parent_.tun_recv(buf);
                 
                 __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
                     "✅ OUTBOUND: Successfully fed %zu byte packet to OpenVPN!", bytes_read);
+                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                    "   OpenVPN should now encrypt and send this packet to server");
+                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                    "   If server responds, tun_send() will be called with decrypted response");
                 
                 // Queue next read
                 queue_read();
