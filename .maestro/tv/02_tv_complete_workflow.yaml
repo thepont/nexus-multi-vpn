@@ -1,0 +1,115 @@
+appId: "com.multiregionvpn"
+---
+# Google TV Complete Workflow (Remote Control Only)
+# Tests full user journey on TV using D-pad navigation
+
+- launchApp
+- assertVisible: "Region Router"
+- wait: 2000
+
+# ============================================
+# Navigate to Settings to enter credentials
+# ============================================
+- pressKey: Down  # Focus content
+- wait: 500
+
+# Navigate to Settings tab (3 presses right: Tunnels → Apps → Connections → Settings)
+- pressKey: Right
+- wait: 300
+- pressKey: Right  
+- wait: 300
+- pressKey: Right
+- wait: 300
+- pressKey: Enter  # Select Settings tab
+- wait: 1000
+
+- assertVisible: "NordVPN"
+
+# Focus on username field
+- pressKey: Down
+- wait: 500
+- pressKey: Enter  # Open keyboard
+- wait: 1000
+
+# Note: On TV, text input requires on-screen keyboard
+# Maestro can input text directly
+- inputText: "${NORDVPN_USERNAME}"
+- pressKey: Enter  # Confirm
+- wait: 1000
+
+# Focus on password field
+- pressKey: Down
+- wait: 500
+- pressKey: Enter
+- wait: 1000
+- inputText: "${NORDVPN_PASSWORD}"
+- pressKey: Enter
+- wait: 1000
+
+# Focus on Save button
+- pressKey: Down
+- wait: 500
+- pressKey: Enter  # Save credentials
+- wait: 2000
+
+- assertVisible: "Credentials saved"
+
+# ============================================
+# Navigate to Tunnels tab to add tunnel
+# ============================================
+- pressKey: Left  # Back to Tunnels (going left from Settings)
+- wait: 300
+- pressKey: Left
+- wait: 300
+- pressKey: Left
+- wait: 300
+- pressKey: Enter
+- wait: 1000
+
+- assertVisible: "Add Tunnel"
+
+# Focus on Add Tunnel button
+- pressKey: Down
+- wait: 500
+- pressKey: Enter  # Open Add Tunnel dialog
+- wait: 1000
+
+- assertVisible: "Add VPN Tunnel"
+
+# Note: Dialog navigation on TV might need specific handling
+# For now, we'll verify dialog opened
+# Manual testing required for full dialog flow
+
+# Press Back to close dialog
+- pressKey: Back
+- wait: 1000
+
+# ============================================
+# Test VPN Toggle with D-pad
+# ============================================
+- pressKey: Up  # Focus header
+- wait: 500
+- pressKey: Right  # Navigate to toggle
+- wait: 500
+- pressKey: Enter  # Toggle VPN
+- wait: 3000
+
+# Handle permission dialog
+- pressKey: Enter  # OK/Allow
+  optional: true
+- wait: 2000
+
+# Status should update
+- assertVisible:
+    text: "Connecting...|Protected|Error"
+
+# Toggle off
+- pressKey: Up
+- wait: 500
+- pressKey: Right
+- wait: 500
+- pressKey: Enter
+- wait: 2000
+
+- assertVisible: "Disconnected"
+
