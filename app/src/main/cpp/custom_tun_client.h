@@ -256,8 +256,13 @@ private:
      */
     void queue_read() {
         if (halt_ || !stream_) {
+            __android_log_print(ANDROID_LOG_WARN, "OpenVPN-CustomTUN",
+                "⚠️  queue_read() skipped: halt=%d, stream=%p", halt_, (void*)stream_);
             return;
         }
+        
+        __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-CustomTUN",
+            "📖 Queuing next async read from lib_fd...");
         
         // Use a simple byte buffer for reading, then copy to BufferAllocated
         auto read_buf = std::make_shared<std::array<uint8_t, 2048>>();
@@ -276,7 +281,13 @@ private:
      */
     void handle_read(const openvpn_io::error_code& error, std::size_t bytes_read,
                     std::shared_ptr<std::array<uint8_t, 2048>> read_buf) {
+        __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-CustomTUN",
+            "📬 handle_read() called: error=%d, bytes_read=%zu, halt=%d",
+            error.value(), bytes_read, halt_);
+        
         if (halt_) {
+            __android_log_print(ANDROID_LOG_WARN, "OpenVPN-CustomTUN",
+                "   handle_read() exiting early: halt=true");
             return;
         }
         
@@ -284,19 +295,33 @@ private:
             __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
                 "📤 OUTBOUND: Read %zu bytes from lib_fd (from app) - feeding to OpenVPN", bytes_read);
             
-            // Create BufferAllocated and copy data
-            BufferAllocated buf;
-            buf.write(read_buf->data(), bytes_read);
-            
-            // CRITICAL: Call parent_.tun_recv() to feed packet into OpenVPN's pipeline
-            // This is documented in TunClientParent interface (tunbase.hpp line 85)
-            parent_.tun_recv(buf);
-            
-            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
-                "✅ OUTBOUND: Fed %zu byte packet to OpenVPN for encryption", bytes_read);
-            
-            // Queue next read
-            queue_read();
+            try {
+                // Create BufferAllocated from data pointer and size
+                BufferAllocated buf(read_buf->data(), bytes_read, BufAllocFlags::CONSTRUCT_ZERO);
+                
+                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                    "   Calling parent_.tun_recv() with %zu byte buffer...", bytes_read);
+                
+                // CRITICAL: Call parent_.tun_recv() to feed packet into OpenVPN's pipeline
+                // This is documented in TunClientParent interface (tunbase.hpp line 85)
+                parent_.tun_recv(buf);
+                
+                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                    "✅ OUTBOUND: Successfully fed %zu byte packet to OpenVPN!", bytes_read);
+                
+                // Queue next read
+                queue_read();
+            } catch (const std::exception& e) {
+                __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
+                    "❌ OUTBOUND: Exception in handle_read: %s", e.what());
+                // Still queue next read to avoid getting stuck
+                queue_read();
+            } catch (...) {
+                __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
+                    "❌ OUTBOUND: Unknown exception in handle_read");
+                // Still queue next read to avoid getting stuck
+                queue_read();
+            }
         } else {
             if (error && error != openvpn_io::error::operation_aborted) {
                 __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
