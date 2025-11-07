@@ -7,18 +7,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.multiregionvpn.ui.settings.SettingsScreen
+import androidx.compose.ui.platform.LocalContext
+import com.multiregionvpn.ui.navigation.MainScreen
 import com.multiregionvpn.ui.theme.AppTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
- * Main Activity - Professional VPN Router UI
+ * Main Activity - Professional VPN Router UI (NOC Style)
  * 
  * Features:
- * - NOC-style header bar with status
- * - Multi-tunnel configuration
- * - Per-app routing rules
- * - Real-time status updates
+ * - Persistent header bar with real-time status
+ * - Tab navigation (Tunnels, Apps, Connections, Settings)
+ * - Professional design with Material 3
+ * - Performance-optimized connection logging
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -30,7 +31,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    SettingsScreen()
+                    MainScreen()
                 }
             }
         }
