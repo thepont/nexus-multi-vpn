@@ -65,6 +65,7 @@ class VpnEngineService : VpnService() {
     private val tunnelDnsServers = mutableMapOf<String, TunnelDnsServers>()  // tunnelId -> DNS servers
     private val subnetToPrimaryTunnel = mutableMapOf<String, String>()  // subnet -> primary tunnelId
     private var shouldReestablishInterface = false  // Flag to trigger interface re-establishment
+    private var currentAllowedPackages = emptySet<String>()  // Track current allowed apps for split tunneling
     
     override fun onCreate() {
         super.onCreate()
@@ -759,12 +760,48 @@ class VpnEngineService : VpnService() {
                 .filter { it.vpnConfigId != null }
                 .map { it.packageName }
                 .distinct()
+                .toSet()
+            
+            // CRITICAL: Detect if allowed apps changed - must restart interface!
+            // addAllowedApplication() is only applied at establish() time
+            // Changes to app rules require interface restart to update allowed apps
+            if (vpnInterface != null && packagesWithRules != currentAllowedPackages) {
+                Log.w(TAG, "⚠️  Allowed apps changed - RESTARTING VPN interface")
+                Log.d(TAG, "   Old: $currentAllowedPackages")
+                Log.d(TAG, "   New: $packagesWithRules")
+                
+                // Close current interface
+                vpnInterface?.close()
+                vpnInterface = null
+                vpnOutput?.close()
+                vpnOutput = null
+                
+                // Re-establish with new allowed apps
+                if (packagesWithRules.isNotEmpty()) {
+                    try {
+                        establishVpnInterface(packagesWithRules.toList())
+                        if (vpnInterface != null) {
+                            vpnOutput = FileOutputStream(vpnInterface!!.fileDescriptor)
+                            initializePacketRouter()
+                            serviceScope.launch { readPacketsFromTun() }
+                            currentAllowedPackages = packagesWithRules
+                            Log.i(TAG, "✅ VPN interface restarted with updated allowed apps")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to restart VPN interface", e)
+                        return@collect
+                    }
+                } else {
+                    currentAllowedPackages = emptySet()
+                }
+            }
             
             // If VPN interface is not established but we have rules, establish it now
             if (vpnInterface == null && packagesWithRules.isNotEmpty()) {
                 Log.i(TAG, "App rules detected - establishing VPN interface for split tunneling")
                 try {
-                    establishVpnInterface(packagesWithRules)
+                    establishVpnInterface(packagesWithRules.toList())
+                    currentAllowedPackages = packagesWithRules
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to establish VPN interface when rules detected", e)
                     return@collect
@@ -779,6 +816,7 @@ class VpnEngineService : VpnService() {
                     vpnInterface = null
                     vpnOutput?.close()
                     vpnOutput = null
+                    currentAllowedPackages = emptySet()
                     // Re-initialize packet router (will handle null interface)
                     initializePacketRouter()
                     Log.i(TAG, "✅ VPN interface closed (no apps need VPN routing)")
@@ -792,7 +830,8 @@ class VpnEngineService : VpnService() {
             if (vpnInterface == null && packagesWithRules.isNotEmpty()) {
                 Log.i(TAG, "App rules detected - establishing VPN interface for split tunneling")
                 try {
-                    establishVpnInterface(packagesWithRules)
+                    establishVpnInterface(packagesWithRules.toList())
+                    currentAllowedPackages = packagesWithRules
                     if (vpnInterface != null) {
                         // Interface was established - set up streams and router
                         vpnOutput = FileOutputStream(vpnInterface!!.fileDescriptor)
