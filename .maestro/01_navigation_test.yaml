@@ -1,0 +1,30 @@
+appId: "com.multiregionvpn"
+---
+# UI Navigation Test
+# Tests the main navigation tabs and header
+
+- launchApp
+- assertVisible: "Region Router"  # Header title
+
+# Test header bar is visible
+- assertVisible: "Disconnected"  # Initial status
+- assertVisible:
+    id: "start_service_toggle"  # VPN toggle switch
+
+# Test bottom navigation tabs
+- tapOn: "Tunnels"
+- assertVisible: "Tunnels"  # Section title
+
+- tapOn: "Apps"
+- assertVisible: "Search apps..."  # Search bar
+
+- tapOn: "Connections"
+- assertVisible: "Connection Log"  # Placeholder text
+
+- tapOn: "Settings"
+- assertVisible: "NordVPN"  # Credentials section
+
+# Navigate back to Tunnels
+- tapOn: "Tunnels"
+- assertVisible: "Add Tunnel"  # Add button
+

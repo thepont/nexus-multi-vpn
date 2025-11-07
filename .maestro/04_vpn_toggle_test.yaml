@@ -1,0 +1,59 @@
+appId: "com.multiregionvpn"
+---
+# VPN Toggle Test
+# Tests the VPN on/off toggle and status updates
+
+- launchApp
+
+# Verify initial state
+- assertVisible: "Disconnected"  # Status in header
+
+# Test: Toggle VPN ON
+- tapOn:
+    id: "start_service_toggle"
+
+# Handle VPN permission dialog (if appears)
+- tapOn:
+    text: "OK"
+    optional: true
+- tapOn:
+    text: "ALLOW"
+    optional: true
+
+# Wait for status to change
+- waitForAnimationToEnd
+
+# Status should change from Disconnected
+- assertVisible:
+    text: "Connecting...|Protected"  # Either connecting or protected
+
+# Wait a few seconds for connection
+- wait: 5000
+
+# If credentials and tunnel are configured, should show Protected
+- assertVisible:
+    text: "Protected|Error"  # Protected or Error (if no tunnels)
+    
+# Test: Toggle VPN OFF
+- tapOn:
+    id: "start_service_toggle"
+
+# Wait for disconnection
+- wait: 2000
+
+# Status should return to Disconnected
+- assertVisible: "Disconnected"
+
+# Test: Toggle ON again (verify it's stable)
+- tapOn:
+    id: "start_service_toggle"
+- wait: 5000
+- assertVisible:
+    text: "Connecting...|Protected|Error"
+
+# Toggle OFF to clean up
+- tapOn:
+    id: "start_service_toggle"
+- wait: 2000
+- assertVisible: "Disconnected"
+

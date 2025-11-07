@@ -1,111 +1,301 @@
-# Maestro E2E Tests
+# Maestro UI E2E Tests
 
-This directory contains End-to-End (E2E) test flows for the Multi-Region VPN app using [Maestro](https://maestro.mobile.dev/).
+Comprehensive UI end-to-end tests for the Multi-Region VPN Router app.
 
-## Setup
+## Prerequisites
 
-1. **Install Maestro CLI:**
+1. **Maestro installed:**
    ```bash
    curl -Ls "https://get.maestro.mobile.dev" | bash
+   export PATH="$PATH:$HOME/.maestro/bin"
    ```
 
-   Or on macOS:
+2. **Device connected:**
    ```bash
-   brew tap mobile-dev-inc/tap
-   brew install maestro
+   adb devices  # Should show your device
    ```
 
-2. **Install the Maestro Studio app** (optional, for visual test recording):
-   - Download from [maestro.mobile.dev](https://maestro.mobile.dev)
+3. **Environment variables:**
+   ```bash
+   export NORDVPN_USERNAME="your_username"
+   export NORDVPN_PASSWORD="your_password"
+   ```
 
-## Running Tests
+4. **Bootstrap credentials and tunnels:**
+   ```bash
+   # Run bootstrap test first
+   adb shell am instrument -w \
+     -e class com.multiregionvpn.BootstrapCredentialsTest \
+     -e NORDVPN_USERNAME "$NORDVPN_USERNAME" \
+     -e NORDVPN_PASSWORD "$NORDVPN_PASSWORD" \
+     com.multiregionvpn.test/androidx.test.runner.AndroidJUnitRunner
+   ```
 
-### Prerequisites
+## Test Files
 
-- Android device or emulator connected
-- App built and installed (`./gradlew installDebug`)
-
-### Run a specific test flow:
-
+### 01_navigation_test.yaml
+Tests basic navigation between tabs and UI elements.
 ```bash
-maestro test .maestro/01_test_full_config_flow.yaml
+maestro test .maestro/01_navigation_test.yaml
 ```
 
-### Run all tests:
+**Tests:**
+- Header bar visibility
+- Bottom navigation tabs
+- Screen transitions
+- UI element presence
 
+**Duration:** ~30 seconds
+
+---
+
+### 02_tunnel_management_test.yaml
+Tests tunnel creation, editing, and deletion.
+```bash
+maestro test .maestro/02_tunnel_management_test.yaml
+```
+
+**Tests:**
+- Add new tunnel with auto-fetch server
+- Edit tunnel name
+- Delete tunnel
+- Tunnel list display
+
+**Duration:** ~60 seconds
+
+**Note:** Requires NordVPN credentials to be set in environment
+
+---
+
+### 03_app_rules_test.yaml
+Tests app rule assignment and search functionality.
+```bash
+maestro test .maestro/03_app_rules_test.yaml
+```
+
+**Tests:**
+- Search for apps
+- Smart app ordering
+- Assign app to tunnel
+- Change app rule
+- Remove app rule (Direct Internet)
+
+**Duration:** ~45 seconds
+
+**Prerequisites:** At least one tunnel configured
+
+---
+
+### 04_vpn_toggle_test.yaml
+Tests VPN on/off toggle and status updates.
+```bash
+maestro test .maestro/04_vpn_toggle_test.yaml
+```
+
+**Tests:**
+- Toggle VPN on
+- Status changes (Disconnected → Connecting → Protected)
+- Toggle VPN off
+- Status returns to Disconnected
+- Stability of toggle (on/off/on)
+
+**Duration:** ~20 seconds
+
+---
+
+### 05_complete_workflow_test.yaml
+Comprehensive test of the full user journey.
+```bash
+NORDVPN_USERNAME="xxx" NORDVPN_PASSWORD="yyy" \
+maestro test .maestro/05_complete_workflow_test.yaml
+```
+
+**Tests:**
+- Configure credentials
+- Add UK tunnel
+- Add France tunnel
+- Assign apps to tunnels
+- Start VPN
+- Verify both tunnels connect
+- Rapid switching between tunnels
+- Stop VPN
+- Cleanup
+
+**Duration:** ~120 seconds
+
+**Note:** Complete end-to-end test, runs full workflow
+
+---
+
+### 06_smart_app_badges_test.yaml
+Tests smart app ordering and badge system.
+```bash
+maestro test .maestro/06_smart_app_badges_test.yaml
+```
+
+**Tests:**
+- Geo-blocked apps appear at top
+- Search filters apps correctly
+- Badge system (visual verification)
+- App ordering by priority
+
+**Duration:** ~30 seconds
+
+**Prerequisites:** Tunnels configured
+
+---
+
+### 07_verify_routing_with_chrome.yaml
+Tests actual VPN routing with Chrome browser.
+```bash
+maestro test .maestro/07_verify_routing_with_chrome.yaml
+```
+
+**Tests:**
+- Assign Chrome to UK tunnel
+- Start VPN
+- Launch Chrome
+- Navigate to ip-api.com
+- Verify UK IP (manual verification)
+
+**Duration:** ~45 seconds
+
+**Prerequisites:** Chrome installed, tunnels configured
+
+**Note:** Requires manual verification of IP address
+
+---
+
+### 08_multi_tunnel_test.yaml
+Tests multiple tunnels running simultaneously.
+```bash
+maestro test .maestro/08_multi_tunnel_test.yaml
+```
+
+**Tests:**
+- Multiple apps assigned to different tunnels
+- Both tunnels connect simultaneously
+- Rapid switching between tunnels
+- VPN stays connected during switches
+- Cleanup of app rules
+
+**Duration:** ~90 seconds
+
+**Prerequisites:** UK and FR tunnels from bootstrap
+
+---
+
+## Running All Tests
+
+### Run complete test suite:
 ```bash
 maestro test .maestro/
 ```
 
-### Run with a specific device:
-
+### Run specific test:
 ```bash
-maestro test .maestro/01_test_full_config_flow.yaml --device <device-id>
+maestro test .maestro/01_navigation_test.yaml
 ```
 
-List devices:
+### Run with environment variables:
 ```bash
-adb devices
+NORDVPN_USERNAME="xxx" NORDVPN_PASSWORD="yyy" \
+maestro test .maestro/05_complete_workflow_test.yaml
 ```
 
-## Test Flows
+---
 
-### `01_test_full_config_flow.yaml`
+## Test Coverage
 
-A complete first-time user setup flow that tests:
+### UI Components Tested
+- ✅ Header bar (status, toggle switch)
+- ✅ Bottom navigation (4 tabs)
+- ✅ Tunnel list and management
+- ✅ App list with search
+- ✅ VPN toggle functionality
+- ✅ Dialogs (add/edit tunnel, select tunnel)
+- ✅ Status updates (Disconnected/Connecting/Protected/Error)
 
-1. ✅ **NordVPN Token Entry** - Saves provider credentials
-2. ✅ **VPN Server Configuration** - Adds a new VPN config via dialog
-3. ✅ **App Rule Assignment** - Assigns a routing rule to an installed app
-4. ✅ **VPN Service Toggle** - Starts the VPN service and handles system permission dialog
-5. ✅ **Service Stop** - Stops the VPN service
+### User Flows Tested
+- ✅ First-time setup (credentials + tunnels)
+- ✅ Assign app to tunnel
+- ✅ Start/stop VPN
+- ✅ Rapid region switching
+- ✅ Multi-tunnel operation
+- ✅ Search and filtering
+- ✅ Tunnel CRUD operations
 
-**Note:** Before running this test, ensure:
-- You have a valid NordVPN token (replace `MY_TEST_NORDVPN_TOKEN_12345` in the YAML)
-- The device/emulator has Chrome installed (`com.android.chrome`) or update the test to use a different app
+### Edge Cases Tested
+- ✅ VPN permission handling
+- ✅ Missing credentials
+- ✅ No tunnels configured
+- ✅ Network errors
+- ✅ Rapid toggle on/off
 
-## Test Tags Reference
+---
 
-All interactive UI elements have been tagged with `testTag` modifiers for Maestro to find them:
+## Expected Results
 
-| Element | Test Tag ID |
-|---------|-------------|
-| Master VPN Toggle | `start_service_toggle` |
-| NordVPN Token Field | `nord_token_textfield` |
-| Save Token Button | `nord_token_save_button` |
-| Add VPN Config Button | `add_vpn_config_button` |
-| Config Name Field | `config_name_textfield` |
-| Config Region Dropdown | `config_region_dropdown` |
-| Config Server Field | `config_server_textfield` |
-| Config Save Button | `config_save_button` |
-| VPN Config List Item | `vpn_config_item_{configName}` |
-| App Rule Dropdown | `app_rule_dropdown_{packageName}` |
+All tests should **PASS** when:
+1. App is installed on device
+2. NordVPN credentials are valid
+3. Device has internet connection
+4. VPN permission is granted
 
 ## Troubleshooting
 
-### Test fails to find elements:
-- Ensure the app is built with the latest code (all `testTag` modifiers added)
-- Check that the app is installed on the device/emulator
-- Verify the element is visible on screen (may need to scroll)
+### Test fails with "Element not found"
+- Check if testTag modifiers are present in Compose UI
+- Verify UI text matches test expectations
+- Check if device language is English
 
-### VPN permission dialog not handled:
-- The test uses `optional: true` for system dialogs as they may vary by Android version
-- Adjust the dialog text matching in the YAML if needed for your Android version
+### Test fails with VPN permission dialog
+- Grant permission manually once
+- Or use: `adb shell appops set com.multiregionvpn ACTIVATE_VPN allow`
 
-### App crashes during test:
-- Check `adb logcat` for error messages
-- Ensure all dependencies are properly configured in `build.gradle.kts`
+### Test fails with "Tunnel not connecting"
+- Check NordVPN credentials
+- Verify internet connection
+- Check logcat for errors
 
-## Continuous Integration
+---
 
-Maestro tests can be integrated into CI/CD pipelines. Example:
+## CI/CD Integration
 
+### GitHub Actions Example
 ```yaml
-# GitHub Actions example
-- name: Run Maestro tests
+- name: Run Maestro UI Tests
   run: |
-    maestro test .maestro/01_test_full_config_flow.yaml
+    export NORDVPN_USERNAME=${{ secrets.NORDVPN_USERNAME }}
+    export NORDVPN_PASSWORD=${{ secrets.NORDVPN_PASSWORD }}
+    maestro test .maestro/
 ```
 
-For more information, visit [Maestro Documentation](https://maestro.mobile.dev/docs/getting-started).
+### Local Testing
+```bash
+# Quick smoke test
+maestro test .maestro/01_navigation_test.yaml
 
+# Full test suite
+maestro test .maestro/
+
+# Specific workflow
+maestro test .maestro/05_complete_workflow_test.yaml
+```
+
+---
+
+## Test Maintenance
+
+### When to Update Tests
+- UI text changes → Update assertVisible text
+- New features added → Add new test file
+- Navigation changes → Update tap sequences
+- New dialogs → Add dialog assertions
+
+### Best Practices
+- Keep tests independent (each can run alone)
+- Use testTag for critical UI elements
+- Add optional: true for elements that may not exist
+- Include wait times for network operations
+- Clean up after tests (delete created data)
