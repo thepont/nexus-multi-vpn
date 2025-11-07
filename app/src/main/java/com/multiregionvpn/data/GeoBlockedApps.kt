@@ -23,6 +23,7 @@ object GeoBlockedApps {
         AppInfo("uk.co.itv.player", "ITV Hub", "UK", "Streaming"),
         AppInfo("air.tv.my5.five", "Channel 5", "UK", "Streaming"),
         AppInfo("com.channel4.ondemand", "All 4", "UK", "Streaming"),
+        AppInfo("com.channel4.od", "Channel 4", "UK", "Streaming"),
         AppInfo("com.sky.sports.skylive", "Sky Go", "UK", "Streaming"),
         AppInfo("uk.co.nowtv.nowtv", "NOW", "UK", "Streaming"),
         
@@ -42,7 +43,11 @@ object GeoBlockedApps {
         
         // Australia Streaming
         AppInfo("au.net.abc.iview", "ABC iView", "AU", "Streaming"),
+        AppInfo("au.net.abc.kidsiview", "ABC Kids", "AU", "Streaming"),
+        AppInfo("au.net.abc.kidslisten", "ABC Kids Listen", "AU", "Streaming"),
+        AppInfo("au.net.abc.news", "ABC News", "AU", "News"),
         AppInfo("com.sbs.ondemand.android", "SBS On Demand", "AU", "Streaming"),
+        AppInfo("au.com.freeview.fv", "7plus", "AU", "Streaming"),
         AppInfo("au.com.tenplay", "10 Play", "AU", "Streaming"),
         AppInfo("au.com.nine.9nowandroid", "9Now", "AU", "Streaming"),
         AppInfo("au.com.optus.sport", "Optus Sport", "AU", "Streaming"),
