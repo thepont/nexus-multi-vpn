@@ -317,6 +317,15 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
                 else()
                     message(FATAL_ERROR "❌ NO lz4 targets found! Cannot build OpenVPN 3")
                 endif()
+            else()
+                message(STATUS "✅ lz4::lz4 target already exists (no alias needed)")
+            endif()
+            
+            # Verify alias worked
+            if(TARGET lz4::lz4)
+                message(STATUS "✅ CONFIRMED: lz4::lz4 target is now available")
+            else()
+                message(FATAL_ERROR "❌ FAILED: lz4::lz4 target NOT available after alias creation!")
             endif()
             
             # CRITICAL: Set lz4 variables in cache IMMEDIATELY after FetchContent
@@ -802,9 +811,15 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
             set(DEPS_AVAILABLE FALSE)
         endif()
     elseif(NOT FETCH_OPENVPN3)
-        # Not using vcpkg and not fetching OpenVPN 3 - dependencies won't be available
-        message(WARNING "OpenVPN 3 enabled but no dependency source (vcpkg or FetchContent) - building stub")
-        set(DEPS_AVAILABLE FALSE)
+        # Not fetching - must be using local libs/openvpn3 directory
+        # Check if dependencies were resolved via FetchContent in ENABLE_OPENVPN3 block
+        if(TARGET lz4::lz4 AND TARGET fmt::fmt AND TARGET asio::asio)
+            message(STATUS "✅ Using local OpenVPN 3 with FetchContent dependencies")
+            set(DEPS_AVAILABLE TRUE)
+        else()
+            message(WARNING "OpenVPN 3 enabled but dependencies not available - building stub")
+            set(DEPS_AVAILABLE FALSE)
+        endif()
     endif()
     
     if(DEPS_AVAILABLE)
