@@ -463,42 +463,34 @@ class VpnEngineService : VpnService() {
             Log.d(TAG, "Using fallback IP: 10.0.0.2/30 (no tunnel IPs available yet)")
         }
         
-        // ARCHITECTURE DECISION: Global VPN with PacketRouter-based routing
-        // 
-        // We do NOT use addAllowedApplication() because it defeats the purpose of PacketRouter!
-        // 
-        // If we use addAllowedApplication():
-        // - ONLY listed apps' packets reach TUN interface
-        // - PacketRouter can only route packets it receives
-        // - Unconfigured apps have NO network access (blocked entirely)
-        // 
-        // Instead, we use a GLOBAL VPN approach:
-        // - ALL apps' traffic goes through VPN interface (no addAllowedApplication)
-        // - PacketRouter inspects every packet and decides routing:
-        //   * App has VPN rule → Route to that VPN tunnel
-        //   * App has no rule → sendToDirectInternet() (bypass VPN, use regular routing)
-        // 
-        // This way:
-        // ✅ Apps with VPN rules use VPN tunnels (multi-tunnel routing)
-        // ✅ Apps without rules use regular internet (not blocked)
-        // ✅ No apps are blocked - all have network access
-        // 
-        // CRITICAL: Do NOT disallow our own package!
-        // While it might seem logical to disallow the VPN service to prevent routing loops,
-        // doing so also disallows:
-        // 1. Instrumentation tests (com.multiregionvpn.test) which run in the same process
-        // 2. Other app components that need VPN access
+        // SPLIT TUNNELING: Only apps with VPN rules use the VPN
+        // Apps without rules bypass VPN entirely (use normal internet)
         //
-        // Instead, we rely on:
-        // 1. OpenVPN 3 calling protect() on its control channel sockets (built-in)
-        // 2. PacketRouter routing our own traffic to direct internet (no rule exists for it)
-        // 3. No infinite loop because PacketRouter explicitly sends unmatched traffic to direct internet
+        // THE "GLOBAL VPN" APPROACH WAS BROKEN:
+        // - sendToDirectInternet() writes packets back to TUN → creates loop
+        // - No way to truly bypass VPN once traffic enters TUN interface
+        // - Result: Apps without rules fail (DNS errors, no connectivity)
         //
-        // This allows instrumentation tests to use the VPN while preventing actual routing loops.
-        Log.d(TAG, "✅ VPN service NOT disallowed - PacketRouter will handle routing (allows E2E tests)")
+        // CORRECT APPROACH: addAllowedApplication()
+        // - ONLY apps with VPN rules have traffic routed through VPN
+        // - Apps without rules never enter VPN (use normal Android routing)
+        // - Multi-tunnel routing STILL WORKS (PacketRouter routes VPN apps to correct tunnel)
+        // - Apps without rules get normal internet access
+        packagesWithRules.forEach { packageName ->
+            try {
+                builder.addAllowedApplication(packageName)
+                Log.d(TAG, "   ✅ VPN allowed: $packageName")
+            } catch (e: Exception) {
+                Log.w(TAG, "   ⚠️  Could not allow $packageName: ${e.message}")
+            }
+        }
         
-        Log.i(TAG, "✅ Global VPN mode enabled - ALL apps' traffic will be routed through VPN interface")
-        Log.i(TAG, "   PacketRouter will decide per-app routing based on rules")
+        // CRITICAL: Do NOT disallow our own package!
+        // E2E tests (com.multiregionvpn.test) need VPN access
+        Log.d(TAG, "✅ VPN service NOT disallowed - E2E tests need access")
+        
+        Log.i(TAG, "✅ Split tunneling: ${packagesWithRules.size} app(s) use VPN")
+        Log.i(TAG, "   Apps WITHOUT rules use direct internet (bypass VPN entirely)")
         
         // CRITICAL: We need routes for traffic to go through VPN, but adding them
         // before VPN connects creates a routing loop. Solution: Add routes but

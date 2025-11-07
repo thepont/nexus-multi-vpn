@@ -104,7 +104,6 @@ class VpnStartupSequenceTest {
         
         println("Step 3: Create app rule to trigger VPN startup")
         val appRule = AppRule(
-            id = UUID.randomUUID().toString(),
             packageName = "com.android.chrome",  // Use Chrome as test app
             vpnConfigId = ukConfig.id
         )
@@ -134,9 +133,9 @@ class VpnStartupSequenceTest {
         
         // Wait up to 60 seconds for tunnel connection
         withTimeout(60000) {
-            repeat(60) { attempt ->
+            for (attempt in 1..60) {
                 delay(1000)
-                println("   [${attempt + 1}/60] Checking connection status...")
+                println("   [$attempt/60] Checking connection status...")
                 
                 // Check logs for errors
                 val logcatProcess = Runtime.getRuntime().exec("logcat -d -s VpnTemplateService:* VpnEngineService:*")
@@ -148,7 +147,7 @@ class VpnStartupSequenceTest {
                         dnsError = true
                         println("❌ DNS ERROR DETECTED!")
                         println("   Socket protection is NOT working!")
-                        break
+                        return@withTimeout
                     }
                 }
                 
@@ -157,7 +156,7 @@ class VpnStartupSequenceTest {
                     configDownloadSuccess = true
                     println("✅ Config downloaded successfully!")
                     println("   Socket protection IS working!")
-                    break
+                    return@withTimeout
                 }
             }
         }
@@ -263,7 +262,6 @@ class VpnStartupSequenceTest {
         // Start VPN FIRST
         println("   Starting VPN service...")
         val appRule = AppRule(
-            id = UUID.randomUUID().toString(),
             packageName = "com.android.chrome",
             vpnConfigId = frConfig.id  // Use pre-fetched config
         )
