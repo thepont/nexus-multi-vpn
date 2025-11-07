@@ -37,9 +37,9 @@ fun AppRulesScreen(
     val uiState by viewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     
-    // Detect user's current region (for deprioritizing local apps)
+    // Detect user's current region (for smart routing logic)
     // TODO: Get from GeoIP or settings - for now assume AU based on your Pixel
-    val userRegion = "AU"
+    val userRegion = "AU" // Change this to "UK", "US", "FR", etc. based on actual location
     
     // Smart ordering and filtering
     val orderedApps = remember(uiState.installedApps, uiState.appRules, uiState.vpnConfigs, searchQuery, userRegion) {
@@ -117,6 +117,7 @@ fun AppRulesScreen(
                     vpnConfigs = uiState.vpnConfigs,
                     isGeoBlocked = GeoBlockedApps.isGeoBlocked(app.packageName),
                     recommendedRegion = GeoBlockedApps.getRecommendedRegion(app.packageName),
+                    userRegion = userRegion,
                     onRuleChanged = { vpnConfigId ->
                         viewModel.saveAppRule(app.packageName, vpnConfigId)
                     }
@@ -133,6 +134,7 @@ fun SmartAppRuleItem(
     vpnConfigs: List<com.multiregionvpn.data.database.VpnConfig>,
     isGeoBlocked: Boolean,
     recommendedRegion: String?,
+    userRegion: String,
     onRuleChanged: (String?) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -143,12 +145,24 @@ fun SmartAppRuleItem(
     } else null
     
     // Determine if app is properly configured for its region
-    val isProperlyRouted = if (currentRule != null && recommendedRegion != null) {
-        val currentTunnel = vpnConfigs.find { it.id == currentRule }
-        currentTunnel?.regionId?.equals(recommendedRegion, ignoreCase = true) == true ||
-        recommendedRegion == "Multiple" // Multi-region apps are OK with any tunnel
-    } else {
-        false
+    val isProperlyRouted = when {
+        // Not a geo-blocked app - always works
+        recommendedRegion == null -> true
+        
+        // Multi-region app - works with Direct Internet OR any tunnel
+        recommendedRegion == "Multiple" -> true
+        
+        // App is for user's current region - Direct Internet (null) is valid!
+        recommendedRegion.equals(userRegion, ignoreCase = true) && currentRule == null -> true
+        
+        // App routed through matching tunnel
+        currentRule != null -> {
+            val currentTunnel = vpnConfigs.find { it.id == currentRule }
+            currentTunnel?.regionId?.equals(recommendedRegion, ignoreCase = true) == true
+        }
+        
+        // Otherwise not properly routed
+        else -> false
     }
     
     // Badge color: Green if working, Gray if needs setup
