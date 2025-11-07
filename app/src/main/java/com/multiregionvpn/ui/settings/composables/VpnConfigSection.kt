@@ -1,5 +1,6 @@
 package com.multiregionvpn.ui.settings.composables
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,8 +22,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.multiregionvpn.data.database.VpnConfig
+import com.multiregionvpn.ui.components.TunnelListItem
 
 @Composable
 fun VpnConfigSection(
@@ -39,48 +42,41 @@ fun VpnConfigSection(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
         ) {
-            Text("My VPN Servers", style = MaterialTheme.typography.titleLarge)
+            Text("Tunnels", style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.SemiBold
+            ))
             IconButton(
                 onClick = {
-                    editingConfig = null // Ensure we're adding new
+                    editingConfig = null
                     showDialog = true 
                 },
                 modifier = Modifier.testTag("add_vpn_config_button")
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add VPN Server")
+                Icon(Icons.Default.Add, contentDescription = "Add Tunnel")
             }
         }
         
         if (configs.isEmpty()) {
-            Text("No VPN servers configured.", style = MaterialTheme.typography.bodyMedium)
+            Text("No tunnels configured.", style = MaterialTheme.typography.bodyMedium)
         } else {
-            // This list is not virtualized, which is fine for a settings screen
-            Column {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 configs.forEach { config ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .testTag("vpn_config_item_${config.name}")
-                    ) {
-                        ListItem(
-                            headlineContent = { Text(config.name) },
-                            supportingContent = { Text("Region: ${config.regionId}  •  ${config.serverHostname}") },
-                            trailingContent = {
-                                Row {
-                                    IconButton(onClick = {
-                                        editingConfig = config
-                                        showDialog = true
-                                    }) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Edit")
-                                    }
-                                    IconButton(onClick = { onDeleteConfig(config.id) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
-                        )
-                    }
+                    TunnelListItem(
+                        config = config,
+                        isConnected = false, // TODO: Get actual connection status
+                        latencyMs = null, // TODO: Get actual latency
+                        onEdit = {
+                            editingConfig = config
+                            showDialog = true
+                        },
+                        onDelete = { onDeleteConfig(config.id) },
+                        onViewApps = {
+                            // TODO: Navigate to app rules filtered by this tunnel
+                        },
+                        modifier = Modifier.testTag("vpn_config_item_${config.name}")
+                    )
                 }
             }
         }
