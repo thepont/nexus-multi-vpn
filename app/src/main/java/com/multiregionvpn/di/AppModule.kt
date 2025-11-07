@@ -57,10 +57,51 @@ object AppModule {
     }
     
     // --- Provide Retrofit for NordVPN API ---
+    // This HTTP client must bypass the VPN to download configs
     @Provides
     @Singleton
-    fun provideNordVpnApiService(): NordVpnApiService {
+    fun provideNordVpnApiService(@ApplicationContext context: Context): NordVpnApiService {
+        // Create OkHttpClient that bypasses VPN using socket factory
+        // This is critical: config downloads must work even when VPN is active
+        val socketFactory = object : javax.net.SocketFactory() {
+            override fun createSocket(): java.net.Socket {
+                val socket = java.net.Socket()
+                // Try to protect socket if VPN service is running
+                try {
+                    val vpnService = com.multiregionvpn.core.VpnEngineService.getRunningInstance()
+                    if (vpnService != null && vpnService.protect(socket)) {
+                        android.util.Log.d("OkHttp", "Socket protected from VPN routing")
+                    }
+                } catch (e: Exception) {
+                    // VPN not running or can't protect - that's fine
+                    android.util.Log.v("OkHttp", "Could not protect socket: ${e.message}")
+                }
+                return socket
+            }
+            
+            override fun createSocket(host: String, port: Int) = createSocket().also {
+                it.connect(java.net.InetSocketAddress(host, port))
+            }
+            
+            override fun createSocket(host: String, port: Int, localHost: java.net.InetAddress, localPort: Int) =
+                createSocket().also {
+                    it.bind(java.net.InetSocketAddress(localHost, localPort))
+                    it.connect(java.net.InetSocketAddress(host, port))
+                }
+            
+            override fun createSocket(host: java.net.InetAddress, port: Int) = createSocket().also {
+                it.connect(java.net.InetSocketAddress(host, port))
+            }
+            
+            override fun createSocket(address: java.net.InetAddress, port: Int, localAddress: java.net.InetAddress, localPort: Int) =
+                createSocket().also {
+                    it.bind(java.net.InetSocketAddress(localAddress, localPort))
+                    it.connect(java.net.InetSocketAddress(address, port))
+                }
+        }
+        
         val client = OkHttpClient.Builder()
+            .socketFactory(socketFactory)
             .build()
         
         val retrofit = Retrofit.Builder()

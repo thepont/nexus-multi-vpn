@@ -47,23 +47,14 @@ class VpnTemplateService @Inject constructor(
 
     private suspend fun prepareNordVpnConfig(config: VpnConfig): PreparedVpnConfig {
         // 1. Get the base .ovpn config file from NordVPN
-        // Try direct download URL first (public access), fall back to API if needed
+        // Use Retrofit API (configured with proper DNS) instead of java.net.URL
+        // to avoid DNS resolution issues when VPN interface is established
         val baseConfig = withContext(Dispatchers.IO) {
             try {
-                // Try direct download URL (publicly accessible)
-                val directUrl = "https://downloads.nordcdn.com/configs/files/ovpn_udp/servers/${config.serverHostname}.udp.ovpn"
-                val response = java.net.URL(directUrl).openConnection()
-                response.connectTimeout = 10000
-                response.readTimeout = 10000
-                response.getInputStream().bufferedReader().readText()
+                val responseBody = nordVpnApi.getOvpnConfig(config.serverHostname)
+                responseBody.string()
             } catch (e: Exception) {
-                // Fall back to API if direct download fails
-                try {
-                    val responseBody = nordVpnApi.getOvpnConfig(config.serverHostname)
-                    responseBody.string()
-                } catch (apiError: Exception) {
-                    throw Exception("Failed to fetch OpenVPN config from both direct URL and API: ${e.message}, API error: ${apiError.message}", e)
-                }
+                throw Exception("Failed to fetch OpenVPN config: ${e.message}", e)
             }
         }
 

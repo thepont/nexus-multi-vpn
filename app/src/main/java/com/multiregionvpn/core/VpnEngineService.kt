@@ -68,6 +68,7 @@ class VpnEngineService : VpnService() {
     
     override fun onCreate() {
         super.onCreate()
+        runningInstance = this  // Set static reference for socket protection
         createNotificationChannel()
         // Initialize VpnConnectionManager early so it's available throughout service lifetime
         // This ensures getInstance() calls don't fail
@@ -989,6 +990,7 @@ class VpnEngineService : VpnService() {
     }
     
     override fun onDestroy() {
+        runningInstance = null  // Clear static reference for socket protection
         super.onDestroy()
         vpnOutput?.close()
         vpnInterface?.close()
@@ -1279,5 +1281,16 @@ class VpnEngineService : VpnService() {
         const val EXTRA_ERROR_DETAILS = "error_details"
         const val EXTRA_ERROR_TUNNEL_ID = "error_tunnel_id"
         const val EXTRA_ERROR_TIMESTAMP = "error_timestamp"
+        
+        // Static reference to running instance for socket protection
+        @Volatile
+        private var runningInstance: VpnEngineService? = null
+        
+        /**
+         * Get the running VPN service instance.
+         * Used by HTTP clients to call protect() on sockets.
+         * Returns null if service is not running.
+         */
+        fun getRunningInstance(): VpnEngineService? = runningInstance
     }
 }
