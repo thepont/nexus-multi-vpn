@@ -69,7 +69,13 @@ class SettingsRepository @Inject constructor(
     }
     
     suspend fun createAppRule(packageName: String, vpnConfigId: String) {
+        android.util.Log.i("SettingsRepository", "💾 SAVING app rule: $packageName → $vpnConfigId")
         appRuleDao.save(AppRule(packageName = packageName, vpnConfigId = vpnConfigId))
+        android.util.Log.i("SettingsRepository", "✅ App rule SAVED to database")
+        
+        // Verify it was actually saved
+        val saved = appRuleDao.getRuleForPackage(packageName)
+        android.util.Log.i("SettingsRepository", "🔍 Verification query: ${saved?.packageName} → ${saved?.vpnConfigId}")
     }
     
     suspend fun updateAppRule(packageName: String, vpnConfigId: String) {

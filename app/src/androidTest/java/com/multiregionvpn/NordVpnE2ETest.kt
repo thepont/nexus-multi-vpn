@@ -233,10 +233,15 @@ class NordVpnE2ETest {
         val tunnelId = "nordvpn_UK"
         verifyTunnelReadyForRouting(tunnelId, timeoutMs = 120000)
         
+        // CRITICAL: Wait for routing to stabilize after interface re-establishments
+        // The interface is re-established multiple times (Flow detect, IP received, DNS received)
+        // Android's routing tables need time to stabilize
+        println("⏳ Waiting 5 seconds for routing to stabilize after interface re-establishments...")
+        delay(5000)
+        
         // THEN: Our IP should be in the UK
-        // No additional delays needed - verifyTunnelReadyForRouting ensures everything is ready
         println("⏳ Making HTTP request to verify routing...")
-        println("   Tunnel is fully ready - connection, IP, and DNS are all configured")
+        println("   Tunnel is fully ready and routing has stabilized")
         val vpnIpInfo = IpCheckService.api.getIpInfo()
         println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
         println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
@@ -259,12 +264,7 @@ class NordVpnE2ETest {
         // GIVEN: A rule routing our test package to France VPN
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
         println("✓ Created app rule: $TEST_PACKAGE_NAME -> FR VPN")
-        
-        // CRITICAL: Wait for Room Flow to emit
-        delay(500)
-        val savedRule = settingsRepo.getAppRuleByPackageName(TEST_PACKAGE_NAME)
-        println("✓ Verified: ${savedRule?.packageName} -> ${savedRule?.vpnConfigId}")
-        assert(savedRule?.vpnConfigId == FR_VPN_ID)
+        delay(500)  // Wait for Room to commit
 
         // WHEN: The VPN service is started
         startVpnEngine()

@@ -758,9 +758,15 @@ class VpnEngineService : VpnService() {
         val connectionManager = VpnConnectionManager.getInstance()
         
         // Collect all app rules and monitor changes
-        Log.d(TAG, "Starting to collect app rules...")
+        Log.i(TAG, "🔄 Starting to collect app rules via Flow...")
+        Log.i(TAG, "   Flow should emit whenever app_rules table changes")
         settingsRepository.getAllAppRules().collect { appRules ->
-            Log.d(TAG, "App rules collected: ${appRules.size} rules found")
+            Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            Log.i(TAG, "🔔 FLOW EMISSION: App rules collected: ${appRules.size} rules found")
+            appRules.forEach { rule ->
+                Log.i(TAG, "   📱 ${rule.packageName} → ${rule.vpnConfigId ?: "Direct"}")
+            }
+            Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             
             // Get packages with VPN rules
             val packagesWithRules = appRules
@@ -1235,8 +1241,10 @@ class VpnEngineService : VpnService() {
      */
     private suspend fun getCurrentPackagesWithRules(): List<String> {
         return try {
-            settingsRepository.getAllAppRules()
-                .first()
+            // CRITICAL: Use direct DB query, not Flow.first()
+            // Flow.first() returns the first emission (which might be stale/empty)
+            // Direct query ensures we get CURRENT data from database
+            settingsRepository.appRuleDao.getAllRulesList()
                 .filter { it.vpnConfigId != null }
                 .map { it.packageName }
                 .distinct()
