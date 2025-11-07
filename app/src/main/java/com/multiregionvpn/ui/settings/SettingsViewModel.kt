@@ -118,26 +118,66 @@ class SettingsViewModel @Inject constructor(
     private fun loadInstalledApps(): List<InstalledApp> {
         val pm = app.packageManager
         
-        // Get all apps that have a launcher intent (user-facing apps)
-        val launcherIntent = android.content.Intent(android.content.Intent.ACTION_MAIN, null)
-        launcherIntent.addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        // Get all installed apps (user and system)
+        val allApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
         
-        val launchableApps = pm.queryIntentActivities(launcherIntent, 0)
-            .map { it.activityInfo.packageName }
-            .toSet()
+        android.util.Log.d("SettingsViewModel", "Total installed: ${allApps.size}")
         
-        // Get all installed apps and filter to only launchable ones
-        return pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { launchableApps.contains(it.packageName) }
-            .filter { it.packageName != app.packageName } // Exclude our own app
-            .map {
+        // Debug: Print all user-installed packages
+        val userPackages = allApps
+            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
+            .map { it.packageName }
+        android.util.Log.d("SettingsViewModel", "User packages (${userPackages.size}): ${userPackages.joinToString(", ")}")
+        
+        // Filter to apps that are visible and meaningful
+        val apps = allApps
+            .filter { appInfo ->
+                // Exclude our own VPN app
+                if (appInfo.packageName == app.packageName) return@filter false
+                
+                // Include user-installed apps
+                if ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0) return@filter true
+                
+                // Include updated system apps (like Chrome when updated)
+                if ((appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) return@filter true
+                
+                // Include common system apps by package name patterns
+                val pkg = appInfo.packageName
+                if (pkg.startsWith("com.google.android.apps.") ||  // Google apps
+                    pkg.startsWith("com.android.chrome") ||
+                    pkg.startsWith("com.google.android.gm") ||      // Gmail
+                    pkg.startsWith("com.google.android.youtube") ||
+                    pkg.startsWith("com.google.android.googlequicksearchbox") // Google app
+                ) return@filter true
+                
+                false
+            }
+            .map { appInfo ->
                 InstalledApp(
-                    name = it.loadLabel(pm).toString(),
-                    packageName = it.packageName,
-                    icon = it.loadIcon(pm)
+                    name = appInfo.loadLabel(pm).toString(),
+                    packageName = appInfo.packageName,
+                    icon = appInfo.loadIcon(pm)
                 )
             }
             .sortedBy { it.name.lowercase() }
+        
+        android.util.Log.d("SettingsViewModel", "Loaded ${apps.size} apps")
+        android.util.Log.d("SettingsViewModel", "First 15: ${apps.take(15).map { it.name }}")
+        
+        // Debug: Check if BBC iPlayer is in the list
+        val bbcApp = apps.find { it.packageName.contains("bbc", ignoreCase = true) }
+        if (bbcApp != null) {
+            android.util.Log.d("SettingsViewModel", "✅ BBC iPlayer found: ${bbcApp.name}")
+        } else {
+            android.util.Log.w("SettingsViewModel", "❌ BBC iPlayer NOT in list!")
+            // Check if it was filtered out
+            val bbcInfo = allApps.find { it.packageName.contains("bbc", ignoreCase = true) }
+            if (bbcInfo != null) {
+                android.util.Log.w("SettingsViewModel", "BBC found in allApps: ${bbcInfo.packageName}, flags=${bbcInfo.flags}")
+            }
+        }
+        
+        return apps
     }
     
     // --- UI Actions ---
