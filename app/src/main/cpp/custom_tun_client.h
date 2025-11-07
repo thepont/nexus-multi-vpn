@@ -17,6 +17,9 @@
 #include <errno.h>
 #include <cstring>
 
+// Logging configuration (compile-time flags)
+#include "logging_config.h"
+
 // Note: OPENVPN_LOG is now defined globally via openvpn_log_override.h (force-included)
 
 namespace openvpn {
@@ -281,18 +284,19 @@ private:
      */
     void handle_read(const openvpn_io::error_code& error, std::size_t bytes_read,
                      const std::shared_ptr<std::array<uint8_t, 2048>>& read_buf) {
-        __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-CustomTUN",
+        // Hot path logging - only enabled in VERBOSE mode
+        LOG_HOT_PATH("OpenVPN-CustomTUN",
             "📬 handle_read() called: error=%d, bytes_read=%zu, halt=%d",
             error.value(), bytes_read, halt_);
         
         if (halt_) {
-            __android_log_print(ANDROID_LOG_WARN, "OpenVPN-CustomTUN",
+            LOG_DEBUG("OpenVPN-CustomTUN",
                 "   handle_read() exiting early: halt=true");
             return;
         }
         
         if (!error && bytes_read > 0) {
-            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+            LOG_HOT_PATH("OpenVPN-CustomTUN",
                 "📤 OUTBOUND: Read %zu bytes from lib_fd (from app) - feeding to OpenVPN", bytes_read);
             
             try {
@@ -314,10 +318,10 @@ private:
                 // Copy packet data to buffer (after headroom)
                 std::memcpy(buf.write_alloc(bytes_read), read_buf->data(), bytes_read);
                 
-                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                LOG_HOT_PATH("OpenVPN-CustomTUN",
                     "   Calling parent_.tun_recv() with %zu byte buffer (capacity=%zu with headroom)...", 
                     bytes_read, buf.capacity());
-                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                LOG_HOT_PATH("OpenVPN-CustomTUN",
                     "   Buffer: size=%zu, offset=%zu, capacity=%zu", 
                     buf.size(), buf.offset(), buf.capacity());
                 
@@ -326,29 +330,29 @@ private:
                 // This should encrypt the packet and send it via UDP to the server
                 parent_.tun_recv(buf);
                 
-                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                LOG_HOT_PATH("OpenVPN-CustomTUN",
                     "✅ OUTBOUND: Successfully fed %zu byte packet to OpenVPN!", bytes_read);
-                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                LOG_HOT_PATH("OpenVPN-CustomTUN",
                     "   OpenVPN should now encrypt and send this packet to server");
-                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                LOG_HOT_PATH("OpenVPN-CustomTUN",
                     "   If server responds, tun_send() will be called with decrypted response");
                 
                 // Queue next read
                 queue_read();
             } catch (const std::exception& e) {
-                __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
+                LOG_ERROR("OpenVPN-CustomTUN",
                     "❌ OUTBOUND: Exception in handle_read: %s", e.what());
                 // Still queue next read to avoid getting stuck
                 queue_read();
             } catch (...) {
-                __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
+                LOG_ERROR("OpenVPN-CustomTUN",
                     "❌ OUTBOUND: Unknown exception in handle_read");
                 // Still queue next read to avoid getting stuck
                 queue_read();
             }
         } else {
             if (error && error != openvpn_io::error::operation_aborted) {
-                __android_log_print(ANDROID_LOG_ERROR, "OpenVPN-CustomTUN",
+                LOG_ERROR("OpenVPN-CustomTUN",
                     "❌ OUTBOUND: Read error from lib_fd: %s", error.message().c_str());
             }
         }

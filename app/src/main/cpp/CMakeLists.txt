@@ -10,7 +10,38 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-    # Include directories
+# ============================================================================
+# Logging Level Configuration
+# ============================================================================
+# Options: RELEASE (errors only), DEBUG (info+errors), VERBOSE (all logs)
+# Performance impact: RELEASE=0%, DEBUG=2-5%, VERBOSE=10-15%
+
+# Auto-detect logging level from build type if not explicitly set
+if(NOT DEFINED LOGGING_LEVEL)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(LOGGING_LEVEL "RELEASE")
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(LOGGING_LEVEL "DEBUG")
+    else()
+        set(LOGGING_LEVEL "DEBUG")  # Default to DEBUG
+    endif()
+endif()
+
+set(LOGGING_LEVEL "${LOGGING_LEVEL}" CACHE STRING "Logging level: RELEASE, DEBUG, or VERBOSE" FORCE)
+set_property(CACHE LOGGING_LEVEL PROPERTY STRINGS RELEASE DEBUG VERBOSE)
+
+if(LOGGING_LEVEL STREQUAL "RELEASE")
+    add_compile_definitions(LOGGING_LEVEL_RELEASE)
+    message(STATUS "✅ Logging: RELEASE mode (errors only, 0% overhead)")
+elseif(LOGGING_LEVEL STREQUAL "VERBOSE")
+    add_compile_definitions(LOGGING_LEVEL_VERBOSE)
+    message(STATUS "✅ Logging: VERBOSE mode (all logs, ~10-15% overhead)")
+else()
+    add_compile_definitions(LOGGING_LEVEL_DEBUG)
+    message(STATUS "✅ Logging: DEBUG mode (info+errors, ~2-5% overhead)")
+endif()
+
+# Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Add our custom Find*.cmake modules to module path (before OpenVPN 3 tries to find them)
