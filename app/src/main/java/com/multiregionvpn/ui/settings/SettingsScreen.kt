@@ -44,6 +44,7 @@ import com.multiregionvpn.ui.settings.composables.AppRuleSection
 import com.multiregionvpn.ui.settings.composables.ProviderCredentialsSection
 import com.multiregionvpn.ui.settings.composables.VpnConfigSection
 import com.multiregionvpn.core.VpnError
+import com.multiregionvpn.ui.components.VpnHeaderBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,31 +100,20 @@ fun SettingsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("Region Router Settings") },
-                actions = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Text("Start VPN")
-                        Switch(
-                            checked = uiState.isVpnRunning,
-                            onCheckedChange = {
-                                if (it) {
-                                    val intent = VpnService.prepare(context)
-                                    if (intent != null) {
-                                        vpnPermissionLauncher.launch(intent)
-                                    } else {
-                                        viewModel.startVpn(context)
-                                    }
-                                } else {
-                                    viewModel.stopVpn(context)
-                                }
-                            },
-                            modifier = Modifier.testTag("start_service_toggle")
-                        )
+            VpnHeaderBar(
+                isVpnRunning = uiState.isVpnRunning,
+                status = uiState.vpnStatus,
+                dataRateMbps = uiState.dataRateMbps,
+                onToggleVpn = { enabled ->
+                    if (enabled) {
+                        val intent = VpnService.prepare(context)
+                        if (intent != null) {
+                            vpnPermissionLauncher.launch(intent)
+                        } else {
+                            viewModel.startVpn(context)
+                        }
+                    } else {
+                        viewModel.stopVpn(context)
                     }
                 }
             )
