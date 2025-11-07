@@ -36,8 +36,12 @@ fun AppRulesScreen(
     val uiState by viewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     
+    // Detect user's current region (for deprioritizing local apps)
+    // TODO: Get from GeoIP or settings - for now assume AU based on your Pixel
+    val userRegion = "AU"
+    
     // Smart ordering and filtering
-    val orderedApps = remember(uiState.installedApps, uiState.appRules, uiState.vpnConfigs, searchQuery) {
+    val orderedApps = remember(uiState.installedApps, uiState.appRules, uiState.vpnConfigs, searchQuery, userRegion) {
         val filtered = if (searchQuery.isEmpty()) {
             uiState.installedApps
         } else {
@@ -47,12 +51,22 @@ fun AppRulesScreen(
             }
         }
         
-        // Sort by priority
+        // Sort by priority (ASCENDING order, so use negative/inverted logic)
         filtered.sortedWith(compareBy(
-            // 1. Apps WITHOUT rules first (need configuration)
-            { uiState.appRules[it.packageName] != null },
-            // 2. Geo-blocked apps first (important)
-            { !GeoBlockedApps.isGeoBlocked(it.packageName) },
+            // 1. Apps WITH rules last (configured apps at top)
+            { uiState.appRules[it.packageName] == null },
+            
+            // 2. Within unconfigured: Geo-blocked apps from OTHER regions first
+            { app ->
+                val recommendedRegion = GeoBlockedApps.getRecommendedRegion(app.packageName)
+                when {
+                    recommendedRegion == null -> 1 // Not geo-blocked (lower priority)
+                    recommendedRegion == "Multiple" -> 0 // Multi-region apps (high priority)
+                    recommendedRegion.equals(userRegion, ignoreCase = true) -> 2 // Local region (deprioritize)
+                    else -> 0 // Foreign region (high priority - needs VPN!)
+                }
+            },
+            
             // 3. Then alphabetically
             { it.name.lowercase() }
         ))
