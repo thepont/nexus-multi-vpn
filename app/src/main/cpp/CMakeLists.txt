@@ -701,7 +701,9 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
             # This tells OpenVPN 3 to use our custom TUN implementation instead of TunBuilderBase
             # With this flag, OpenVPN 3 will actively poll our socketpair FD in its event loop
             add_compile_definitions(OPENVPN_EXTERNAL_TUN_FACTORY)
+            add_compile_definitions(OPENVPN_DEBUG_CLIPROTO)  # Enable detailed protocol logging
             message(STATUS "✅ OpenVPN 3 External TUN Factory mode ENABLED")
+            message(STATUS "✅ OpenVPN 3 CLIPROTO debug logging ENABLED")
             message(STATUS "   OpenVPN 3 will use custom TUN implementation")
             message(STATUS "   Event loop will actively poll our socketpair FD")
         endif()
