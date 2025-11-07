@@ -41,7 +41,7 @@ import com.multiregionvpn.ui.shared.RouterViewModel
 fun TvAppRulesScreen(
     viewModel: RouterViewModel
 ) {
-    val appRules by viewModel.allAppRules.collectAsState()
+    val installedApps by viewModel.allInstalledApps.collectAsState()
     val serverGroups by viewModel.allServerGroups.collectAsState()
     var selectedApp by remember { mutableStateOf<AppRule?>(null) }
     
@@ -57,25 +57,25 @@ fun TvAppRulesScreen(
             modifier = Modifier.padding(bottom = 24.dp)
         )
         
-        if (appRules.isEmpty()) {
+        if (installedApps.isEmpty()) {
             // Empty state
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No apps with routing rules",
+                    text = "Loading installed apps...",
                     fontSize = 24.sp,
                     color = Color(0xFF9E9E9E)
                 )
             }
         } else {
-            // App list
+            // App list (ALL installed apps)
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(appRules) { app ->
+                items(installedApps) { app ->
                     TvAppRuleCard(
                         app = app,
                         serverGroups = serverGroups,

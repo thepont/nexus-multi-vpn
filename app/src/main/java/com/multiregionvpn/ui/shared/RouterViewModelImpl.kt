@@ -53,6 +53,9 @@ class RouterViewModelImpl @Inject constructor(
     private val _allAppRules = MutableStateFlow<List<AppRule>>(emptyList())
     override val allAppRules: StateFlow<List<AppRule>> = _allAppRules.asStateFlow()
     
+    private val _allInstalledApps = MutableStateFlow<List<AppRule>>(emptyList())
+    override val allInstalledApps: StateFlow<List<AppRule>> = _allInstalledApps.asStateFlow()
+    
     private val _selectedServerGroup = MutableStateFlow<ServerGroup?>(null)
     override val selectedServerGroup: StateFlow<ServerGroup?> = _selectedServerGroup.asStateFlow()
     
@@ -74,6 +77,7 @@ class RouterViewModelImpl @Inject constructor(
         viewModelScope.launch(exceptionHandler) {
             loadServerGroups()
             loadAppRules()
+            loadInstalledApps()
             observeVpnStatus()
             observeLiveStats()
         }
@@ -198,6 +202,72 @@ class RouterViewModelImpl @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error loading app rules", e)
             _allAppRules.value = emptyList()
+        }
+    }
+    
+    /**
+     * Load ALL installed apps (including those without routing rules).
+     * 
+     * This is what the UI should display to users - both mobile and TV.
+     * For each installed app:
+     * - Loads its icon from PackageManager
+     * - Looks up its routing rule (if any) from the database
+     * - Creates AppRule with current rule or null (bypass)
+     */
+    private suspend fun loadInstalledApps() {
+        try {
+            Log.d(TAG, "📱 Loading ALL installed apps...")
+            
+            val packageManager = application.packageManager
+            
+            // Get ALL installed user apps (excluding system apps)
+            val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+                .filter { (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 }
+                .sortedBy { packageManager.getApplicationLabel(it).toString().lowercase() }
+            
+            Log.d(TAG, "   Found ${installedApps.size} installed user apps")
+            
+            // Get current app rules from database
+            val dbAppRules = settingsRepository.getAllAppRules().first()
+            val rulesMap = dbAppRules.associateBy { it.packageName }
+            
+            // Create AppRule for EVERY installed app
+            val appRules = installedApps.mapNotNull { appInfo ->
+                try {
+                    val packageName = appInfo.packageName
+                    val appName = packageManager.getApplicationLabel(appInfo).toString()
+                    val icon: Drawable? = try {
+                        packageManager.getApplicationIcon(packageName)
+                    } catch (e: Exception) {
+                        null
+                    }
+                    
+                    // Look up rule for this app (if it exists)
+                    val dbRule = rulesMap[packageName]
+                    val groupId = if (dbRule?.vpnConfigId != null) {
+                        val vpnConfig = settingsRepository.getVpnConfigById(dbRule.vpnConfigId!!)
+                        vpnConfig?.regionId  // Use regionId as groupId
+                    } else {
+                        null  // No rule = bypass VPN
+                    }
+                    
+                    AppRule(
+                        packageName = packageName,
+                        appName = appName,
+                        icon = icon,
+                        routedGroupId = groupId
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "   ⚠️  Error loading app ${appInfo.packageName}", e)
+                    null
+                }
+            }
+            
+            _allInstalledApps.value = appRules
+            Log.i(TAG, "✅ Loaded ${appRules.size} installed apps (including ${appRules.count { it.routedGroupId != null }} with routing rules)")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error loading installed apps", e)
+            _allInstalledApps.value = emptyList()
         }
     }
     

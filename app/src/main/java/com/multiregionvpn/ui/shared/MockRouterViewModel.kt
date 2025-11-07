@@ -33,6 +33,9 @@ class MockRouterViewModel : RouterViewModel() {
     private val _allAppRules = MutableStateFlow(createMockAppRules())
     override val allAppRules: StateFlow<List<AppRule>> = _allAppRules.asStateFlow()
     
+    private val _allInstalledApps = MutableStateFlow(createMockInstalledApps())
+    override val allInstalledApps: StateFlow<List<AppRule>> = _allInstalledApps.asStateFlow()
+    
     private val _selectedServerGroup = MutableStateFlow<ServerGroup?>(null)
     override val selectedServerGroup: StateFlow<ServerGroup?> = _selectedServerGroup.asStateFlow()
     
@@ -139,6 +142,16 @@ class MockRouterViewModel : RouterViewModel() {
                 routedGroupId = "block" // Blocked
             )
         )
+        
+        /**
+         * Creates mock list of ALL installed apps (including those without routing rules)
+         * This is what the UI should display to users - mobile and TV
+         */
+        fun createMockInstalledApps(): List<AppRule> {
+            // Return the same as createMockAppRules for now
+            // In production, this would query PackageManager for ALL apps
+            return createMockAppRules()
+        }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════

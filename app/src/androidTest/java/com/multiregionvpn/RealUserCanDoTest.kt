@@ -338,6 +338,88 @@ class RealUserCanDoTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // TV: Can user see installed apps in the app list?
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun tv_canSeeInstalledAppsInList() {
+        val rule = createAndroidComposeRule<TvActivity>()
+        
+        log("🧪 TV: Can user see installed apps in the app list?")
+        
+        // Setup test data
+        setupTestVpnConfigs()
+        rule.waitForIdle()
+        Thread.sleep(2000)
+        
+        // Navigate to App Rules
+        pressKey(KeyEvent.KEYCODE_DPAD_RIGHT)
+        Thread.sleep(500)
+        
+        rule.onNodeWithText("App Routing Rules").assertExists()
+        log("  ✓ Navigated to App Rules")
+        
+        // Check for empty state message
+        val hasEmptyState = try {
+            rule.onNodeWithText("No apps with routing rules", substring = true)
+                .assertExists()
+            true
+        } catch (e: AssertionError) {
+            false
+        }
+        
+        if (hasEmptyState) {
+            log("  ❌ CRITICAL BUG: TV shows 'No apps with routing rules'")
+            log("  ❌ This means TV is only showing apps WITH rules, not ALL installed apps")
+            log("  ❌ Mobile shows ALL installed apps, TV should too!")
+            throw AssertionError("TV app list is empty - should show all installed apps like mobile does!")
+        }
+        
+        // Should see at least our own app (com.multiregionvpn)
+        val testPackage = context.packageName
+        try {
+            rule.onAllNodesWithText(testPackage, substring = true)
+                .onFirst()
+                .assertExists()
+            log("  ✓ Found test app: $testPackage")
+        } catch (e: AssertionError) {
+            log("  ❌ CRITICAL BUG: Cannot find test app in TV app list!")
+            log("  ❌ Expected to see: $testPackage")
+            throw AssertionError("TV app list does not show installed apps!")
+        }
+        
+        log("✅ TV: User CAN see installed apps in list")
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MOBILE vs TV: App list parity check
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun mobile_showsAllInstalledApps() {
+        val rule = createAndroidComposeRule<MainActivity>()
+        
+        log("🧪 MOBILE: Does mobile show all installed apps?")
+        
+        // Setup test data
+        setupTestVpnConfigs()
+        rule.waitForIdle()
+        
+        // Navigate to app rules
+        rule.onNodeWithText("App Routing Rules", substring = true)
+            .performScrollTo()
+        
+        // Should see our test app
+        val testPackage = context.packageName
+        rule.onAllNodesWithText(testPackage, substring = true)
+            .onFirst()
+            .assertExists()
+        
+        log("  ✓ Mobile shows test app: $testPackage")
+        log("✅ MOBILE: Shows all installed apps (INCLUDING apps without routing rules)")
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // HELPER METHODS
     // ═══════════════════════════════════════════════════════════════════════════
 

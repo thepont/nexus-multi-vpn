@@ -34,6 +34,12 @@ abstract class RouterViewModel : ViewModel() {
     abstract val allAppRules: StateFlow<List<AppRule>>
     
     /**
+     * All installed apps (including those without routing rules)
+     * This is what should be displayed in the app list UI
+     */
+    abstract val allInstalledApps: StateFlow<List<AppRule>>
+    
+    /**
      * Currently selected server group (for detail view)
      */
     abstract val selectedServerGroup: StateFlow<ServerGroup?>
