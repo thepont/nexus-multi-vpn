@@ -281,7 +281,6 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
                 GIT_REPOSITORY https://github.com/lz4/lz4.git
                 GIT_TAG v1.9.4  # Stable version
                 GIT_SHALLOW TRUE
-                SOURCE_SUBDIR build/cmake  # lz4 CMakeLists.txt location
             )
             
             # Make dependencies available via FetchContent
@@ -293,31 +292,6 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
             
             message(STATUS "Fetching lz4 library...")
             FetchContent_MakeAvailable(lz4)
-            
-            # DEBUG: List all targets to see what lz4 created
-            message(STATUS "🔍 Checking available lz4 targets...")
-            if(TARGET lz4_static)
-                message(STATUS "   ✅ Found: lz4_static")
-            endif()
-            if(TARGET lz4)
-                message(STATUS "   ✅ Found: lz4")
-            endif()
-            if(TARGET lz4::lz4)
-                message(STATUS "   ✅ Found: lz4::lz4")
-            endif()
-            
-            # Create lz4::lz4 alias if needed
-            if(NOT TARGET lz4::lz4)
-                if(TARGET lz4_static)
-                    add_library(lz4::lz4 ALIAS lz4_static)
-                    message(STATUS "✅ Created lz4::lz4 ALIAS from lz4_static")
-                elseif(TARGET lz4)
-                    add_library(lz4::lz4 ALIAS lz4)
-                    message(STATUS "✅ Created lz4::lz4 ALIAS from lz4")
-                else()
-                    message(FATAL_ERROR "❌ NO lz4 targets found! Cannot build OpenVPN 3")
-                endif()
-            endif()
             
             # CRITICAL: Set lz4 variables in cache IMMEDIATELY after FetchContent
             # OpenVPN 3's find_package(lz4) runs in subdirectory scope and can't see the target.
