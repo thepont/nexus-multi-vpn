@@ -296,11 +296,27 @@ private:
                 "📤 OUTBOUND: Read %zu bytes from lib_fd (from app) - feeding to OpenVPN", bytes_read);
             
             try {
-                // Create BufferAllocated from data pointer and size
-                BufferAllocated buf(read_buf->data(), bytes_read, BufAllocFlags::CONSTRUCT_ZERO);
+                // CRITICAL: Allocate buffer with headroom for encryption headers!
+                // OpenVPN needs space at the front of the buffer to add encryption overhead
+                // Typically needs 128-256 bytes of headroom for:
+                // - Protocol headers (up to 100 bytes)
+                // - Encryption/HMAC overhead (up to 100 bytes)
+                // - Alignment padding
+                constexpr size_t HEADROOM = 256;
+                constexpr size_t TAILROOM = 128;
+                
+                // Allocate buffer with total capacity: headroom + packet + tailroom
+                BufferAllocated buf(HEADROOM + bytes_read + TAILROOM, BufAllocFlags::CONSTRUCT_ZERO);
+                
+                // Initialize headroom (sets offset to start of headroom region)
+                buf.init_headroom(HEADROOM);
+                
+                // Copy packet data to buffer (after headroom)
+                std::memcpy(buf.write_alloc(bytes_read), read_buf->data(), bytes_read);
                 
                 __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
-                    "   Calling parent_.tun_recv() with %zu byte buffer...", bytes_read);
+                    "   Calling parent_.tun_recv() with %zu byte buffer (capacity=%zu with headroom)...", 
+                    bytes_read, buf.capacity());
                 __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
                     "   Buffer: size=%zu, offset=%zu, capacity=%zu", 
                     buf.size(), buf.offset(), buf.capacity());
