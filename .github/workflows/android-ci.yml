@@ -54,7 +54,13 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Download Dependencies (with retries)
-        run: ./gradlew androidDependencies --info --stacktrace
+        run: |
+          echo "Starting dependency download (Java/Kotlin only, skipping native builds)..."
+          # Skip external native build tasks explicitly
+          ./gradlew androidDependencies \
+            -x externalNativeBuildDebug \
+            -x externalNativeBuildRelease \
+            --info --stacktrace
 
   # --------------------------------------------------------------------
   # JOB 2: BUILD AND TEST
