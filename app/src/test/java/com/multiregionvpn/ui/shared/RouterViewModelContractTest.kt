@@ -27,6 +27,7 @@ class RouterViewModelContractTest {
         override val vpnStatus = MutableStateFlow(VpnStatus.DISCONNECTED)
         override val allServerGroups = MutableStateFlow<List<ServerGroup>>(emptyList())
         override val allAppRules = MutableStateFlow<List<AppRule>>(emptyList())
+        override val allInstalledApps = MutableStateFlow<List<AppRule>>(emptyList())
         override val selectedServerGroup = MutableStateFlow<ServerGroup?>(null)
         override val liveStats = MutableStateFlow(VpnStats())
         
