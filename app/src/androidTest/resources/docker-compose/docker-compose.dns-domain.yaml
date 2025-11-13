@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # DNS Server (dnsmasq) - resolves test domains
+  dns-server:
+    image: strm/dnsmasq:latest
+    container_name: dns-server-domain
+    ports:
+      - "5353:53/udp"  # Use non-standard port to avoid conflicts
+      - "5353:53/tcp"
+    volumes:
+      - ./dnsmasq-domain.conf:/etc/dnsmasq.conf:ro
+    networks:
+      vpn-dns-domain:
+        ipv4_address: 10.5.0.2  # DNS server IP
+    command: dnsmasq --no-daemon --log-queries
+
+  # OpenVPN Server that pushes DNS via DHCP
+  vpn-server-dns:
+    image: kylemanna/openvpn:latest
+    container_name: vpn-server-dns-domain
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    ports:
+      - "1199:1194/udp"  # Different port for DNS domain test
+    volumes:
+      - ../../../../openvpn-dns-domain:/etc/openvpn
+    networks:
+      vpn-dns-domain:
+    command: >
+      sh -c "
+        if [ ! -f /etc/openvpn/pki/ca.crt ]; then
+          echo '⚠️  PKI not found - generating...'
+          ovpn_genconfig -u udp://vpn-server-dns-domain:1194 -N -d -s 10.5.0.0/24
+          EASYRSA_BATCH=1 ovpn_initpki nopass
+        fi
+        openvpn --config /etc/openvpn/server.conf
+      "
+    environment:
+      - OVPN_SERVER_URL=udp://vpn-server-dns-domain:1194
+    depends_on:
+      - dns-server
+
+  # HTTP Server accessible via domain name
+  http-server-dns:
+    image: nginx:alpine
+    container_name: http-server-dns-domain
+    ports:
+      - "8085:80"
+    networks:
+      vpn-dns-domain:
+        ipv4_address: 10.5.0.10  # Accessible via DNS as test.example.com
+    volumes:
+      - ../../../../http-dns-domain:/usr/share/nginx/html:ro
+    command: nginx -g 'daemon off;'
+    depends_on:
+      - dns-server
+
+networks:
+  vpn-dns-domain:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/24
+

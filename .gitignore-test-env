@@ -1,0 +1,8 @@
+# Test environment files (generated)
+openvpn-*/pki/
+*.pem
+*.crt
+*.key
+*.csr
+*.crl
+*.txt

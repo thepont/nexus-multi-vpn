@@ -1,0 +1,47 @@
+appId: "com.multiregionvpn"
+---
+- launchApp
+
+# --- 1. Set the NordVPN Service Credentials ---
+- tapOn: "NordVPN Service Username"
+- inputText: "${NORDVPN_USERNAME}"
+- tapOn: "NordVPN Service Password"
+- inputText: "${NORDVPN_PASSWORD}"
+- tapOn: "Save NordVPN Credentials"
+
+# --- 2. Add a new VPN Server Config ---
+- tapOn: 
+    text: ".*Add.*" # Add button icon/text
+- assertVisible: "Add Server"
+
+- tapOn: "Friendly Name"
+- inputText: "Test ${TEST_VPN_REGION:-UK} Server"
+
+- tapOn: "Region"
+- tapOn: "${TEST_VPN_REGION:-UK}"
+
+- tapOn: "Save"
+
+# Wait for dialog to close and config to appear
+- assertVisible: "Test ${TEST_VPN_REGION:-UK} Server"
+
+# --- 3. Assign a Rule to an App ---
+# Scroll and find an app to assign a rule
+- scroll
+- scroll
+- tapOn:
+    text: "Chrome"
+    optional: true
+- tapOn:
+    text: "Test ${TEST_VPN_REGION:-UK} Server"
+    optional: true
+
+# --- 4. Start the VPN Service ---
+- tapOn: "Start VPN"
+# Handle system VPN permission dialog if it appears
+- tapOn:
+    text: "OK"
+    optional: true
+- tapOn:
+    text: "Allow"
+    optional: true

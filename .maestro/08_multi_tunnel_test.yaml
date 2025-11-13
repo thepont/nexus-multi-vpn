@@ -1,0 +1,111 @@
+appId: "com.multiregionvpn"
+---
+# Multi-Tunnel Test
+# Tests multiple tunnels running simultaneously with different apps
+
+- launchApp
+
+# Prerequisites: UK and FR tunnels from bootstrap
+- tapOn: "Tunnels"
+- assertVisible: "UK - BBC"
+- assertVisible: "France - Streaming"
+
+# ============================================
+# STEP 1: Assign multiple apps to different tunnels
+# ============================================
+- tapOn: "Apps"
+
+# Assign Chrome to UK
+- tapOn:
+    text: "Chrome"
+    optional: true
+- tapOn: "UK - BBC"
+- wait: 500
+
+# Scroll to find another app
+- scroll:
+    direction: DOWN
+    repeat: 3
+
+# Assign Firefox to France (if exists)
+- tapOn:
+    text: "Firefox"
+    optional: true
+- tapOn: "France - Streaming"
+- wait: 500
+
+# Scroll to find third app
+- scroll:
+    direction: DOWN
+    repeat: 3
+
+# Assign a streaming app to UK
+- tapOn:
+    text: "Netflix|Disney"
+    optional: true
+- tapOn: "UK - BBC"
+- wait: 500
+
+# ============================================
+# STEP 2: Start VPN (should start BOTH tunnels)
+# ============================================
+- tapOn:
+    point: "90%,8%"  # Toggle switch in top right
+- wait: 15000  # Wait for both tunnels to connect
+
+- assertVisible: "Protected"
+
+# ============================================
+# STEP 3: Verify both tunnels connected
+# ============================================
+- tapOn: "Tunnels"
+- wait: 2000
+
+# Both tunnels should show Connected status
+- assertVisible:
+    text: "Connected.*UK|UK.*Connected"
+    optional: true
+- assertVisible:
+    text: "Connected.*France|France.*Connected"
+    optional: true
+
+# ============================================
+# STEP 4: Test rapid switching
+# ============================================
+- tapOn: "Apps"
+- tapOn: "Chrome"
+- tapOn: "France - Streaming"  # Switch to FR
+- wait: 3000  # Wait for tunnel switch
+
+# VPN should stay Protected (no disconnection)
+- assertVisible: "Protected"
+
+# Switch back to UK
+- tapOn: "Chrome"
+- tapOn: "UK - BBC"
+- wait: 3000
+
+- assertVisible: "Protected"
+
+# ============================================
+# STEP 5: Remove app rules
+# ============================================
+- tapOn: "Chrome"
+- tapOn: "Direct Internet"
+- wait: 500
+
+# Chrome should now have no rule
+
+# ============================================
+# STEP 6: Stop VPN
+# ============================================
+- tapOn:
+    point: "90%,8%"  # Toggle switch in top right
+- wait: 2000
+- assertVisible: "Disconnected"
+
+# Both tunnels should show Disconnected
+- tapOn: "Tunnels"
+- assertNotVisible:
+    text: "Connected.*UK|UK.*Connected"
+

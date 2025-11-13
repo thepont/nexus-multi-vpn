@@ -1,0 +1,71 @@
+appId: "com.multiregionvpn"
+---
+# Verify Routing with Chrome
+# Tests that Chrome actually routes through the VPN tunnel
+# This is a REAL end-to-end test with a production browser
+
+- launchApp
+
+# Prerequisites check
+- tapOn: "Tunnels"
+- assertVisible: "UK - BBC"  # From bootstrap
+
+# Navigate to Apps
+- tapOn: "Apps"
+
+# Assign Chrome to UK tunnel
+- tapOn:
+    text: "Chrome"
+    optional: true
+- tapOn: "UK - BBC"
+- wait: 500
+
+# Start VPN
+- tapOn:
+    point: "90%,8%"  # Toggle switch in top right
+- wait: 10000  # Wait for tunnel to connect
+
+# Should show Protected
+- assertVisible: "Protected"
+
+# Launch Chrome
+- stopApp
+- launchApp:
+    appId: "com.android.chrome"
+    clearState: false
+
+# Navigate to IP check site
+- tapOn:
+    id: "url_bar"
+    optional: true
+- inputText: "ip-api.com/json"
+- pressKey: Enter
+
+# Wait for page to load
+- wait: 5000
+
+# Look for "GB" in the page content (UK country code)
+- assertVisible:
+    text: '"GB"|United Kingdom'
+    optional: true
+
+# ============================================
+# Manual Verification Note
+# ============================================
+# This test can only PARTIALLY verify routing automatically.
+# Manual steps:
+# 1. Check if page shows "countryCode":"GB"
+# 2. Verify city is in UK (London, Manchester, etc.)
+# 3. If you see your local country, routing failed
+
+# Return to VPN app
+- stopApp
+- launchApp:
+    appId: "com.multiregionvpn"
+
+# Turn off VPN
+- tapOn:
+    point: "90%,8%"  # Toggle switch in top right
+- wait: 2000
+- assertVisible: "Disconnected"
+

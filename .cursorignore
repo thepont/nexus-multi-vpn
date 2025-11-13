@@ -1,0 +1,206 @@
+# ============================================================================
+# Build Outputs - DO NOT INDEX
+# ============================================================================
+
+# Gradle build outputs
+build/
+app/build/
+**/build/
+.gradle/
+**/.gradle/
+
+# CMake and NDK build outputs
+.cxx/
+**/.cxx/
+.externalNativeBuild/
+**/.externalNativeBuild/
+
+# Android intermediate files
+**/intermediates/
+**/generated/
+**/tmp/
+**/captures/
+
+# ============================================================================
+# Dependencies - DO NOT INDEX
+# ============================================================================
+
+# Node modules
+node_modules/
+**/node_modules/
+
+# vcpkg
+vcpkg/
+**/vcpkg_installed/
+**/buildtrees/
+**/downloads/
+**/packages/
+
+# ============================================================================
+# IDE & Editor - DO NOT INDEX
+# ============================================================================
+
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+
+# ============================================================================
+# Compiled Binaries - DO NOT INDEX
+# ============================================================================
+
+# Java/Kotlin
+*.class
+*.jar
+*.war
+*.ear
+*.dex
+
+# Native
+*.so
+*.a
+*.o
+*.dylib
+*.dll
+
+# Android
+*.apk
+*.ap_
+*.aab
+
+# ============================================================================
+# Large Library Sources - MINIMAL INDEXING
+# ============================================================================
+
+# ics-openvpn - NOT USED (79MB) - Completely ignore
+libs/ics-openvpn/
+
+# OpenVPN 3 - Only index headers we actually modify
+libs/openvpn3/test/
+libs/openvpn3/doc/
+libs/openvpn3/.github/
+libs/openvpn3/deps/
+libs/openvpn3/javacli/
+libs/openvpn3/cmake/
+
+# OpenVPN 3 source (most of it) - we only modify cliproto.hpp
+libs/openvpn3/openvpn/ssl/
+libs/openvpn3/openvpn/crypto/
+libs/openvpn3/openvpn/compress/
+libs/openvpn3/openvpn/transport/
+libs/openvpn3/openvpn/server/
+libs/openvpn3/openvpn/ws/
+libs/openvpn3/openvpn/linux/
+libs/openvpn3/openvpn/apple/
+libs/openvpn3/openvpn/win/
+libs/openvpn3/openvpn/log/
+libs/openvpn3/openvpn/random/
+libs/openvpn3/openvpn/time/
+libs/openvpn3/openvpn/proxy/
+libs/openvpn3/openvpn/http/
+libs/openvpn3/openvpn/auth/
+
+# ============================================================================
+# Test Outputs - DO NOT INDEX
+# ============================================================================
+
+**/test-results/
+**/androidTest-results/
+**/.androidTest/
+**/reports/
+**/test-output/
+*.xml
+coverage/
+
+# ============================================================================
+# Logs & Temporary Files - DO NOT INDEX
+# ============================================================================
+
+*.log
+*.txt
+logcat.txt
+last_test_output.log
+test_output.log
+
+# ============================================================================
+# Docker & Certificates - DO NOT INDEX
+# ============================================================================
+
+# Docker volumes
+**/pki/
+**/certs/
+**/keys/
+
+# OpenVPN server directories (Docker)
+app/openvpn-uk/
+app/openvpn-fr/
+app/openvpn-dns-domain/
+app/openvpn-uk-conflict/
+app/openvpn-fr-conflict/
+
+# Docker compose
+docker-*/volumes/
+docker-*/data/
+
+# ============================================================================
+# Version Control - DO NOT INDEX
+# ============================================================================
+
+.git/
+.gitignore
+.gitattributes
+
+# ============================================================================
+# Misc - DO NOT INDEX
+# ============================================================================
+
+local.properties
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================================================
+# Large Test/Report Files - DO NOT INDEX
+# ============================================================================
+
+# Test reports and summaries (can be regenerated)
+TEST_RESULTS*.md
+TEST_SUITE*.md
+TEST_STATUS.md
+*_REPORT.md
+SUMMARY.md
+
+# Temporary test/analysis outputs
+/tmp/
+*.tmp
+
+# ============================================================================
+# C++ Test Framework - DO NOT INDEX
+# ============================================================================
+
+# GoogleTest/GoogleMock (fetched by CMake)
+**/_deps/
+**/googletest-src/
+**/googlemock-src/
+
+# ============================================================================
+# Additional Build Artifacts - DO NOT INDEX
+# ============================================================================
+
+# Lint reports
+lint-results*.html
+lint-results*.xml
+
+# APK outputs
+*.apk
+*.aab
+outputs/
+
+# Profiling data
+*.trace
+*.hprof
+
