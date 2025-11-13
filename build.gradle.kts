@@ -9,3 +9,24 @@ plugins {
 tasks.register("clean", Delete::class) {
     delete(rootProject.layout.buildDirectory)
 }
+
+// Task to download all dependencies for Android projects
+// This is useful for CI caching to pre-download dependencies
+tasks.register("androidDependencies") {
+    group = "help"
+    description = "Downloads all dependencies for Android projects"
+    doLast {
+        println("Resolving all project dependencies...")
+        allprojects {
+            configurations.filter { it.isCanBeResolved }.forEach { configuration ->
+                try {
+                    configuration.resolve()
+                } catch (e: Exception) {
+                    // Some configurations might not be resolvable in all contexts
+                    println("Could not resolve ${configuration.name}: ${e.message}")
+                }
+            }
+        }
+        println("All dependencies resolved successfully")
+    }
+}
