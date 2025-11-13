@@ -11,6 +11,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   # --------------------------------------------------------------------
   # JOB 1: WARM THE CACHE
