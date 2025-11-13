@@ -34,6 +34,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
       - name: Cache Gradle packages
         uses: actions/cache@v4
         with:
@@ -67,6 +73,12 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
 
       # This step will be very fast, as the cache is already warm
       - name: Restore Gradle Cache
