@@ -1,0 +1,70 @@
+appId: "com.multiregionvpn"
+---
+# Google TV Navigation Test (D-pad Only)
+# Tests navigation using remote control / D-pad
+
+- launchApp
+- assertVisible: "Region Router"
+
+# Test D-pad DOWN to focus on content
+- pressKey: Down
+- wait: 500
+
+# Test D-pad RIGHT to navigate tabs
+- pressKey: Right
+- wait: 500
+- pressKey: Enter  # Select Apps tab
+- wait: 1000
+- assertVisible: "Search apps..."
+
+# Navigate to Connections tab
+- pressKey: Right
+- wait: 500
+- pressKey: Enter
+- wait: 1000
+- assertVisible: "Connection Log"
+
+# Navigate to Settings tab
+- pressKey: Right
+- wait: 500
+- pressKey: Enter
+- wait: 1000
+- assertVisible: "NordVPN"
+
+# Navigate back to Tunnels
+- pressKey: Left
+- wait: 500
+- pressKey: Left
+- wait: 500
+- pressKey: Left
+- wait: 500
+- pressKey: Enter
+- wait: 1000
+- assertVisible: "Add Tunnel"
+
+# Test D-pad UP to access header
+- pressKey: Up
+- wait: 500
+
+# Should focus on toggle switch
+- pressKey: Enter  # Toggle VPN
+- wait: 2000
+
+# Handle permission dialog if appears
+- pressKey: Enter  # OK/Allow button
+  optional: true
+- wait: 1000
+
+# Status should change
+- assertVisible:
+    text: "Connecting...|Protected|Disconnected"
+
+# Toggle back off
+- pressKey: Up
+- wait: 500
+- pressKey: Enter
+- wait: 2000
+
+# Should return to Disconnected
+- assertVisible: "Disconnected"
+

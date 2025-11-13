@@ -1,0 +1,163 @@
+name: Maestro E2E Tests
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+    inputs:
+      allow-empty-credentials:
+        description: 'Allow tests to run without NordVPN credentials (for dry runs)'
+        type: boolean
+        default: false
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g
+  TERM: dumb
+
+jobs:
+  guard:
+    name: Evaluate Maestro Preconditions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run-maestro: ${{ steps.evaluate.outputs.run_maestro }}
+      allow-empty: ${{ steps.evaluate.outputs.allow_empty }}
+    steps:
+      - name: Evaluate run conditions
+        id: evaluate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_ALLOW_EMPTY: ${{ github.event.inputs.allow-empty-credentials }}
+          NORDVPN_USERNAME: ${{ secrets.NORDVPN_USERNAME }}
+          NORDVPN_PASSWORD: ${{ secrets.NORDVPN_PASSWORD }}
+        shell: bash
+        run: |
+          run=false
+          allow_empty=false
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            run=true
+            if [[ "${DISPATCH_ALLOW_EMPTY}" == "true" ]]; then
+              allow_empty=true
+            fi
+          elif [[ -n "${NORDVPN_USERNAME}" && -n "${NORDVPN_PASSWORD}" ]]; then
+            run=true
+          fi
+
+          echo "run_maestro=${run}" >> "$GITHUB_OUTPUT"
+          echo "allow_empty=${allow_empty}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish summary
+        env:
+          RUN_MAESTRO: ${{ steps.evaluate.outputs.run_maestro }}
+          ALLOW_EMPTY: ${{ steps.evaluate.outputs.allow_empty }}
+        run: |
+          if [[ "${RUN_MAESTRO}" == "true" ]]; then
+            {
+              echo "## Maestro E2E Tests"
+              if [[ "${ALLOW_EMPTY}" == "true" ]]; then
+                echo "- Running with dummy credentials (workflow_dispatch override)."
+              else
+                echo "- Running with provided NordVPN credentials."
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Maestro E2E Tests"
+              echo "- Skipped because NordVPN credentials were not provided and workflow_dispatch override not enabled."
+            } >> "$GITHUB_STEP_SUMMARY"
+
+  maestro:
+    name: Maestro E2E
+    runs-on: macos-latest
+    timeout-minutes: 50
+    needs: guard
+    if: ${{ needs.guard.outputs.run-maestro == 'true' }}
+    env:
+      ALLOW_EMPTY_CREDENTIALS: ${{ needs.guard.outputs.allow-empty == 'true' }}
+      NORDVPN_USERNAME: ${{ secrets.NORDVPN_USERNAME }}
+      NORDVPN_PASSWORD: ${{ secrets.NORDVPN_PASSWORD }}
+      TEST_VPN_HOSTNAME: ${{ secrets.TEST_VPN_HOSTNAME != '' && secrets.TEST_VPN_HOSTNAME || 'uk1234.nordvpn.com' }}
+      TEST_VPN_REGION: ${{ secrets.TEST_VPN_REGION != '' && secrets.TEST_VPN_REGION || 'UK' }}
+      TEST_APP_PACKAGE: ${{ secrets.TEST_APP_PACKAGE != '' && secrets.TEST_APP_PACKAGE || 'com.android.chrome' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
+      - name: Validate NordVPN credentials
+        shell: bash
+        run: |
+          if [[ -z "${NORDVPN_USERNAME}" || -z "${NORDVPN_PASSWORD}" ]]; then
+            if [[ "${ALLOW_EMPTY_CREDENTIALS}" == "true" ]]; then
+              echo "⚠️  Running without NordVPN credentials (dry run)."
+              echo "NORDVPN_USERNAME=dummy-user" >> "$GITHUB_ENV"
+              echo "NORDVPN_PASSWORD=dummy-password" >> "$GITHUB_ENV"
+            else
+              echo "::error::NordVPN credentials are required for Maestro E2E tests."
+              echo "       Provide NORDVPN_USERNAME and NORDVPN_PASSWORD secrets or trigger workflow_dispatch with allow-empty-credentials."
+              exit 1
+            fi
+          fi
+
+      - name: Install Maestro CLI
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Generate .env file
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          NORDVPN_USERNAME=${NORDVPN_USERNAME}
+          NORDVPN_PASSWORD=${NORDVPN_PASSWORD}
+          TEST_VPN_HOSTNAME=${TEST_VPN_HOSTNAME}
+          TEST_VPN_REGION=${TEST_VPN_REGION}
+          TEST_APP_PACKAGE=${TEST_APP_PACKAGE}
+          EOF
+
+      - name: Assemble debug build
+        run: ./gradlew --stacktrace assembleDebug
+
+      - name: Launch emulator and run Maestro tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            maestro test .maestro/
+            maestro report .maestro/ --output maestro-test-results.html
+
+      - name: Upload Maestro artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-test-results
+          path: |
+            maestro-test-results.html
+            .maestro/tests/
+
