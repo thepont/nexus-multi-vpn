@@ -46,8 +46,37 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install Build Dependencies
+        run: |
+          echo "=== Checking installed build tools ==="
+          # Check for essential build dependencies
+          which cmake || echo "⚠️  CMake not found"
+          which ninja || echo "⚠️  Ninja not found"
+          which make || echo "⚠️  Make not found"
+          
+          # Install CMake and Ninja via Homebrew on macOS
+          echo "=== Installing build dependencies ==="
+          brew install cmake ninja
+          
+          echo "=== Installed versions ==="
+          cmake --version
+          ninja --version
+          
+          echo "=== Android SDK Components ==="
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed
+
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
+
+      - name: Cache Android NDK (if native builds are needed later)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk
+            ~/.android/build-cache
+          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-ndk-
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
@@ -59,14 +88,46 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Download Dependencies
+      - name: Download Dependencies (with enhanced logging)
         run: |
-          echo "Starting dependency download (Java/Kotlin only, skipping native builds)..."
-          # Skip external native build tasks explicitly
+          echo "========================================"
+          echo "Starting dependency download"
+          echo "========================================"
+          echo "Timestamp: $(date)"
+          echo "Java version: $(java -version 2>&1 | head -1)"
+          echo "Gradle version: $(./gradlew --version | grep Gradle)"
+          echo ""
+          
+          # Enable maximum Gradle logging for debugging
+          echo "=== Downloading Java/Kotlin dependencies (skipping native builds) ==="
+          
+          # Run with debug logging and capture output
           ./gradlew androidDependencies \
             -x externalNativeBuildDebug \
             -x externalNativeBuildRelease \
-            --info --stacktrace
+            --info --stacktrace --debug 2>&1 | tee gradle-dependency-download.log
+          
+          echo ""
+          echo "========================================"
+          echo "Dependency download completed"
+          echo "========================================"
+          echo "Timestamp: $(date)"
+          
+          # Show summary of what was resolved
+          echo ""
+          echo "=== Configurations resolved (from log) ==="
+          grep "✓ Resolving:" gradle-dependency-download.log || echo "No resolutions logged"
+          
+          echo ""
+          echo "=== Gradle cache size ==="
+          du -sh ~/.gradle/caches || echo "Cache directory not found"
+
+      - name: Upload Gradle logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-dependency-logs-macos
+          path: gradle-dependency-download.log
 
   guard:
     name: Evaluate Maestro Preconditions
