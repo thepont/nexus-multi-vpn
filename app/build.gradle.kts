@@ -163,13 +163,6 @@ android {
         }
     }
     
-    testOptions {
-        animationsDisabled = true
-        unitTests {
-            isReturnDefaultValues = true
-        }
-    }
-    
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -216,7 +209,9 @@ android {
     }
 
     testOptions {
+        animationsDisabled = true
         unitTests.isIncludeAndroidResources = true
+        unitTests.isReturnDefaultValues = true
         unitTests.all {
             it.jvmArgs(
                 "--add-opens=java.base/java.lang=ALL-UNNAMED",
@@ -224,12 +219,12 @@ android {
                 "--add-opens=java.base/java.util=ALL-UNNAMED",
                 "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
             )
-        }
-    }
-    
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // Force Robolectric to use pinned SDK and offline mode
+            // This prevents hanging in CI when trying to download SDK components
+            it.systemProperty("robolectric.sdk", "34")
+            it.systemProperty("robolectric.offline", "true")
+            // Timeout for individual tests (safety net)
+            it.systemProperty("junit.jupiter.execution.timeout.testable.method.default", "120s")
         }
     }
 }
