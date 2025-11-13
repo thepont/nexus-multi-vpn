@@ -224,6 +224,21 @@ android {
                 "--add-opens=java.base/java.util=ALL-UNNAMED",
                 "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
             )
+            // Set max heap size for tests
+            it.maxHeapSize = "2g"
+            // Set timeout per test method (2 minutes per test)
+            it.systemProperty("junit.jupiter.execution.timeout.testable.method.default", "120s")
+            it.systemProperty("robolectric.timeout", "120000") // 2 minutes in ms
+            // Disable parallel test execution to avoid resource contention
+            it.maxParallelForks = 1
+            // Enable test output for debugging
+            it.testLogging {
+                events("passed", "skipped", "failed", "standardOut", "standardError")
+                showStandardStreams = false
+                showExceptions = true
+                showCauses = true
+                showStackTraces = true
+            }
         }
     }
     

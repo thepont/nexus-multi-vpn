@@ -47,7 +47,7 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     needs: build
 
     steps:
@@ -65,7 +65,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run lint and unit tests
-        run: ./gradlew --stacktrace testDebugUnitTest
+        run: ./gradlew --stacktrace --info testDebugUnitTest
 
       - name: Upload unit test reports
         if: always()
