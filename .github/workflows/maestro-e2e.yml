@@ -269,7 +269,7 @@ jobs:
   maestro:
     name: Maestro E2E
     runs-on: macos-latest
-    timeout-minutes: 50
+    timeout-minutes: 90
     needs: 
       - warm-cache
       - guard
@@ -385,6 +385,8 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
+          force-avd-creation: false
+          emulator-boot-timeout: 600
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             maestro test .maestro/
