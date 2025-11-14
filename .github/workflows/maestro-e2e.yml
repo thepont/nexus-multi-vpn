@@ -90,6 +90,8 @@ jobs:
 
       - name: Download Dependencies (with enhanced logging and timeout monitoring)
         timeout-minutes: 30
+        env:
+          CI: true
         run: |
           echo "========================================"
           echo "Starting dependency download"
@@ -164,10 +166,7 @@ jobs:
           # Now try our custom task
           echo ""
           echo "=== Running androidDependencies task ==="
-          ./gradlew androidDependencies \
-            -x externalNativeBuildDebug \
-            -x externalNativeBuildRelease \
-            --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
+          ./gradlew androidDependencies -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
           
           GRADLE_EXIT=$?
           set -e
@@ -327,7 +326,9 @@ jobs:
           EOF
 
       - name: Assemble debug build
-        run: ./gradlew --stacktrace assembleDebug
+        env:
+          CI: true
+        run: ./gradlew --stacktrace assembleDebug -x externalNativeBuildDebug -x externalNativeBuildRelease
 
       - name: Launch emulator and run Maestro tests
         uses: reactivecircus/android-emulator-runner@v2
