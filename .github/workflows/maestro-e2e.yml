@@ -103,6 +103,7 @@ jobs:
         timeout-minutes: 30
         env:
           CI: true
+          SKIP_NATIVE_BUILD: true
         run: |
           echo "========================================"
           echo "Starting dependency download"
@@ -110,6 +111,7 @@ jobs:
           echo "Timestamp: $(date)"
           echo "Java version: $(java -version 2>&1 | head -1)"
           echo "Gradle version: $(./gradlew --version | grep Gradle)"
+          echo "SKIP_NATIVE_BUILD: $SKIP_NATIVE_BUILD (skipping native builds for dependency download)"
           echo ""
           
           # Create a monitoring script
@@ -360,12 +362,17 @@ jobs:
 
       - name: Assemble debug build with native libraries
         timeout-minutes: 45
+        env:
+          # SKIP_NATIVE_BUILD is not set, so native builds will be enabled
+          # This is required for E2E tests to create actual VPN connections
+          ENABLE_NATIVE_BUILD: true
         run: |
           echo "========================================"
           echo "Building APK with OpenVPN native libraries for E2E tests"
           echo "========================================"
           echo "Note: Native builds are required for actual VPN connections in E2E tests"
           echo "This may take 15-30 minutes on first build, but will be cached for subsequent runs"
+          echo "SKIP_NATIVE_BUILD: ${SKIP_NATIVE_BUILD:-not set (native builds ENABLED)}"
           echo ""
           ./gradlew --stacktrace assembleDebug
 

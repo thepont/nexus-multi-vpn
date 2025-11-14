@@ -87,12 +87,14 @@ jobs:
         timeout-minutes: 30
         env:
           CI: true
+          SKIP_NATIVE_BUILD: true
         run: |
           echo "========================================"
           echo "Starting dependency download"
           echo "========================================"
           echo "Timestamp: $(date)"
           echo "CI environment: $CI"
+          echo "SKIP_NATIVE_BUILD: $SKIP_NATIVE_BUILD"
           echo "Java version: $(java -version 2>&1 | head -1)"
           echo "Gradle version: $(./gradlew --version | grep Gradle)"
           echo ""
@@ -240,12 +242,14 @@ jobs:
         timeout-minutes: 20
         env:
           CI: true
+          SKIP_NATIVE_BUILD: true
         run: |
           echo "========================================"
           echo "Starting Robolectric Unit Tests"
           echo "========================================"
           echo "Timestamp: $(date)"
           echo "CI environment: $CI"
+          echo "SKIP_NATIVE_BUILD: $SKIP_NATIVE_BUILD"
           
           # Create monitoring script
           cat > /tmp/test_monitor.sh << 'MONITOR_EOF'
