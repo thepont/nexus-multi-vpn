@@ -1,5 +1,6 @@
 package com.multiregionvpn.data.repository
 
+import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.AppRuleDao
 import com.multiregionvpn.data.database.ProviderCredentials
@@ -11,6 +12,9 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -108,6 +112,21 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun `saveAppRule notifies engine service of change`() = runTest {
+        mockkObject(VpnEngineService.Companion)
+        try {
+            val rule = AppRule("com.example.app", "vpn-config-id")
+            coEvery { appRuleDao.save(any()) } returns Unit
+
+            repository.saveAppRule(rule)
+
+            verify(exactly = 1) { VpnEngineService.notifyAppRuleChanged("com.example.app", "vpn-config-id") }
+        } finally {
+            unmockkObject(VpnEngineService.Companion)
+        }
+    }
+
+    @Test
     fun `given a package name, when deleteAppRule is called, then it calls the DAO's delete function`() = runTest {
         // GIVEN: a package name
         val packageName = "com.bbc.iplayer"
@@ -118,6 +137,21 @@ class SettingsRepositoryTest {
 
         // THEN: the DAO's delete function is called with the correct package name
         coVerify(exactly = 1) { appRuleDao.delete(packageName) }
+    }
+
+    @Test
+    fun `deleteAppRule notifies engine service`() = runTest {
+        mockkObject(VpnEngineService.Companion)
+        try {
+            val packageName = "com.example.remove"
+            coEvery { appRuleDao.delete(any()) } returns Unit
+
+            repository.deleteAppRule(packageName)
+
+            verify(exactly = 1) { VpnEngineService.notifyAppRuleRemoved(packageName) }
+        } finally {
+            unmockkObject(VpnEngineService.Companion)
+        }
     }
 
     @Test
@@ -188,5 +222,49 @@ class SettingsRepositoryTest {
 
         // THEN: the repository returns the config from the DAO
         assertThat(result).isEqualTo(expectedConfig)
+    }
+
+    @Test
+    fun `createAppRule notifies engine service after persistence`() = runTest {
+        mockkObject(VpnEngineService.Companion)
+        try {
+            coEvery { appRuleDao.save(any()) } returns Unit
+            coEvery { appRuleDao.getRuleForPackage("com.example.create") } returns AppRule("com.example.create", "vpn-config-id")
+
+            repository.createAppRule("com.example.create", "vpn-config-id")
+
+            coVerify(exactly = 1) { appRuleDao.getRuleForPackage("com.example.create") }
+            verify(exactly = 1) { VpnEngineService.notifyAppRuleChanged("com.example.create", "vpn-config-id") }
+        } finally {
+            unmockkObject(VpnEngineService.Companion)
+        }
+    }
+
+    @Test
+    fun `updateAppRule notifies engine service`() = runTest {
+        mockkObject(VpnEngineService.Companion)
+        try {
+            coEvery { appRuleDao.save(any()) } returns Unit
+
+            repository.updateAppRule("com.example.update", "vpn-config-id")
+
+            verify(exactly = 1) { VpnEngineService.notifyAppRuleChanged("com.example.update", "vpn-config-id") }
+        } finally {
+            unmockkObject(VpnEngineService.Companion)
+        }
+    }
+
+    @Test
+    fun `clearAllAppRules notifies engine service`() = runTest {
+        mockkObject(VpnEngineService.Companion)
+        try {
+            coEvery { appRuleDao.clearAll() } returns Unit
+
+            repository.clearAllAppRules()
+
+            verify(exactly = 1) { VpnEngineService.notifyAllAppRulesCleared() }
+        } finally {
+            unmockkObject(VpnEngineService.Companion)
+        }
     }
 }

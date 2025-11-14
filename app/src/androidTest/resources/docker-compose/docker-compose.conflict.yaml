@@ -15,7 +15,7 @@ services:
       - ../../../../openvpn-uk-conflict:/etc/openvpn
     networks:
       vpn-conflict:
-        ipv4_address: 10.8.0.1
+        ipv4_address: 10.8.0.10
     command: >
       sh -c "
         if [ ! -f /etc/openvpn/pki/ca.crt ]; then
@@ -42,7 +42,7 @@ services:
       - ../../../../openvpn-fr-conflict:/etc/openvpn
     networks:
       vpn-conflict:
-        ipv4_address: 10.8.0.2
+        ipv4_address: 10.8.0.11
     command: >
       sh -c "
         if [ ! -f /etc/openvpn/pki/ca.crt ]; then

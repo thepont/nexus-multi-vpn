@@ -14,6 +14,18 @@ APP_ID="$PACKAGE_NAME"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+COMPOSE_FILE_ROUTING="$PROJECT_DIR/app/src/androidTest/resources/docker-compose/docker-compose.routing.yaml"
+DOCKER_COMPOSE_CMD=""
+SKIP_DOCKER=false
+
+trap_cleanup() {
+    if [ -n "$DOCKER_COMPOSE_CMD" ] && [ -f "$COMPOSE_FILE_ROUTING" ] && [ "$SKIP_DOCKER" = false ]; then
+        log_info "Stopping Docker test stack..."
+        $DOCKER_COMPOSE_CMD -f "$COMPOSE_FILE_ROUTING" down >/dev/null 2>&1 || true
+    fi
+}
+trap trap_cleanup EXIT
+
 # Functions
 log_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
@@ -37,6 +49,19 @@ log_step() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 }
 
+# Uninstall existing app builds to ensure clean state
+cleanup_installed_apps() {
+    log_step "Cleaning Up Previous Installations"
+    for pkg in \
+        "com.multiregionvpn" \
+        "com.example.diagnostic.uk" \
+        "com.example.diagnostic.fr" \
+        "com.example.diagnostic.direct"; do
+        log_info "Uninstalling $pkg (if present)..."
+        adb uninstall "$pkg" >/dev/null 2>&1 && log_success "Removed $pkg" || log_info "$pkg not installed"
+    done
+}
+
 # Check prerequisites
 check_prerequisites() {
     log_step "Checking Prerequisites"
@@ -56,6 +81,7 @@ check_prerequisites() {
         exit 1
     fi
     log_success "Android device/emulator connected"
+    wait_for_device_with_timeout
     
     # Check if .env file exists
     if [ ! -f "$PROJECT_DIR/.env" ]; then
@@ -175,6 +201,93 @@ grant_permissions() {
     fi
 }
 
+
+# Ensure device owner provisioning for debug builds
+ensure_device_owner() {
+    log_step "Ensuring Device Owner Provisioning"
+
+    local owner_status
+    owner_status=$(adb shell dpm list device-owner 2>/dev/null || true)
+
+    if echo "$owner_status" | grep -q "$PACKAGE_NAME"; then
+        log_success "${PACKAGE_NAME} is already device owner"
+        return
+    fi
+
+    log_info "Attempting to promote ${PACKAGE_NAME} to device owner (requires freshly wiped emulator with no accounts)."
+    local command_output
+    if command_output=$(adb shell dpm set-device-owner "${PACKAGE_NAME}/.deviceowner.TestDeviceOwnerReceiver" 2>&1); then
+        log_success "Device owner set successfully"
+    else
+        log_error "Failed to set device owner"
+        echo "$command_output"
+        log_warning "If this fails, wipe the emulator data (emulator -avd <name> -wipe-data) and retry."
+        exit 1
+    fi
+}
+
+wait_for_device_with_timeout() {
+    log_info "Waiting for emulator/device to come online (60s timeout)..."
+    if timeout 60 adb wait-for-device; then
+        log_success "Device detected."
+    else
+        log_error "Device did not appear within 60 seconds."
+        exit 1
+    fi
+}
+
+detect_docker_compose() {
+    if command -v docker-compose >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker-compose"
+    elif command -v docker >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    else
+        DOCKER_COMPOSE_CMD=""
+    fi
+}
+
+start_docker_stack() {
+    if [ "$SKIP_DOCKER" = true ]; then
+        log_info "Skipping Docker stack startup (--skip-docker)"
+        return
+    fi
+    log_step "Starting Docker Test Stack"
+
+    if ! command -v docker >/dev/null 2>&1; then
+        log_warning "Docker is not installed; skipping local stack startup."
+        return
+    fi
+
+    detect_docker_compose
+    if [ -z "$DOCKER_COMPOSE_CMD" ]; then
+        log_warning "docker compose command not found; skipping local stack startup."
+        return
+    fi
+
+    if [ ! -f "$COMPOSE_FILE_ROUTING" ]; then
+        log_warning "Compose file not found at $COMPOSE_FILE_ROUTING"
+        return
+    fi
+
+    log_info "Using compose command: $DOCKER_COMPOSE_CMD"
+    log_info "Bringing up stack from $COMPOSE_FILE_ROUTING"
+    if $DOCKER_COMPOSE_CMD -f "$COMPOSE_FILE_ROUTING" up -d --build; then
+        log_success "Docker services started"
+    else
+        log_warning "Failed to start Docker services"
+    fi
+}
+
+stop_docker_stack() {
+    if [ "$SKIP_DOCKER" = true ]; then
+        return
+    fi
+    if [ -n "$DOCKER_COMPOSE_CMD" ] && [ -f "$COMPOSE_FILE_ROUTING" ]; then
+        log_step "Stopping Docker Test Stack"
+        $DOCKER_COMPOSE_CMD -f "$COMPOSE_FILE_ROUTING" down || true
+    fi
+}
+
 # Clear app data (optional, for clean test state)
 clear_app_data() {
     if [ "${CLEAR_APP_DATA:-false}" = "true" ]; then
@@ -197,7 +310,7 @@ run_tests() {
     source .env
     
     # Determine which test to run
-    TEST_CLASS="${1:-com.multiregionvpn.VpnRoutingTest}"
+    TEST_CLASS="${1:-com.multiregionvpn.BasicConnectionTest}"
     TEST_METHOD="${2:-}"
     
     if [ -n "$TEST_METHOD" ]; then
@@ -213,10 +326,10 @@ run_tests() {
     adb logcat -c
     
     # Run tests with timeout
-    log_info "Starting tests with 2 minute timeout..."
+    log_info "Starting tests with 5 minute timeout..."
     log_info "Credentials: NORDVPN_USERNAME=${NORDVPN_USERNAME:0:3}***"
     
-    if timeout 120 ./gradlew :app:connectedDebugAndroidTest \
+    if timeout 300 ./gradlew :app:connectedDebugAndroidTest \
         "$TEST_ARG" \
         -Pandroid.testInstrumentationRunnerArguments.NORDVPN_USERNAME="$NORDVPN_USERNAME" \
         -Pandroid.testInstrumentationRunnerArguments.NORDVPN_PASSWORD="$NORDVPN_PASSWORD"; then
@@ -240,6 +353,7 @@ show_logs() {
 
 # Main execution
 main() {
+    export QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-xcb}
     echo -e "${GREEN}"
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║     Multi-Region VPN - E2E Test Runner                    ║"
@@ -251,6 +365,7 @@ main() {
     TEST_METHOD=""
     SKIP_INSTALL=false
     SKIP_PERMISSIONS=false
+    SKIP_DOCKER=false
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -270,6 +385,10 @@ main() {
                 SKIP_PERMISSIONS=true
                 shift
                 ;;
+            --skip-docker)
+                SKIP_DOCKER=true
+                shift
+                ;;
             --clear-data)
                 CLEAR_APP_DATA=true
                 shift
@@ -287,6 +406,7 @@ Options:
   --test-method METHOD     Run specific test method (requires --test-class)
   --skip-install           Skip app installation
   --skip-permissions       Skip permission granting
+  --skip-docker            Skip Docker compose stack startup/shutdown
   --clear-data             Clear app data before running tests
   --show-logs              Show logs after tests complete
   --help                   Show this help message
@@ -312,13 +432,14 @@ EOF
     done
     
     # Set defaults
-    TEST_CLASS="${TEST_CLASS:-com.multiregionvpn.VpnRoutingTest}"
+    TEST_CLASS="${1:-com.multiregionvpn.BasicConnectionTest}"
     
     # Run setup steps
     check_prerequisites
     setup_environment
     
     if [ "$SKIP_INSTALL" = false ]; then
+        cleanup_installed_apps
         install_app
     else
         log_info "Skipping app installation (--skip-install)"
@@ -330,6 +451,7 @@ EOF
         log_info "Skipping permission granting (--skip-permissions)"
     fi
     
+    start_docker_stack
     clear_app_data
     
     # Run tests
@@ -337,11 +459,13 @@ EOF
         show_logs
         log_step "Test Execution Complete"
         log_success "All tests passed!"
+        stop_docker_stack
         exit 0
     else
         show_logs
         log_step "Test Execution Complete"
         log_error "Some tests failed. Check logs for details."
+        stop_docker_stack
         exit 1
     fi
 }

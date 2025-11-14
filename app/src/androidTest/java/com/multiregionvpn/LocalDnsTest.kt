@@ -2,8 +2,9 @@ package com.multiregionvpn
 
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
-import com.multiregionvpn.test.BaseLocalTest
 import com.multiregionvpn.test.DockerComposeManager
+import com.multiregionvpn.test.BaseLocalTest
+import dagger.hilt.android.testing.HiltAndroidTest
 import com.multiregionvpn.test.TestAppManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -22,6 +23,7 @@ import java.util.UUID
  * - vpn-server-dns: OpenVPN server (10.3.0.0/24) with push "dhcp-option DNS 10.3.0.2"
  * - http-server-dns: Web server at 10.3.0.10 returning "DNS_TEST_PASSED"
  */
+@HiltAndroidTest
 class LocalDnsTest : BaseLocalTest() {
     
     override fun getComposeFile(): DockerComposeManager.ComposeFile {

@@ -6,7 +6,9 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.ColorDrawable
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.google.common.truth.Truth.assertThat
-import com.multiregionvpn.core.VpnEngineService
+import com.multiregionvpn.MainCoroutineRule
+import com.multiregionvpn.core.VpnServiceStateTracker
+import com.multiregionvpn.ui.shared.VpnStats
 import com.multiregionvpn.data.database.AppRule as DbAppRule
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
@@ -14,9 +16,8 @@ import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -39,38 +40,39 @@ class RouterViewModelImplTest {
 
     @get:Rule
     val instantTaskExecutorRule = InstantTaskExecutorRule()
+    @get:Rule
+    val mainDispatcherRule = MainCoroutineRule()
 
     private lateinit var viewModel: RouterViewModelImpl
     private lateinit var mockApplication: Application
     private lateinit var mockSettingsRepository: SettingsRepository
     private lateinit var mockPackageManager: PackageManager
-    private val testDispatcher = UnconfinedTestDispatcher()
-    private val testScope = TestScope(testDispatcher)
-
     @Before
     fun setup() {
         // Mock Application
         mockApplication = mockk(relaxed = true)
         mockPackageManager = mockk(relaxed = true)
         every { mockApplication.packageManager } returns mockPackageManager
+        every { mockApplication.packageName } returns "com.multiregionvpn"
+        every { mockPackageManager.getApplicationLabel(any()) } returns "Mock App"
+        every { mockPackageManager.getApplicationIcon(any<ApplicationInfo>()) } returns ColorDrawable(0xFF000000.toInt())
+        every { mockPackageManager.getApplicationIcon(any<String>()) } returns ColorDrawable(0xFF000000.toInt())
+        every { mockPackageManager.getInstalledApplications(any<Int>()) } returns emptyList()
         
         // Mock SettingsRepository
         mockSettingsRepository = mockk(relaxed = true)
-        
-        // Mock VpnEngineService static methods
-        mockkObject(VpnEngineService)
-        every { VpnEngineService.isRunning() } returns false
         
         // Default mock behaviors
         every { mockSettingsRepository.getAllVpnConfigs() } returns flowOf(emptyList())
         every { mockSettingsRepository.getAllAppRules() } returns flowOf(emptyList())
         coEvery { mockSettingsRepository.appRuleDao.getAllRulesList() } returns emptyList()
-        every { mockPackageManager.getInstalledApplications(any<Int>()) } returns emptyList()
+        
+        VpnServiceStateTracker.reset()
     }
 
     @After
     fun tearDown() {
-        unmockkObject(VpnEngineService)
+        VpnServiceStateTracker.reset()
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -78,7 +80,7 @@ class RouterViewModelImplTest {
     // ═══════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `loadServerGroups groups VPN configs by region`() = runTest {
+    fun `loadServerGroups groups VPN configs by region`() = runTest() {
         // GIVEN: 3 UK configs and 2 US configs in database
         val vpnConfigs = listOf(
             VpnConfig("uk1", "UK Server 1", "uk", "nordvpn", "uk1.nordvpn.com"),
@@ -92,7 +94,7 @@ class RouterViewModelImplTest {
         
         // WHEN: ViewModel is created
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100) // Let init block execute
+        runCurrent()
         
         // THEN: ServerGroups are created for each region
         val serverGroups = viewModel.allServerGroups.value
@@ -110,7 +112,7 @@ class RouterViewModelImplTest {
     }
 
     @Test
-    fun `loadServerGroups marks groups as active when app rules exist`() = runTest {
+    fun `loadServerGroups marks groups as active when app rules exist`() = runTest() {
         // GIVEN: VPN configs and app rules that use UK config
         val vpnConfigs = listOf(
             VpnConfig("uk1", "UK Server 1", "uk", "nordvpn", "uk1.nordvpn.com"),
@@ -125,7 +127,7 @@ class RouterViewModelImplTest {
         
         // WHEN: ViewModel is created
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100)
+        runCurrent()
         
         // THEN: UK group is marked as active
         val serverGroups = viewModel.allServerGroups.value
@@ -137,16 +139,15 @@ class RouterViewModelImplTest {
     }
 
     @Test
-    fun `loadAppRules loads installed apps with routing rules`() = runTest {
+    fun `loadAppRules loads installed apps with routing rules`() = runTest() {
         // GIVEN: Installed app with a rule
         val mockAppInfo = mockk<ApplicationInfo>(relaxed = true)
         mockAppInfo.flags = 0  // Not a system app
         mockAppInfo.packageName = "com.bbc.iplayer"
         
         every { mockPackageManager.getInstalledApplications(any<Int>()) } returns listOf(mockAppInfo)
-        every { mockPackageManager.getApplicationLabel(mockAppInfo) } returns "BBC iPlayer"
-        every { mockPackageManager.getApplicationIcon("com.bbc.iplayer") } returns ColorDrawable()
-        every { mockAppInfo.packageName } returns "com.bbc.iplayer"
+        every { mockPackageManager.getApplicationLabel(any()) } returns "BBC iPlayer"
+        every { mockPackageManager.getApplicationIcon(any<String>()) } returns ColorDrawable()
         
         val appRules = listOf(
             DbAppRule("com.bbc.iplayer", "uk1")
@@ -159,7 +160,7 @@ class RouterViewModelImplTest {
         
         // WHEN: ViewModel is created
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100)
+        runCurrent()
         
         // THEN: AppRule is loaded with correct group mapping
         val loadedRules = viewModel.allAppRules.value
@@ -176,23 +177,24 @@ class RouterViewModelImplTest {
     // ═══════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `onToggleVpn(true) starts VPN service`() = runTest {
+    fun `onToggleVpn(true) starts VPN service`() = runTest() {
         // GIVEN: ViewModel initialized
         every { mockSettingsRepository.getAllVpnConfigs() } returns flowOf(emptyList())
         every { mockSettingsRepository.getAllAppRules() } returns flowOf(emptyList())
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
+        runCurrent()
         
         // WHEN: User enables VPN
         viewModel.onToggleVpn(true)
-        advanceTimeBy(100)
+        runCurrent()
         
         // THEN: VPN service start intent is sent
-        verify { mockApplication.startForegroundService(any()) }
+        verify { mockApplication.startService(any()) }
         assertThat(viewModel.vpnStatus.value).isEqualTo(VpnStatus.CONNECTING)
     }
 
     @Test
-    fun `onToggleVpn(false) stops VPN service`() = runTest {
+    fun `onToggleVpn(false) stops VPN service`() = runTest() {
         // GIVEN: ViewModel initialized
         every { mockSettingsRepository.getAllVpnConfigs() } returns flowOf(emptyList())
         every { mockSettingsRepository.getAllAppRules() } returns flowOf(emptyList())
@@ -208,7 +210,7 @@ class RouterViewModelImplTest {
     }
 
     @Test
-    fun `onAppRuleChange saves to repository and updates local state`() = runTest {
+    fun `onAppRuleChange saves to repository and updates local state`() = runTest() {
         // GIVEN: ViewModel with a server group
         val vpnConfigs = listOf(
             VpnConfig("uk1", "UK Server 1", "uk", "nordvpn", "uk1.nordvpn.com")
@@ -218,12 +220,12 @@ class RouterViewModelImplTest {
         coEvery { mockSettingsRepository.saveAppRule(any()) } just Runs
         
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100)
+        runCurrent()
         
         // WHEN: User changes app rule to UK group
         val app = AppRule("com.bbc.iplayer", "BBC iPlayer", null, null)
         viewModel.onAppRuleChange(app, "uk")
-        advanceTimeBy(100)
+        runCurrent()
         
         // THEN: Repository is called to save app rule
         coVerify {
@@ -234,19 +236,19 @@ class RouterViewModelImplTest {
     }
 
     @Test
-    fun `onAppRuleChange with null groupId saves bypass rule`() = runTest {
+    fun `onAppRuleChange with null groupId saves bypass rule`() = runTest() {
         // GIVEN: ViewModel initialized
         every { mockSettingsRepository.getAllVpnConfigs() } returns flowOf(emptyList())
         every { mockSettingsRepository.getAllAppRules() } returns flowOf(emptyList())
         coEvery { mockSettingsRepository.saveAppRule(any()) } just Runs
         
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100)
+        runCurrent()
         
         // WHEN: User changes app rule to bypass (null)
         val app = AppRule("com.netflix.mediaclient", "Netflix", null, "uk")
         viewModel.onAppRuleChange(app, null)
-        advanceTimeBy(100)
+        runCurrent()
         
         // THEN: Repository is called to save bypass rule (vpnConfigId = null)
         coVerify {
@@ -257,7 +259,7 @@ class RouterViewModelImplTest {
     }
 
     @Test
-    fun `onRemoveServerGroup deletes all configs in group`() = runTest {
+    fun `onRemoveServerGroup deletes all configs in group`() = runTest() {
         // GIVEN: ViewModel with multiple configs in UK group
         val vpnConfigs = listOf(
             VpnConfig("uk1", "UK Server 1", "uk", "nordvpn", "uk1.nordvpn.com"),
@@ -269,12 +271,12 @@ class RouterViewModelImplTest {
         coEvery { mockSettingsRepository.deleteVpnConfig(any()) } just Runs
         
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100)
+        runCurrent()
         
         // WHEN: User removes UK group
         val ukGroup = viewModel.allServerGroups.value.first { it.id == "uk" }
         viewModel.onRemoveServerGroup(ukGroup)
-        advanceTimeBy(100)
+        runCurrent()
         
         // THEN: Both UK configs are deleted
         coVerify {
@@ -289,7 +291,7 @@ class RouterViewModelImplTest {
     }
 
     @Test
-    fun `onServerGroupSelected updates selected group`() = runTest {
+    fun `onServerGroupSelected updates selected group`() = runTest() {
         // GIVEN: ViewModel with server groups
         val vpnConfigs = listOf(
             VpnConfig("uk1", "UK Server 1", "uk", "nordvpn", "uk1.nordvpn.com")
@@ -298,7 +300,7 @@ class RouterViewModelImplTest {
         coEvery { mockSettingsRepository.appRuleDao.getAllRulesList() } returns emptyList()
         
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100)
+        runCurrent()
         
         // WHEN: User selects UK group
         val ukGroup = viewModel.allServerGroups.value.first { it.id == "uk" }
@@ -313,58 +315,59 @@ class RouterViewModelImplTest {
     // ═══════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `observeVpnStatus updates status when service starts`() = runTest {
+    fun `observeVpnStatus updates status when service starts`() = runTest() {
         // GIVEN: ViewModel initialized with service stopped
-        every { VpnEngineService.isRunning() } returns false
         every { mockSettingsRepository.getAllVpnConfigs() } returns flowOf(emptyList())
         every { mockSettingsRepository.getAllAppRules() } returns flowOf(emptyList())
         
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100)
+        runCurrent()
         
         assertThat(viewModel.vpnStatus.value).isEqualTo(VpnStatus.DISCONNECTED)
         
         // WHEN: Service starts
-        every { VpnEngineService.isRunning() } returns true
-        advanceTimeBy(1100)  // Wait for polling interval
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTED)
+        runCurrent()
         
         // THEN: Status is updated to CONNECTED
         assertThat(viewModel.vpnStatus.value).isEqualTo(VpnStatus.CONNECTED)
     }
 
     @Test
-    fun `observeLiveStats tracks connection time`() = runTest {
+    fun `observeLiveStats tracks connection time`() = runTest() {
         // GIVEN: ViewModel initialized with service running
-        every { VpnEngineService.isRunning() } returns true
         every { mockSettingsRepository.getAllVpnConfigs() } returns flowOf(emptyList())
         every { mockSettingsRepository.getAllAppRules() } returns flowOf(emptyList())
         
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(100)
+        runCurrent()
         
-        // WHEN: Time passes
-        advanceTimeBy(1100)  // 1 second
+        // WHEN: Stats update emitted from service
+        VpnServiceStateTracker.updateStats(VpnStats(connectionTimeSeconds = 5, activeConnections = 2))
+        runCurrent()
         
         // THEN: Connection time is tracked
         val stats = viewModel.liveStats.value
-        assertThat(stats.connectionTimeSeconds).isAtLeast(1)
+        assertThat(stats.connectionTimeSeconds).isEqualTo(5)
+        assertThat(stats.activeConnections).isEqualTo(2)
     }
 
     @Test
-    fun `observeLiveStats resets when service stops`() = runTest {
+    fun `observeLiveStats resets when service stops`() = runTest() {
         // GIVEN: ViewModel with service running
-        every { VpnEngineService.isRunning() } returns true
         every { mockSettingsRepository.getAllVpnConfigs() } returns flowOf(emptyList())
         every { mockSettingsRepository.getAllAppRules() } returns flowOf(emptyList())
         
         viewModel = RouterViewModelImpl(mockApplication, mockSettingsRepository)
-        advanceTimeBy(2100)  // Let connection time accumulate
+        runCurrent()
+        VpnServiceStateTracker.updateStats(VpnStats(connectionTimeSeconds = 10, activeConnections = 1))
+        runCurrent()
         
         assertThat(viewModel.liveStats.value.connectionTimeSeconds).isGreaterThan(0)
         
         // WHEN: Service stops
-        every { VpnEngineService.isRunning() } returns false
-        advanceTimeBy(1100)
+        VpnServiceStateTracker.updateStats(VpnStats())
+        runCurrent()
         
         // THEN: Stats are reset
         val stats = viewModel.liveStats.value
@@ -377,7 +380,7 @@ class RouterViewModelImplTest {
     // ═══════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `getRegionDisplayName returns human-readable names`() = runTest {
+    fun `getRegionDisplayName returns human-readable names`() = runTest() {
         // GIVEN: VPN configs with various region codes
         val vpnConfigs = listOf(
             VpnConfig("uk1", "Server 1", "uk", "nordvpn", "uk1.nordvpn.com"),

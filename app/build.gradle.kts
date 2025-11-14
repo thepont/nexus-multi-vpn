@@ -1,8 +1,42 @@
+import org.gradle.api.tasks.testing.Test
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
+    id("jacoco")
+}
+
+val dotenv: Map<String, String> = run {
+    val envFile = rootProject.file(".env")
+    if (envFile.exists()) {
+        envFile.readLines()
+            .mapNotNull { line ->
+                val trimmed = line.trim()
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) return@mapNotNull null
+                val idx = trimmed.indexOf('=')
+                if (idx <= 0) return@mapNotNull null
+                val key = trimmed.substring(0, idx).trim()
+                var value = trimmed.substring(idx + 1).trim()
+                if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+                    value = value.substring(1, value.length - 1)
+                }
+                key to value
+            }
+            .toMap()
+    } else {
+        emptyMap()
+    }
+}
+
+fun envOrDotenv(key: String): String? =
+    System.getenv(key)?.takeIf { it.isNotBlank() } ?: dotenv[key]?.takeIf { it.isNotBlank() }
+
+jacoco {
+    toolVersion = "0.8.11"
 }
 
 android {
@@ -116,8 +150,14 @@ android {
         versionCode = 1
         versionName = "1.0"
         
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.multiregionvpn.HiltTestRunner"
         testInstrumentationRunnerArguments["useTestStorageService"] = "true"
+        envOrDotenv("NORDVPN_USERNAME")?.let { username ->
+            testInstrumentationRunnerArguments["NORDVPN_USERNAME"] = username
+        }
+        envOrDotenv("NORDVPN_PASSWORD")?.let { password ->
+            testInstrumentationRunnerArguments["NORDVPN_PASSWORD"] = password
+        }
         // Allow passing test arguments for E2E tests (e.g., NordVPN credentials)
         // Usage: -Pandroid.testInstrumentationRunnerArguments.NORDVPN_USERNAME='user' -Pandroid.testInstrumentationRunnerArguments.NORDVPN_PASSWORD='pass'
         multiDexEnabled = true
@@ -176,6 +216,18 @@ android {
     
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.4"
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.jvmArgs(
+                "--add-opens=java.base/java.lang=ALL-UNNAMED",
+                "--add-opens=java.base/java.io=ALL-UNNAMED",
+                "--add-opens=java.base/java.util=ALL-UNNAMED",
+                "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+            )
+        }
     }
     
     packaging {
@@ -247,6 +299,7 @@ dependencies {
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation("org.robolectric:robolectric:4.12.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00"))
@@ -255,6 +308,9 @@ dependencies {
     // UI Automator for E2E Testing
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    androidTestUtil(files("${rootDir}/diagnostic-client-uk/build/outputs/apk/debug/diagnostic-client-uk-debug.apk"))
+    androidTestUtil(files("${rootDir}/diagnostic-client-fr/build/outputs/apk/debug/diagnostic-client-fr-debug.apk"))
+    androidTestUtil(files("${rootDir}/diagnostic-client-direct/build/outputs/apk/debug/diagnostic-client-direct-debug.apk"))
     
     // Mocking - Using Mockito for Android tests (more reliable than MockK on Android)
     testImplementation("io.mockk:mockk:1.13.10")
@@ -289,4 +345,66 @@ dependencies {
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+gradle.projectsEvaluated {
+    tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
+        dependsOn(
+            ":diagnostic-client-uk:assembleDebug",
+            ":diagnostic-client-fr:assembleDebug",
+            ":diagnostic-client-direct:assembleDebug"
+        )
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    extensions.configure(JacocoTaskExtension::class) {
+        isIncludeNoLocationClasses = true
+        excludes = listOf("jdk.internal.*")
+    }
+}
+
+tasks.register<JacocoReport>("jacocoDebugUnitTestReport") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "Generates Jacoco coverage report for debug unit tests."
+
+    val fileFilter = listOf(
+        "**/R.class",
+        "**/R$*.class",
+        "**/BuildConfig.*",
+        "**/Manifest*.*",
+        "**/*\$Companion.class",
+        "**/*\$inlined$*.*",
+        "**/*Test*.*",
+        "**/Hilt_*",
+        "**/*_Factory.*",
+        "**/*_MembersInjector.*",
+        "**/*_HiltModules_*",
+        "android/**/*"
+    )
+
+    val mergedClassesTree = fileTree("${buildDir}/intermediates/classes/debug") {
+        exclude(fileFilter)
+    }
+
+    classDirectories.setFrom(files(mergedClassesTree))
+    sourceDirectories.setFrom(files("src/main/java", "src/main/kotlin"))
+    executionData.setFrom(
+        fileTree(buildDir) {
+            include(
+                "jacoco/testDebugUnitTest.exec",
+                "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
+                "outputs/unit_test_code_coverage/testDebugUnitTest/testDebugUnitTest.exec"
+            )
+        }
+    )
+
+    reports {
+        xml.required.set(true)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/jacocoDebugUnitTestReport.xml"))
+        html.required.set(true)
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/jacocoDebugUnitTestReportHtml"))
+        csv.required.set(false)
+    }
 }

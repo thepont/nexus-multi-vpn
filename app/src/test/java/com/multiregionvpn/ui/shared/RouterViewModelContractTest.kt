@@ -27,6 +27,7 @@ class RouterViewModelContractTest {
         override val vpnStatus = MutableStateFlow(VpnStatus.DISCONNECTED)
         override val allServerGroups = MutableStateFlow<List<ServerGroup>>(emptyList())
         override val allAppRules = MutableStateFlow<List<AppRule>>(emptyList())
+        override val allInstalledApps = MutableStateFlow<List<AppRule>>(emptyList())
         override val selectedServerGroup = MutableStateFlow<ServerGroup?>(null)
         override val liveStats = MutableStateFlow(VpnStats())
         
@@ -90,6 +91,14 @@ class RouterViewModelContractTest {
         // THEN: Should have allAppRules StateFlow
         assertNotNull(mockViewModel.allAppRules, "allAppRules should not be null")
         assertEquals(emptyList(), mockViewModel.allAppRules.value)
+    }
+    
+    @Test
+    fun `RouterViewModel should expose allInstalledApps StateFlow`() {
+        // GIVEN: RouterViewModel implementation
+        // THEN: Should have allInstalledApps StateFlow
+        assertNotNull(mockViewModel.allInstalledApps, "allInstalledApps should not be null")
+        assertEquals(emptyList(), mockViewModel.allInstalledApps.value)
     }
     
     @Test

@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.common.truth.Truth.assertThat
 import com.multiregionvpn.MainCoroutineRule
 import com.multiregionvpn.data.database.AppRule
@@ -15,6 +16,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
@@ -34,23 +37,34 @@ class SettingsViewModelTest {
     private lateinit var nordVpnApiService: NordVpnApiService
     private lateinit var application: Application
     private lateinit var packageManager: PackageManager
+    private lateinit var localBroadcastManager: LocalBroadcastManager
 
     // The class we are testing
     private lateinit var viewModel: SettingsViewModel
 
     @Before
     fun setup() {
-        settingsRepo = mockk()
-        nordVpnApiService = mockk()
-        application = mockk()
-        packageManager = mockk()
+        settingsRepo = mockk(relaxed = true)
+        nordVpnApiService = mockk(relaxed = true)
+        application = mockk(relaxed = true)
+        packageManager = mockk(relaxed = true)
+        localBroadcastManager = mockk(relaxed = true)
+        
+        mockkStatic(LocalBroadcastManager::class)
         
         // Mock the application context and package manager
         every { application.packageManager } returns packageManager
         every { application.applicationContext } returns application
+        every { application.packageName } returns "com.multiregionvpn"
+        every { LocalBroadcastManager.getInstance(application) } returns localBroadcastManager
         
         // Mock the return of getInstalledApplications (empty list by default)
         every { packageManager.getInstalledApplications(PackageManager.GET_META_DATA) } returns emptyList()
+    }
+    
+    @org.junit.After
+    fun tearDown() {
+        unmockkStatic(LocalBroadcastManager::class)
     }
     
     private fun createViewModel() {

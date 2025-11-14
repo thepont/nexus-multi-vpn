@@ -9,3 +9,9 @@ plugins {
 tasks.register("clean", Delete::class) {
     delete(rootProject.layout.buildDirectory)
 }
+
+tasks.register("jacocoAggregatedReport") {
+    group = "verification"
+    description = "Runs Jacoco unit test coverage report for all modules."
+    dependsOn(":app:jacocoDebugUnitTestReport")
+}

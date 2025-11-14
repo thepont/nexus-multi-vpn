@@ -16,29 +16,37 @@ import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.util.Log
-import com.multiregionvpn.ui.MainActivity
+import androidx.annotation.VisibleForTesting
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.data.database.AppDatabase
+import com.multiregionvpn.data.database.AppRule
+import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
+import com.multiregionvpn.ui.MainActivity
+import com.multiregionvpn.ui.shared.VpnStats
+import com.multiregionvpn.ui.shared.VpnStatus
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.net.InetAddress
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.first
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 /**
  * Foreground Service that extends VpnService.
  * Routes all device traffic and manages packet routing.
  */
 @AndroidEntryPoint
-class VpnEngineService : VpnService() {
+open class VpnEngineService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     
@@ -52,6 +60,12 @@ class VpnEngineService : VpnService() {
     private var connectionTracker: ConnectionTracker? = null
     private var vpnOutput: FileOutputStream? = null
     private val activeTunnels = mutableSetOf<String>() // Track tunnel IDs to avoid duplicates
+    private var statsJob: Job? = null
+    private var connectionStartTime: Long? = null
+    private var connectionManager: VpnConnectionManager? = null
+    private var readyTunnelIds: Set<String> = emptySet()
+    private var hasEverHadReadyTunnel = false
+    private var tunReaderJob: Job? = null
     
     // Multi-IP support: Track tunnel IP addresses per tunnel and subnet
     data class TunnelIpAddress(
@@ -66,9 +80,17 @@ class VpnEngineService : VpnService() {
         val dnsServers: List<String>  // DNS server IP addresses from OpenVPN DHCP
     )
     
+    data class RouteSubnet(
+        val address: String,
+        val prefixLength: Int,
+        val isIpv6: Boolean
+    )
+    
     private val tunnelIps = mutableMapOf<String, TunnelIpAddress>()  // tunnelId -> IP address
     private val tunnelDnsServers = mutableMapOf<String, TunnelDnsServers>()  // tunnelId -> DNS servers
+    private val tunnelRoutes = mutableMapOf<String, MutableList<RouteSubnet>>() // tunnelId -> pushed routes
     private val subnetToPrimaryTunnel = mutableMapOf<String, String>()  // subnet -> primary tunnelId
+    private val tunnelTemplateIds = mutableMapOf<String, String>() // tunnelId -> templateId
     private var shouldReestablishInterface = false  // Flag to trigger interface re-establishment
     private var currentAllowedPackages = emptySet<String>()  // Track current allowed apps for split tunneling
     
@@ -92,7 +114,306 @@ class VpnEngineService : VpnService() {
         // Register network change listener to detect Wi-Fi <-> 4G switches
         registerNetworkCallback()
     }
+
+    private fun configureConnectionManager() {
+        if (connectionManager != null) {
+            return
+        }
+        connectionManager = try {
+            VpnConnectionManager.getInstance()
+        } catch (e: IllegalStateException) {
+            VpnConnectionManager.initialize(this, this)
+        }
+        val manager = connectionManager ?: return
+
+        manager.setTunnelIpCallback { tunnelId, ip, prefixLength ->
+            onTunnelIpReceived(tunnelId, ip, prefixLength)
+        }
+
+        manager.setTunnelDnsCallback { tunnelId, dnsServers ->
+            onTunnelDnsReceived(tunnelId, dnsServers)
+        }
+
+        manager.setTunnelRouteCallback { tunnelId, address, prefixLength, isIpv6 ->
+            onTunnelRouteReceived(tunnelId, address, prefixLength, isIpv6)
+        }
+
+        manager.setConnectionStateListener { hasConnecting ->
+            handleConnectionStateChange(hasConnecting)
+        }
+
+        manager.setTunnelReadinessListener { readyIds ->
+            handleTunnelReadinessChange(readyIds)
+        }
+    }
+
+    private fun handleConnectionStateChange(hasConnecting: Boolean) {
+        val newPauseState = hasConnecting
+        if (newPauseState != shouldPauseTunReading) {
+            val oldPauseState = shouldPauseTunReading
+            shouldPauseTunReading = newPauseState
+
+            if (newPauseState) {
+                // Connections are connecting - pause TUN reading
+                Log.i(TAG, "⏸️  Stopping TUN reading (exclusive access for OpenVPN 3 TLS handshake)")
+                Log.i(TAG, "   OpenVPN 3 now has exclusive TUN FD access for connection")
+            } else {
+                // All connections are established - resume TUN reading
+                Log.i(TAG, "✅ OpenVPN 3 connections established - RESUMING TUN reading (socket pair architecture)")
+                Log.i(TAG, "   Changed from paused=$oldPauseState to paused=$newPauseState")
+                Log.i(TAG, "   OpenVPN 3 reads from socket pairs, not TUN - no conflict")
+                Log.i(TAG, "   We read from TUN and route to socket pairs via sendPacketToTunnel()")
+            }
+        }
+    }
+
+    private fun startTunReader(reason: String) {
+        if (vpnInterface == null) {
+            Log.w(TAG, "⚠️  Cannot start TUN reader (reason=$reason) - vpnInterface is null")
+            return
+        }
+
+        val existingJob = tunReaderJob
+        if (existingJob?.isActive == true) {
+            Log.i(TAG, "ℹ️  TUN reader already active (reason=$reason)")
+            return
+        }
+
+        if (existingJob != null && !existingJob.isCancelled && !existingJob.isCompleted) {
+            Log.w(TAG, "⚠️  Cancelling stale TUN reader job before restart (reason=$reason)")
+            existingJob.cancel()
+        }
+
+        Log.i(TAG, "▶️  Starting TUN reader (reason=$reason)")
+        val job = serviceScope.launch {
+            Log.i(TAG, "🟢 TUN reader coroutine launched (reason=$reason)")
+            try {
+                readPacketsFromTun()
+            } catch (ce: CancellationException) {
+                Log.i(TAG, "🛑 TUN reader coroutine cancelled (reason=$reason, message=${ce.message})")
+                throw ce
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ TUN reader coroutine failed (reason=$reason)", e)
+                throw e
+            } finally {
+                Log.i(TAG, "🔚 TUN reader coroutine finished (reason=$reason)")
+            }
+        }
+        job.invokeOnCompletion { throwable ->
+            Log.i(
+                TAG,
+                "📘 TUN reader completion (reason=$reason, " +
+                    "status=${throwable?.javaClass?.simpleName ?: "success"})"
+            )
+            if (tunReaderJob == job) {
+                tunReaderJob = null
+            }
+        }
+        tunReaderJob = job
+    }
+
+    @VisibleForTesting
+    internal fun handleTunnelReadinessChange(readyIds: Set<String>) {
+        serviceScope.launch {
+            readyTunnelIds = readyIds
+            if (readyIds.isNotEmpty()) {
+                hasEverHadReadyTunnel = true
+                VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTED)
+            } else {
+                VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTING)
+                if (hasEverHadReadyTunnel) {
+                    Log.w(TAG, "🚨 All tunnels lost - shutting down VPN interface to avoid zombie state")
+                    hasEverHadReadyTunnel = false
+                    onAllTunnelsLost()
+                }
+            }
+        }
+    }
+
+    protected open fun onAllTunnelsLost() {
+        stopVpn()
+    }
     
+    private fun registerPackageForRouting(packageName: String, vpnConfigId: String) {
+        kotlinx.coroutines.runBlocking {
+            registerPackageForRoutingInternal(packageName, vpnConfigId)
+        }
+    }
+
+    private suspend fun registerPackageForRoutingInternal(
+        packageName: String,
+        vpnConfigId: String
+    ): Boolean {
+        Log.w(TAG, "VPN[register:start] package=$packageName config=$vpnConfigId trackerReady=${connectionTracker != null}")
+        if (connectionTracker == null) {
+            Log.d(TAG, "ConnectionTracker not ready when registering $packageName, waiting...")
+        }
+        return try {
+            var attempts = 0
+            while (connectionTracker == null && attempts < 50) {
+                delay(100)
+                attempts++
+            }
+            val tracker = connectionTracker
+            if (tracker == null) {
+                Log.w(TAG, "ConnectionTracker still null after waiting when registering $packageName")
+                Log.w(TAG, "VPN[register:fail] package=$packageName reason=tracker-null")
+                return false
+            }
+            val vpnConfig = settingsRepository.getVpnConfigById(vpnConfigId)
+            if (vpnConfig == null) {
+                Log.w(TAG, "Cannot register $packageName - VPN config $vpnConfigId not found")
+                Log.w(TAG, "VPN[register:fail] package=$packageName reason=config-missing id=$vpnConfigId")
+                return false
+            }
+            val tunnelId = "${vpnConfig.templateId}_${vpnConfig.regionId}"
+            val registered = tracker.setPackageToTunnel(packageName, tunnelId)
+            Log.w(TAG, "VPN[register] package=$packageName uid=${tracker.getUidForPackage(packageName)} tunnel=$tunnelId registered=$registered")
+            if (registered) {
+                Log.i(TAG, "🔁 Updated routing: $packageName → $tunnelId")
+            } else {
+                Log.w(TAG, "⚠️  Failed to register package $packageName for tunnel $tunnelId (package missing?)")
+            }
+            registered
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering package $packageName", e)
+            false
+        }
+    }
+
+    private fun removePackageRouting(packageName: String) {
+        serviceScope.launch {
+            try {
+                if (connectionTracker == null) {
+                    Log.d(TAG, "ConnectionTracker not ready when clearing $packageName, skipping")
+                    return@launch
+                }
+                connectionTracker?.clearPackage(packageName)
+                Log.i(TAG, "🧹 Cleared routing for $packageName")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear routing for $packageName", e)
+            }
+        }
+    }
+
+    private fun clearAllPackageRoutings() {
+        serviceScope.launch {
+            try {
+                if (connectionTracker == null) {
+                    Log.d(TAG, "ConnectionTracker not ready when clearing all mappings, skipping")
+                    return@launch
+                }
+                connectionTracker?.clearAllMappings()
+                tunnelRoutes.clear()
+                restoreTunnelIpMappings()
+                Log.i(TAG, "🧹 Cleared all package routings")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear all package routings", e)
+            }
+        }
+    }
+
+    private fun restoreTunnelIpMappings() {
+        val tracker = connectionTracker ?: return
+        tunnelIps.forEach { (tunnelId, ipInfo) ->
+            try {
+                val inetAddress = InetAddress.getByName(ipInfo.ip)
+                tracker.setTunnelForIp(inetAddress, tunnelId)
+                Log.v(TAG, "🔁 Restored IP→tunnel mapping ${ipInfo.ip} → $tunnelId")
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️  Unable to restore IP mapping for ${ipInfo.ip} on $tunnelId: ${e.message}")
+            }
+        }
+        restoreTunnelRouteMappings()
+    }
+
+    private fun restoreTunnelRouteMappings() {
+        val tracker = connectionTracker ?: return
+        tunnelRoutes.forEach { (tunnelId, routes) ->
+            routes.forEach { route ->
+                try {
+                    val inetAddress = InetAddress.getByName(route.address)
+                    tracker.addRouteForTunnel(tunnelId, inetAddress, route.prefixLength)
+                    Log.v(TAG, "🔁 Restored route ${route.address}/${route.prefixLength} → $tunnelId")
+                } catch (e: Exception) {
+                    Log.w(TAG, "⚠️  Unable to restore route ${route.address}/${route.prefixLength} for $tunnelId: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun ensureLocalTestRoutes(tunnelId: String) {
+        val templateId = tunnelTemplateIds[tunnelId]
+        Log.i(
+            TAG,
+            "ensureLocalTestRoutes: tunnelId=$tunnelId templateId=$templateId trackerNull=${connectionTracker == null} mapKeys=${tunnelTemplateIds.keys}"
+        )
+        if (templateId != "local-test") return
+        if (connectionTracker == null) {
+            Log.w(TAG, "Local-test route setup skipped: connectionTracker null for $tunnelId")
+            return
+        }
+        applyLocalTestRoutesIfNeeded(tunnelId)
+    }
+
+    private fun applyLocalTestRoutesIfNeeded(tunnelId: String) {
+        val templateId = tunnelTemplateIds[tunnelId]
+        Log.i(
+            TAG,
+            "applyLocalTestRoutesIfNeeded: tunnelId=$tunnelId templateId=$templateId knownTemplates=${tunnelTemplateIds.toMap()}"
+        )
+        if (templateId != "local-test") return
+
+        val routes = when {
+            tunnelId.endsWith("UK") -> listOf("198.18.1.0" to 24)
+            tunnelId.endsWith("FR") -> listOf("198.18.2.0" to 24)
+            else -> emptyList()
+        }
+        if (routes.isEmpty()) return
+
+        val tracker = connectionTracker ?: return
+        val routeList = tunnelRoutes.getOrPut(tunnelId) { mutableListOf() }
+
+        routes.forEach { (address, prefix) ->
+            try {
+                val inetAddress = InetAddress.getByName(address)
+                tracker.addRouteForTunnel(tunnelId, inetAddress, prefix)
+                if (routeList.none { it.address == address && it.prefixLength == prefix && !it.isIpv6 }) {
+                    routeList.add(RouteSubnet(address, prefix, false))
+                }
+                Log.i(TAG, "   🧭 Applied local-test route $address/$prefix to $tunnelId")
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️  Unable to apply local-test route $address/$prefix to $tunnelId: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun restorePackageTunnelMappings(appRules: List<AppRule>) {
+        val tracker = connectionTracker ?: run {
+            Log.w(TAG, "⚠️  ConnectionTracker unavailable when restoring package mappings")
+            return
+        }
+        Log.i(TAG, "♻️ Restoring package→tunnel mappings for ${appRules.size} app rule(s)")
+        appRules.forEach { rule ->
+            val vpnConfigId = rule.vpnConfigId ?: return@forEach
+            val vpnConfig = try {
+                settingsRepository.getVpnConfigById(vpnConfigId)
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️  Unable to fetch VPN config $vpnConfigId for ${rule.packageName}: ${e.message}")
+                null
+            } ?: return@forEach
+
+            val tunnelId = "${vpnConfig.templateId}_${vpnConfig.regionId}"
+            val uid = tracker.registerPackage(rule.packageName)
+            if (uid != null) {
+                tracker.setUidToTunnel(uid, tunnelId)
+                Log.i(TAG, "🔁 Restored package mapping ${rule.packageName} (uid=$uid) → $tunnelId")
+            } else {
+                Log.w(TAG, "⚠️  Unable to restore package mapping for ${rule.packageName} (UID lookup failed)")
+            }
+        }
+    }
+
     private fun initializePacketRouter() {
         // Initialize VpnConnectionManager with Context and VpnService for real OpenVPN clients
         val connectionManager = VpnConnectionManager.initialize(this, this)
@@ -201,7 +522,9 @@ class VpnEngineService : VpnService() {
         }
         
         // Create connection tracker for UID detection (alternative to /proc/net)
-        connectionTracker = ConnectionTracker(this, packageManager)
+        if (connectionTracker == null) {
+            connectionTracker = ConnectionTracker(this, packageManager)
+        }
         
         // CRITICAL: Register all packages with app rules so ConnectionTracker knows about them
         // In Global VPN mode, we don't use addAllowedApplication(), so ConnectionTracker
@@ -211,18 +534,9 @@ class VpnEngineService : VpnService() {
                 val appRules = settingsRepository.getAllAppRules().first()
                 Log.i(TAG, "📝 Registering ${appRules.size} packages with ConnectionTracker for VPN routing")
                 appRules.forEach { appRule ->
-                    if (appRule.vpnConfigId != null) {
-                        // Register package with ConnectionTracker so it knows to track this app
-                        val vpnConfig = settingsRepository.getVpnConfigById(appRule.vpnConfigId!!)
-                        if (vpnConfig != null) {
-                            val tunnelId = "${vpnConfig.templateId}_${vpnConfig.regionId}"
-                            val registered = connectionTracker?.setPackageToTunnel(appRule.packageName, tunnelId)
-                            if (registered == true) {
-                                Log.d(TAG, "   ✅ Registered ${appRule.packageName} → tunnel $tunnelId")
-                            } else {
-                                Log.w(TAG, "   ⚠️  Failed to register ${appRule.packageName} (not installed?)")
-                            }
-                        }
+                    val vpnConfigId = appRule.vpnConfigId
+                    if (vpnConfigId != null) {
+                        registerPackageForRouting(appRule.packageName, vpnConfigId)
                     }
                 }
                 Log.i(TAG, "✅ Package registration complete - ConnectionTracker ready for routing")
@@ -231,6 +545,7 @@ class VpnEngineService : VpnService() {
             }
         }
         
+        PacketRouter.resetDebugCounters()
         packetRouter = PacketRouter(
             this,
             settingsRepository,
@@ -277,8 +592,13 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "🚀 startVpn() called")
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTING)
+        configureConnectionManager()
+        
         if (vpnInterface != null) {
             Log.w(TAG, "VPN already started")
+            VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTED)
+            startStatsUpdates()
             return
         }
         
@@ -311,6 +631,7 @@ class VpnEngineService : VpnService() {
             appRules.forEach { rule ->
                 Log.i(TAG, "   📱 ${rule.packageName} → ${rule.vpnConfigId ?: "Direct Internet"}")
             }
+            Log.e(TAG, "VPN DEBUG: startVpn collected ${appRules.size} app rule(s)")
             
             // Get unique package names that have VPN rules
             val packagesWithRules = appRules
@@ -331,6 +652,8 @@ class VpnEngineService : VpnService() {
                     manageTunnels(emptyMap())
                 }
                 Log.i(TAG, "✅ VPN service started (interface will be established when rules are added)")
+                VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
+                stopStatsUpdates()
                 return
             }
             
@@ -345,12 +668,14 @@ class VpnEngineService : VpnService() {
                 .distinct()
             
             val configsPrepared = mutableMapOf<String, PreparedVpnConfig>()
+            val vpnConfigById = mutableMapOf<String, VpnConfig>()
             for (vpnConfigId in activeVpnConfigIds) {
                 try {
                     val vpnConfig = kotlinx.coroutines.runBlocking {
                         settingsRepository.getVpnConfigById(vpnConfigId)
                     }
                     if (vpnConfig != null) {
+                        vpnConfigById[vpnConfigId] = vpnConfig
                         Log.d(TAG, "Pre-fetching config for ${vpnConfig.name}...")
                         val preparedConfig = try {
                             kotlinx.coroutines.runBlocking {
@@ -373,6 +698,22 @@ class VpnEngineService : VpnService() {
             
             // Establish VPN interface with split tunneling (only for apps with rules)
             establishVpnInterface(packagesWithRules)
+            
+            // Bootstrap ConnectionTracker mappings for all rules immediately
+            val trackerInstance = connectionTracker ?: ConnectionTracker(this, packageManager).also {
+                connectionTracker = it
+            }
+            appRules.forEach { rule ->
+                val vpnConfigId = rule.vpnConfigId ?: return@forEach
+                val vpnConfig = vpnConfigById[vpnConfigId] ?: kotlinx.coroutines.runBlocking {
+                    settingsRepository.getVpnConfigById(vpnConfigId)
+                } ?: return@forEach
+                val tunnelId = "${vpnConfig.templateId}_${vpnConfig.regionId}"
+                tunnelTemplateIds[tunnelId] = vpnConfig.templateId
+                val registered = trackerInstance.setPackageToTunnel(rule.packageName, tunnelId)
+                Log.w(TAG, "VPN[bootstrap] package=${rule.packageName} tunnel=$tunnelId registered=$registered")
+                ensureLocalTestRoutes(tunnelId)
+            }
             
             if (vpnInterface == null) {
                 Log.e(TAG, "Failed to establish VPN interface even though rules exist")
@@ -405,9 +746,7 @@ class VpnEngineService : VpnService() {
             // (different apps → different VPN connections)
             // This may create race conditions with OpenVPN 3, but is necessary
             // for the multi-tunnel architecture to work.
-            serviceScope.launch {
-                readPacketsFromTun()
-            }
+            startTunReader("startVpn-initial")
             
             // Start tunnel management - monitors app rules and creates tunnels
             // Pass pre-fetched configs to avoid DNS issues
@@ -428,10 +767,9 @@ class VpnEngineService : VpnService() {
      * If packagesWithRules is empty, the interface is NOT established (proper split tunneling).
      */
     private fun establishVpnInterface(packagesWithRules: List<String>) {
-        // TEMPORARY: Use global VPN mode to fix test failures
-        // Test packages bypass split tunneling due to Android framework limitation
-        // All traffic enters VPN, PacketRouter handles per-app routing
-        val useGlobalMode = true  // TODO: Set to false once we can test with production apps
+        // We now rely on Android's per-package split tunnelling instead of forcing global mode.
+        // Only packages with explicit rules are routed through the VPN; everything else stays direct.
+        val useGlobalMode = false
         
         if (packagesWithRules.isEmpty() && !useGlobalMode) {
             Log.w(TAG, "⚠️  No app rules found - NOT establishing VPN interface")
@@ -450,12 +788,12 @@ class VpnEngineService : VpnService() {
             Log.i(TAG, "   PacketRouter handles per-app routing to correct tunnels")
         }
         
-        Log.d(TAG, "Creating VPN interface builder...")
-        Log.d(TAG, "Packages with VPN rules: $packagesWithRules")
+        Log.i(TAG, "Creating VPN interface builder...")
+        Log.i(TAG, "Packages with VPN rules: $packagesWithRules")
         
         val builder = Builder()
         builder.setSession("MultiRegionVPN")
-        
+
         // TODO: Use IP address from OpenVPN DHCP instead of hardcoding
         // Currently, we establish VPN interface BEFORE OpenVPN connects, so we don't know
         // what IP address OpenVPN will assign via PUSH_REPLY (ifconfig-push).
@@ -535,45 +873,36 @@ class VpnEngineService : VpnService() {
         // Set DNS servers for VPN (only used by allowed apps)
         // Use DNS servers from OpenVPN DHCP options (received via tun_builder_set_dns_options())
         // For multi-tunnel setup, use DNS servers from primary tunnels
-        val dnsServersToUse = mutableSetOf<String>()
-        
+        val dnsServersToUse = linkedSetOf<String>()
+
         // Collect DNS servers from all tunnels (not just primary) - we want all available DNS servers
         // This ensures DNS resolution works even if some tunnels haven't connected yet
         tunnelDnsServers.values.forEach { tunnelDns ->
             tunnelDns.dnsServers.forEach { dnsServer ->
-                dnsServersToUse.add(dnsServer)
+                if (dnsServersToUse.add(dnsServer)) {
+                    Log.d(TAG, "✅ Added DNS server from tunnel ${tunnelDns.tunnelId}: $dnsServer")
+                }
             }
-            Log.d(TAG, "✅ Added DNS servers from tunnel ${tunnelDns.tunnelId}: ${tunnelDns.dnsServers.joinToString(", ")}")
+        }
+
+        if (dnsServersToUse.isEmpty()) {
+            Log.w(TAG, "⚠️  No DNS servers available yet - using fallback DNS servers: ${DEFAULT_FALLBACK_DNS_SERVERS.joinToString(", ")}")
+            DEFAULT_FALLBACK_DNS_SERVERS.forEach { fallback ->
+                if (dnsServersToUse.add(fallback)) {
+                    Log.i(TAG, "   ✅ Added fallback DNS server: $fallback")
+                }
+            }
         }
         
         // CRITICAL: Android's VpnService requires DNS servers to be set for DNS queries
         // to go through the VPN interface. If no DNS servers are set, Android will use
         // system DNS which bypasses the VPN interface entirely.
-        if (dnsServersToUse.isNotEmpty()) {
-            dnsServersToUse.forEach { dnsServer ->
-                builder.addDnsServer(dnsServer)
-                Log.d(TAG, "   ➕ Added DNS server: $dnsServer")
-            }
-            Log.i(TAG, "✅✅✅ DNS servers configured for VPN interface: ${dnsServersToUse.joinToString(", ")} (from OpenVPN DHCP)")
-            Log.i(TAG, "   This ensures DNS queries from allowed apps go through VPN interface")
-        } else {
-            // CRITICAL: Without DNS servers, Android will NOT route DNS queries through VPN
-            // This causes DNS queries to bypass VPN entirely, even if route 0.0.0.0/0 is set.
-            // 
-            // THE FUNKY ISSUE: If VPN interface is established without DNS servers, Android
-            // might cache the decision to bypass VPN for DNS, and even after re-establishment
-            // with DNS servers, DNS queries might still bypass VPN.
-            //
-            // SOLUTION: Use a temporary fallback DNS server (8.8.8.8) when interface is first
-            // established. This ensures DNS queries go through VPN interface from the start.
-            // The interface will be re-established with proper VPN DNS servers when available.
-            val fallbackDns = "8.8.8.8"  // Google DNS as fallback
-            builder.addDnsServer(fallbackDns)
-            Log.w(TAG, "⚠️  No DNS servers available yet - using fallback DNS server: $fallbackDns")
-            Log.w(TAG, "   This ensures DNS queries go through VPN interface from the start")
-            Log.w(TAG, "   VPN DNS servers will replace this when interface is re-established")
-            Log.i(TAG, "   ✅ Added fallback DNS server: $fallbackDns")
+        dnsServersToUse.forEach { dnsServer ->
+            builder.addDnsServer(dnsServer)
+            Log.d(TAG, "   ➕ Added DNS server: $dnsServer")
         }
+        Log.i(TAG, "✅✅✅ DNS servers configured for VPN interface: ${dnsServersToUse.joinToString(", ")}")
+        Log.i(TAG, "   This ensures DNS queries from allowed apps go through VPN interface")
         
         builder.setMtu(1500)
         
@@ -607,13 +936,19 @@ class VpnEngineService : VpnService() {
                 Log.e(TAG, "  2. Another VPN is already active")
                 Log.e(TAG, "  3. System resources unavailable")
                 Log.e(TAG, "  4. VpnService.prepare() was not called or user denied permission")
+                VpnServiceStateTracker.updateStatus(VpnStatus.ERROR)
+                stopStatsUpdates()
                 return
             }
             Log.i(TAG, "✅ VPN interface established successfully")
             Log.d(TAG, "VPN interface ParcelFileDescriptor: ${if (vpnInterface != null) "valid" else "null"}")
+            VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTED)
+            startStatsUpdates()
         } catch (e: Exception) {
             Log.e(TAG, "❌ Exception while establishing VPN interface: ${e.message}")
             Log.e(TAG, "Stack trace:", e)
+            VpnServiceStateTracker.updateStatus(VpnStatus.ERROR)
+            stopStatsUpdates()
             return
         }
         
@@ -638,6 +973,9 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "🛑 SHUTDOWN: Graceful VPN shutdown initiated...")
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
+        VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
+        stopStatsUpdates()
+        
         try {
             // STEP 1: Tell C++ to stop all tunnels and clean up
             // This stops it from reading/writing to the FD
@@ -654,7 +992,10 @@ class VpnEngineService : VpnService() {
                     }
                 }
                 activeTunnels.clear()
+                updateActiveConnectionCount()
                 connectionTracker?.clearAllMappings()
+                tunnelRoutes.clear()
+                tunnelTemplateIds.clear()
                 Log.i(TAG, "   ✅ Connection tracker cleared")
             } catch (e: Exception) {
                 Log.e(TAG, "   ❌ Error closing tunnels (continuing with shutdown)", e)
@@ -813,6 +1154,8 @@ class VpnEngineService : VpnService() {
         // Unregister network callback
         unregisterNetworkCallback()
         
+        stopStatsUpdates()
+        VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
         connectionTracker?.clearAllMappings()
         runningInstance = null
         super.onDestroy()
@@ -948,6 +1291,7 @@ class VpnEngineService : VpnService() {
         // Collect all app rules and monitor changes
         Log.i(TAG, "🔄 Starting to collect app rules via Flow...")
         Log.i(TAG, "   Flow should emit whenever app_rules table changes")
+        Log.w(TAG, "VPN[manage] collecting app rules flow...")
         settingsRepository.getAllAppRules().collect { appRules ->
             Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             Log.i(TAG, "🔔 FLOW EMISSION: App rules collected: ${appRules.size} rules found")
@@ -955,7 +1299,17 @@ class VpnEngineService : VpnService() {
                 Log.i(TAG, "   📱 ${rule.packageName} → ${rule.vpnConfigId ?: "Direct"}")
             }
             Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            connectionTracker?.clearAllMappings()
+            connectionTracker?.clearTransientMappings()
+            restoreTunnelIpMappings()
+            restorePackageTunnelMappings(appRules)
+            for (rule in appRules) {
+                val vpnConfigId = rule.vpnConfigId ?: continue
+                val registered = registerPackageForRoutingInternal(rule.packageName, vpnConfigId)
+                println("VPN[manage] rule ${rule.packageName} -> ${rule.vpnConfigId} registered=$registered")
+            }
+            val snapshot = connectionTracker?.getCurrentPackageMappings() ?: emptyMap()
+            Log.i(TAG, "📊 ConnectionTracker mappings after refresh: $snapshot")
+            println("VPN[snapshot] $snapshot")
             
             // Get packages with VPN rules
             val packagesWithRules = appRules
@@ -985,7 +1339,7 @@ class VpnEngineService : VpnService() {
                         if (vpnInterface != null) {
                             vpnOutput = FileOutputStream(vpnInterface!!.fileDescriptor)
                             initializePacketRouter()
-                            serviceScope.launch { readPacketsFromTun() }
+                            startTunReader("allowed-apps-updated")
                             currentAllowedPackages = packagesWithRules
                             Log.i(TAG, "✅ VPN interface restarted with updated allowed apps")
                         }
@@ -1022,6 +1376,8 @@ class VpnEngineService : VpnService() {
                     // Re-initialize packet router (will handle null interface)
                     initializePacketRouter()
                     Log.i(TAG, "✅ VPN interface closed (no apps need VPN routing)")
+                    stopStatsUpdates()
+                    VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error closing VPN interface", e)
                 }
@@ -1038,10 +1394,7 @@ class VpnEngineService : VpnService() {
                         // Interface was established - set up streams and router
                         vpnOutput = FileOutputStream(vpnInterface!!.fileDescriptor)
                         initializePacketRouter()
-                        // Start reading packets now that interface is established
-                        serviceScope.launch {
-                            readPacketsFromTun()
-                        }
+                        startTunReader("interface-established-flow")
                         Log.i(TAG, "✅ VPN interface established and packet reading started")
                     }
                 } catch (e: Exception) {
@@ -1097,6 +1450,8 @@ class VpnEngineService : VpnService() {
                     }
                     
                     Log.d(TAG, "Found VPN config: ${vpnConfig.name} (${vpnConfig.serverHostname})")
+                    tunnelTemplateIds[tunnelId] = vpnConfig.templateId
+                    ensureLocalTestRoutes(tunnelId)
                     
                     // Prepare config using VpnTemplateService
                     // Use pre-fetched config if available (to avoid DNS issues)
@@ -1149,6 +1504,7 @@ class VpnEngineService : VpnService() {
                     
                     if (result.success) {
                         activeTunnels.add(tunnelId)
+                        updateActiveConnectionCount()
                         Log.i(TAG, "✅ Successfully created tunnel $tunnelId for VPN config ${vpnConfig.name}")
                     } else {
                         // Broadcast error to UI
@@ -1171,6 +1527,9 @@ class VpnEngineService : VpnService() {
                     Log.d(TAG, "Closing unused tunnel $tunnelId")
                     connectionManager.closeTunnel(tunnelId)
                     activeTunnels.remove(tunnelId)
+                    connectionTracker?.removeRoutesForTunnel(tunnelId)
+                    tunnelRoutes.remove(tunnelId)
+                    updateActiveConnectionCount()
                     Log.d(TAG, "Closed unused tunnel $tunnelId")
                 }
             } catch (e: Exception) {
@@ -1285,6 +1644,25 @@ class VpnEngineService : VpnService() {
             Log.d(TAG, "VPN interface not yet established - DNS servers will be used when interface is created")
         }
     }
+
+    private fun onTunnelRouteReceived(tunnelId: String, address: String, prefixLength: Int, isIpv6: Boolean) {
+        if (isIpv6) {
+            Log.w(TAG, "⚠️  Received IPv6 route $address/$prefixLength for $tunnelId - IPv6 routing not yet supported")
+            return
+        }
+
+        try {
+            val inetAddress = InetAddress.getByName(address)
+            connectionTracker?.addRouteForTunnel(tunnelId, inetAddress, prefixLength)
+            val routes = tunnelRoutes.getOrPut(tunnelId) { mutableListOf() }
+            if (routes.none { it.address == address && it.prefixLength == prefixLength && it.isIpv6 == isIpv6 }) {
+                routes.add(RouteSubnet(address, prefixLength, isIpv6))
+            }
+            Log.i(TAG, "   Mapped tunnel route $address/$prefixLength to tunnel $tunnelId")
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to process route $address/$prefixLength for $tunnelId: ${e.message}")
+        }
+    }
     
     /**
      * Called when a tunnel receives its IP address from OpenVPN DHCP.
@@ -1321,6 +1699,14 @@ class VpnEngineService : VpnService() {
             Log.d(TAG, "   TUN reading already active (shouldPauseTunReading=false)")
         }
         
+        try {
+            val inetAddress = InetAddress.getByName(ip)
+            connectionTracker?.setTunnelForIp(inetAddress, tunnelId)
+            Log.i(TAG, "   Mapped tunnel IP ${inetAddress.hostAddress} to tunnel $tunnelId")
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to register tunnel IP mapping for $ip on $tunnelId: ${e.message}")
+        }
+        
         // DOUBLE-CHECK: After a short delay, verify TUN reading is actually active
         // This handles race conditions where the flag might not propagate immediately
         serviceScope.launch {
@@ -1339,6 +1725,7 @@ class VpnEngineService : VpnService() {
         // Store tunnel IP
         val tunnelIp = TunnelIpAddress(tunnelId, ip, prefixLength, subnet)
         tunnelIps[tunnelId] = tunnelIp
+        applyLocalTestRoutesIfNeeded(tunnelId)
         
         // Determine primary tunnel for this subnet (first-come-first-served)
         val primaryTunnel = subnetToPrimaryTunnel.computeIfAbsent(subnet) { tunnelId }
@@ -1408,6 +1795,41 @@ class VpnEngineService : VpnService() {
             }
         }
     }
+
+    private fun startStatsUpdates() {
+        if (statsJob?.isActive == true) return
+        connectionStartTime = System.currentTimeMillis()
+        statsJob = serviceScope.launch {
+            while (isActive) {
+                val elapsed = connectionStartTime?.let { (System.currentTimeMillis() - it) / 1000 } ?: 0
+                val activeCount = synchronized(activeTunnels) { activeTunnels.size }
+                VpnServiceStateTracker.updateStats(
+                    VpnStats(
+                        bytesSent = 0L,
+                        bytesReceived = 0L,
+                        connectionTimeSeconds = elapsed,
+                        activeConnections = activeCount
+                    )
+                )
+                delay(1000)
+            }
+        }
+    }
+
+    private fun stopStatsUpdates() {
+        statsJob?.cancel()
+        statsJob = null
+        connectionStartTime = null
+        VpnServiceStateTracker.updateStats(VpnStats())
+    }
+
+    private fun updateActiveConnectionCount() {
+        val activeCount = synchronized(activeTunnels) { activeTunnels.size }
+        val currentStats = VpnServiceStateTracker.stats.value
+        VpnServiceStateTracker.updateStats(
+            currentStats.copy(activeConnections = activeCount)
+        )
+    }
     
     /**
      * Get current list of packages with VPN rules.
@@ -1457,9 +1879,7 @@ class VpnEngineService : VpnService() {
                 initializePacketRouter()
                 
                 // Restart packet reading
-                serviceScope.launch {
-                    readPacketsFromTun()
-                }
+                startTunReader("interface-reestablish")
                 
                 Log.i(TAG, "✅ VPN interface re-established successfully with ${subnetToPrimaryTunnel.size} subnet(s)")
             }
@@ -1492,6 +1912,7 @@ class VpnEngineService : VpnService() {
         private const val TAG = "VpnEngineService"
         private const val CHANNEL_ID = "vpn_service_channel"
         private const val NOTIFICATION_ID = 1
+        private val DEFAULT_FALLBACK_DNS_SERVERS = listOf("8.8.8.8", "8.8.4.4")
         
         const val ACTION_START = "com.multiregionvpn.START_VPN"
         const val ACTION_STOP = "com.multiregionvpn.STOP_VPN"
@@ -1513,6 +1934,18 @@ class VpnEngineService : VpnService() {
 
         fun getConnectionTrackerSnapshot(): Map<String, String> {
             return runningInstance?.connectionTracker?.getCurrentPackageMappings() ?: emptyMap()
+        }
+
+        fun notifyAppRuleChanged(packageName: String, vpnConfigId: String) {
+            runningInstance?.registerPackageForRouting(packageName, vpnConfigId)
+        }
+
+        fun notifyAppRuleRemoved(packageName: String) {
+            runningInstance?.removePackageRouting(packageName)
+        }
+
+        fun notifyAllAppRulesCleared() {
+            runningInstance?.clearAllPackageRoutings()
         }
     }
 }

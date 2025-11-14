@@ -9,6 +9,7 @@
 #include <map>         // For std::map
 #include <mutex>       // For std::mutex
 #include "openvpn_wrapper.h"
+extern "C" void reconnectSession(OpenVpnSession* session);
 
 // Forward declare OpenVpnSession to avoid incomplete type issues
 // The actual definition is in openvpn_wrapper.cpp
@@ -30,11 +31,12 @@ static std::mutex sessions_mutex;
 // Forward declarations
 extern "C" {
     // JNI functions that will be called from Kotlin
-    JNIEXPORT jlong JNICALL
-    Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
-            JNIEnv *env, jobject thiz,
-            jstring config, jstring username, jstring password,
-            jobject vpnBuilder, jint tunFd, jobject vpnService, jstring tunnelId);
+JNIEXPORT jlong JNICALL
+Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
+        JNIEnv *env, jobject thiz,
+        jstring config, jstring username, jstring password,
+        jobject vpnBuilder, jint tunFd, jobject vpnService, jstring tunnelId,
+        jobject ipCallback, jobject dnsCallback, jobject routeCallback);
     
     JNIEXPORT void JNICALL
     Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeDisconnect(
@@ -59,7 +61,7 @@ extern "C" {
     JNIEXPORT void JNICALL
     Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeSetTunnelIdAndCallback(
             JNIEnv *env, jobject thiz,
-            jlong sessionHandle, jstring tunnelId, jobject ipCallback, jobject dnsCallback);
+            jlong sessionHandle, jstring tunnelId, jobject ipCallback, jobject dnsCallback, jobject routeCallback);
     
     JNIEXPORT jint JNICALL
     Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_getAppFd(
@@ -91,7 +93,8 @@ JNIEXPORT jlong JNICALL
 Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
         JNIEnv *env, jobject thiz,
         jstring config, jstring username, jstring password,
-        jobject vpnBuilder, jint tunFd, jobject vpnService, jstring tunnelId) {
+        jobject vpnBuilder, jint tunFd, jobject vpnService, jstring tunnelId,
+        jobject ipCallback, jobject dnsCallback, jobject routeCallback) {
     
     LOGI("nativeConnect called - Using OpenVPN 3 ClientAPI service");
     LOGI("TUN file descriptor: %d", tunFd);
@@ -147,9 +150,13 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
     // CRITICAL: Set tunnel ID BEFORE connect() is called
     // This ensures AndroidOpenVPNClient has the tunnel ID when new_tun_factory() is called
     // during the connection process in the background thread
-    if (tunnelIdStr) {
-        openvpn_wrapper_set_tunnel_id_and_callback(session, env, tunnelIdStr, nullptr, nullptr);
-        LOGI("✅ Tunnel ID set BEFORE connect: %s", tunnelIdStr);
+    if (tunnelIdStr || ipCallback || dnsCallback || routeCallback) {
+        openvpn_wrapper_set_tunnel_id_and_callback(session, env, tunnelIdStr, ipCallback, dnsCallback, routeCallback);
+        if (tunnelIdStr) {
+            LOGI("✅ Tunnel ID and callbacks set BEFORE connect: %s", tunnelIdStr);
+        } else {
+            LOGI("✅ Callbacks set BEFORE connect (tunnel ID not provided at this stage)");
+        }
     }
     
     // Connect using wrapper
@@ -277,7 +284,7 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeGetLastError(
 JNIEXPORT void JNICALL
 Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeSetTunnelIdAndCallback(
         JNIEnv *env, jobject thiz,
-        jlong sessionHandle, jstring tunnelId, jobject ipCallback, jobject dnsCallback) {
+        jlong sessionHandle, jstring tunnelId, jobject ipCallback, jobject dnsCallback, jobject routeCallback) {
     
     if (sessionHandle == 0) {
         LOGE("Invalid session handle for setTunnelIdAndCallback");
@@ -293,7 +300,7 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeSetTunnelIdAndC
     }
     
     // Set tunnel ID and callbacks
-    openvpn_wrapper_set_tunnel_id_and_callback(session, env, tunnelIdStr, ipCallback, dnsCallback);
+    openvpn_wrapper_set_tunnel_id_and_callback(session, env, tunnelIdStr, ipCallback, dnsCallback, routeCallback);
     
     // Register session in global map for app FD retrieval
     if (tunnelIdStr) {

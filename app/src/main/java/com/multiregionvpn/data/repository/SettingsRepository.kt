@@ -8,6 +8,7 @@ import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.ProviderCredentialsDao
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.database.VpnConfigDao
+import com.multiregionvpn.core.VpnEngineService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -44,10 +45,12 @@ class SettingsRepository @Inject constructor(
     
     suspend fun saveAppRule(rule: AppRule) {
         appRuleDao.save(rule)
+        VpnEngineService.notifyAppRuleChanged(rule.packageName, rule.vpnConfigId ?: return)
     }
     
     suspend fun deleteAppRule(packageName: String) {
         appRuleDao.delete(packageName)
+        VpnEngineService.notifyAppRuleRemoved(packageName)
     }
     
     suspend fun getAppRuleByPackageName(packageName: String): AppRule? {
@@ -76,16 +79,19 @@ class SettingsRepository @Inject constructor(
         // Verify it was actually saved
         val saved = appRuleDao.getRuleForPackage(packageName)
         android.util.Log.i("SettingsRepository", "🔍 Verification query: ${saved?.packageName} → ${saved?.vpnConfigId}")
+        VpnEngineService.notifyAppRuleChanged(packageName, vpnConfigId)
     }
     
     suspend fun updateAppRule(packageName: String, vpnConfigId: String) {
         // Update or create the app rule with new VPN config
         appRuleDao.save(AppRule(packageName = packageName, vpnConfigId = vpnConfigId))
+        VpnEngineService.notifyAppRuleChanged(packageName, vpnConfigId)
     }
     
     // Test helper methods
     suspend fun clearAllAppRules() {
         appRuleDao.clearAll()
+        VpnEngineService.notifyAllAppRulesCleared()
     }
     
     suspend fun clearAllVpnConfigs() {

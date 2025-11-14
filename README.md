@@ -195,6 +195,20 @@ A production-ready native Android (Kotlin/C++) application that functions as a s
 
 ### **Test Coverage**: 25+ tests
 
+#### **Android Unit Test Coverage Reports** ✅
+
+Generate Jacoco coverage after running the debug unit tests:
+
+```bash
+./gradlew testDebugUnitTest
+./gradlew app:jacocoDebugUnitTestReport
+# Aggregate all module reports (currently app-only)
+./gradlew jacocoAggregatedReport
+```
+
+HTML reports are written to `app/build/reports/jacoco/jacocoDebugUnitTestReport/html/index.html`
+and XML reports to `app/build/reports/jacoco/jacocoDebugUnitTestReport/jacocoDebugUnitTestReport.xml`.
+
 #### **C++ Unit Tests** (18 tests) ✅
 - **Socketpair Tests** (7): I/O, boundaries, non-blocking
 - **Bidirectional Flow** (4): Async multi-threaded data flow
@@ -281,21 +295,27 @@ git clone https://github.com/yourusername/multi-region-vpn.git
 cd multi-region-vpn
 ```
 
-2. **Open in Android Studio**:
+2. **Setup OpenVPN 3 C++ library** (required for native OpenVPN support):
+```bash
+./scripts/setup-openvpn3.sh
+```
+This clones the OpenVPN 3 library into `libs/openvpn3`. The script will update if the directory already exists.
+
+3. **Open in Android Studio**:
 ```bash
 android-studio .
 ```
 
-3. **Sync Gradle dependencies**:
+4. **Sync Gradle dependencies**:
    - Android Studio will automatically sync
    - Or run: `./gradlew build`
 
-4. **Build native code**:
+5. **Build native code**:
 ```bash
 ./gradlew :app:externalNativeBuildDebug
 ```
 
-5. **Run on device/emulator**:
+6. **Run on device/emulator**:
 ```bash
 ./gradlew :app:installDebug
 ```

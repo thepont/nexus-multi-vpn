@@ -182,10 +182,40 @@ adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
 - Check if VPN servers are reachable
 - Verify NordVPN credentials are correct
 
+## Setup Scripts
+
+### `setup-openvpn3.sh`
+
+Clones the OpenVPN 3 C++ library required for native OpenVPN integration.
+
+**Usage**:
+```bash
+./scripts/setup-openvpn3.sh
+```
+
+**What it does**:
+- Clones OpenVPN 3 from `https://github.com/OpenVPN/openvpn3.git` into `libs/openvpn3`
+- Uses the `master` branch by default (can be overridden with `OPENVPN3_VERSION` environment variable)
+- Updates the repository if it already exists
+- Verifies that `CMakeLists.txt` exists after cloning
+
+**Required for**: Building the native OpenVPN 3 integration
+
+### `setup-ics-openvpn.sh`
+
+Clones and patches the ics-openvpn library for use as a Gradle module.
+
+**Usage**:
+```bash
+./scripts/setup-ics-openvpn.sh
+```
+
 ## Related Files
 
 - `load-env.sh` - Loads environment variables from `.env`
 - `run-tests-with-env.sh` - Legacy test runner (use `run-e2e-tests.sh` instead)
+- `setup-openvpn3.sh` - Sets up OpenVPN 3 C++ library
+- `setup-ics-openvpn.sh` - Sets up ics-openvpn library
 
 ## Notes
 

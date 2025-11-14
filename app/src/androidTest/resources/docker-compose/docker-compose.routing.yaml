@@ -1,95 +1,88 @@
-version: '3.8'
-
 services:
-  # UK VPN Server (subnet 10.1.0.0/24)
-  vpn-server-uk:
-    image: kylemanna/openvpn:latest
+  http_uk:
+    image: nginx:1.25-alpine
+    container_name: http-server-uk
+    volumes:
+      - ../http-uk:/usr/share/nginx/html:ro
+    networks:
+      vpn_bridge:
+        ipv4_address: 198.18.1.100
+
+  http_fr:
+    image: nginx:1.25-alpine
+    container_name: http-server-fr
+    volumes:
+      - ../http-fr:/usr/share/nginx/html:ro
+    networks:
+      vpn_bridge_fr:
+        ipv4_address: 198.18.2.100
+
+  openvpn_uk:
+    build:
+      context: ../../../../../docker/openvpn-test-server
     container_name: vpn-server-uk
+    privileged: true
     cap_add:
       - NET_ADMIN
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv4.conf.all.rp_filter: "0"
+      net.ipv4.conf.default.rp_filter: "0"
     devices:
-      - /dev/net/tun
+      - /dev/net/tun:/dev/net/tun
     ports:
       - "1194:1194/udp"
     volumes:
-      - ../../../../openvpn-uk:/etc/openvpn
+      - ../openvpn/pki:/etc/openvpn/pki:ro
+      - ../openvpn/auth:/etc/openvpn/auth:ro
+      - ../openvpn/uk/server.conf:/etc/openvpn/server.conf:ro
+      - ../openvpn/uk/ipp.txt:/etc/openvpn/ipp.txt
+      - ../openvpn/uk/ccd:/etc/openvpn/ccd
     networks:
-      vpn-uk:
-        ipv4_address: 10.1.0.1
-    command: >
-      sh -c "
-        if [ ! -f /etc/openvpn/pki/ca.crt ]; then
-          echo '⚠️  PKI not found - generating...'
-          ovpn_genconfig -u udp://vpn-server-uk -N -d -s 10.1.0.0/24
-          EASYRSA_BATCH=1 ovpn_initpki nopass
-        fi
-        openvpn --config /etc/openvpn/server.conf
-      "
-    environment:
-      - OVPN_SERVER_URL=udp://vpn-server-uk:1194
+      vpn_bridge:
+        ipv4_address: 198.18.1.2
+      shared_backend:
+    depends_on:
+      - http_uk
 
-  # FR VPN Server (subnet 10.2.0.0/24)
-  vpn-server-fr:
-    image: kylemanna/openvpn:latest
+  openvpn_fr:
+    build:
+      context: ../../../../../docker/openvpn-test-server
     container_name: vpn-server-fr
+    privileged: true
     cap_add:
       - NET_ADMIN
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv4.conf.all.rp_filter: "0"
+      net.ipv4.conf.default.rp_filter: "0"
     devices:
-      - /dev/net/tun
+      - /dev/net/tun:/dev/net/tun
     ports:
-      - "1195:1194/udp"
+      - "1195:1195/udp"
     volumes:
-      - ../../../../openvpn-fr:/etc/openvpn
+      - ../openvpn/pki:/etc/openvpn/pki:ro
+      - ../openvpn/auth:/etc/openvpn/auth:ro
+      - ../openvpn/fr/server.conf:/etc/openvpn/server.conf:ro
+      - ../openvpn/fr/ipp.txt:/etc/openvpn/ipp.txt
+      - ../openvpn/fr/ccd:/etc/openvpn/ccd
     networks:
-      vpn-fr:
-        ipv4_address: 10.2.0.1
-    command: >
-      sh -c "
-        if [ ! -f /etc/openvpn/pki/ca.crt ]; then
-          echo '⚠️  PKI not found - generating...'
-          ovpn_genconfig -u udp://vpn-server-fr -N -d -s 10.2.0.0/24
-          EASYRSA_BATCH=1 ovpn_initpki nopass
-        fi
-        openvpn --config /etc/openvpn/server.conf
-      "
-    environment:
-      - OVPN_SERVER_URL=udp://vpn-server-fr:1194
-
-  # HTTP Server on UK VPN Network
-  http-server-uk:
-    image: nginx:alpine
-    container_name: http-server-uk
-    ports:
-      - "18080:80"
-    networks:
-      vpn-uk:
-        ipv4_address: 10.1.0.2
-    volumes:
-      - ../../../../http-uk:/usr/share/nginx/html:ro
-    command: nginx -g 'daemon off;'
-
-  # HTTP Server on FR VPN Network
-  http-server-fr:
-    image: nginx:alpine
-    container_name: http-server-fr
-    ports:
-      - "18081:80"
-    networks:
-      vpn-fr:
-        ipv4_address: 10.2.0.2
-    volumes:
-      - ../../../../http-fr:/usr/share/nginx/html:ro
-    command: nginx -g 'daemon off;'
+      vpn_bridge_fr:
+        ipv4_address: 198.18.2.2
+      shared_backend:
+    depends_on:
+      - http_fr
 
 networks:
-  vpn-uk:
+  vpn_bridge:
     driver: bridge
     ipam:
       config:
-        - subnet: 10.1.0.0/24
-  vpn-fr:
+        - subnet: 198.18.1.0/24
+  vpn_bridge_fr:
     driver: bridge
     ipam:
       config:
-        - subnet: 10.2.0.0/24
-
+        - subnet: 198.18.2.0/24
+  shared_backend:
+    driver: bridge

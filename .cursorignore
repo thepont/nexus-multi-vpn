@@ -6,6 +6,7 @@
 build/
 app/build/
 **/build/
+Build/
 .gradle/
 **/.gradle/
 
@@ -139,10 +140,26 @@ app/openvpn-fr/
 app/openvpn-dns-domain/
 app/openvpn-uk-conflict/
 app/openvpn-fr-conflict/
+openvpn-uk/
+openvpn-fr/
+openvpn-dns/
+openvpn-dns-domain/
+openvpn-uk-conflict/
+openvpn-fr-conflict/
 
 # Docker compose
 docker-*/volumes/
 docker-*/data/
+docker-wireguard-test/
+docker/
+app/src/androidTest/resources/docker-compose/
+
+# Local HTTP fixtures served by Docker
+http-uk/
+http-fr/
+http-dns/
+http-fr-conflict/
+http-uk-conflict/
 
 # ============================================================================
 # Version Control - DO NOT INDEX

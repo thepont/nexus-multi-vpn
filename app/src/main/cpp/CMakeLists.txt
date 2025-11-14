@@ -746,6 +746,9 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
             # Let's try setting CMAKE_LIBRARY_PATH so find_library can find our lz4:
             list(APPEND CMAKE_LIBRARY_PATH "${lz4_BINARY_DIR}")
             
+            # CRITICAL: Add OpenVPN 3's cmake directory to CMAKE_MODULE_PATH so Findasio.cmake is found
+            list(APPEND CMAKE_MODULE_PATH "${OPENVPN3_DIR}/cmake")
+
             add_subdirectory(${OPENVPN3_DIR} ${CMAKE_BINARY_DIR}/openvpn3 EXCLUDE_FROM_ALL)
             
             # Include OpenVPN 3 headers (must come after add_subdirectory)

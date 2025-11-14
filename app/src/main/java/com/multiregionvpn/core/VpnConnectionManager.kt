@@ -3,6 +3,7 @@ package com.multiregionvpn.core
 import android.content.Context
 import android.net.VpnService
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.multiregionvpn.core.vpnclient.OpenVpnClient
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
 import com.multiregionvpn.core.vpnclient.WireGuardVpnClient
@@ -12,7 +13,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import java.net.Inet4Address
+import java.net.InetAddress
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Manages multiple simultaneous OpenVPN connections.
@@ -45,8 +50,13 @@ class VpnConnectionManager(
     private val pipeReaders = ConcurrentHashMap<String, kotlinx.coroutines.Job>()  // tunnelId -> socket reader coroutine job (for receiving from OpenVPN)
     private val pipeReaderScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     
+    private data class TunnelIpInfo(val addressBytes: ByteArray, val prefixLength: Int)
+    private val tunnelIpv4Addresses = ConcurrentHashMap<String, TunnelIpInfo>()
+    private val tunnelOriginalSourceIps = ConcurrentHashMap<String, ByteArray>()
+    
     private var tunnelIpCallback: ((String, String, Int) -> Unit)? = null  // Callback for tunnel IP addresses
     private var tunnelDnsCallback: ((String, List<String>) -> Unit)? = null  // Callback for DNS servers
+    private var tunnelRouteCallback: ((String, String, Int, Boolean) -> Unit)? = null  // Callback for pushed routes
     
     // Packet queueing for tunnels that are connecting but not yet ready
     private data class QueuedPacket(val packet: ByteArray, val timestamp: Long)
@@ -60,6 +70,252 @@ class VpnConnectionManager(
         var dnsConfigured: Boolean = false
     )
     private val tunnelReadinessStates = ConcurrentHashMap<String, TunnelReadinessState>()
+    private val readyTunnels = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private var readinessListener: ((Set<String>) -> Unit)? = null
+    
+    private val sendSampleCounter = AtomicInteger(0)
+    private val queueSampleCounter = AtomicInteger(0)
+
+    private fun cacheTunnelIp(tunnelId: String, ip: String, prefixLength: Int) {
+        try {
+            val inet = InetAddress.getByName(ip)
+            if (inet is Inet4Address) {
+                tunnelIpv4Addresses[tunnelId] = TunnelIpInfo(inet.address, prefixLength)
+                Log.d(TAG, "Cached IPv4 address ${inet.hostAddress}/$prefixLength for tunnel $tunnelId")
+            } else {
+                Log.w(TAG, "Ignoring non-IPv4 tunnel IP $ip for tunnel $tunnelId")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to cache tunnel IP $ip for $tunnelId: ${e.message}")
+        }
+    }
+
+    private fun rewritePacketSourceIp(tunnelId: String, original: ByteArray): ByteArray {
+        val tunnelInfo = tunnelIpv4Addresses[tunnelId] ?: return original
+        if (original.size < 20) return original
+        val version = (original[0].toInt() ushr 4)
+        if (version != 4) return original
+        val ihlWords = original[0].toInt() and 0x0F
+        val headerLength = ihlWords * 4
+        if (headerLength < 20 || original.size < headerLength) return original
+        val originalSource = original.copyOfRange(12, 16)
+        tunnelOriginalSourceIps[tunnelId] = originalSource
+
+        // If the source IP already matches the assigned tunnel IP, return original
+        if (original.size >= 16) {
+            var matches = true
+            for (i in 0 until 4) {
+                if (original[12 + i] != tunnelInfo.addressBytes[i]) {
+                    matches = false
+                    break
+                }
+            }
+            if (matches) {
+                return original
+            }
+        }
+
+        val packet = original.copyOf()
+        System.arraycopy(tunnelInfo.addressBytes, 0, packet, 12, tunnelInfo.addressBytes.size)
+
+        // Recalculate IPv4 header checksum
+        packet[10] = 0
+        packet[11] = 0
+        val ipv4Sum = calculateChecksum(packet, 0, headerLength)
+        val ipv4Checksum = finalizeChecksum(ipv4Sum)
+        packet[10] = ((ipv4Checksum shr 8) and 0xFF).toByte()
+        packet[11] = (ipv4Checksum and 0xFF).toByte()
+
+        val protocol = packet[9].toInt() and 0xFF
+        val totalLength = readUint16(packet, 2)
+        val payloadLength = totalLength - headerLength
+        if (payloadLength <= 0 || packet.size < headerLength + payloadLength) {
+            return packet
+        }
+        val destinationIp = packet.copyOfRange(16, 20)
+
+        when (protocol) {
+            6 -> { // TCP
+                if (payloadLength >= 20) {
+                    val checksumOffset = headerLength + 16
+                    if (packet.size >= checksumOffset + 2) {
+                        packet[checksumOffset] = 0
+                        packet[checksumOffset + 1] = 0
+                        val tcpSum = computeTransportChecksum(
+                            packet = packet,
+                            headerOffset = headerLength,
+                            segmentLength = payloadLength,
+                            protocol = protocol,
+                            srcAddress = tunnelInfo.addressBytes,
+                            dstAddress = destinationIp
+                        )
+                        packet[checksumOffset] = ((tcpSum shr 8) and 0xFF).toByte()
+                        packet[checksumOffset + 1] = (tcpSum and 0xFF).toByte()
+                    }
+                }
+            }
+            17 -> { // UDP
+                if (payloadLength >= 8) {
+                    val udpLength = readUint16(packet, headerLength + 4).coerceAtMost(payloadLength)
+                    val checksumOffset = headerLength + 6
+                    if (udpLength >= 8 && packet.size >= checksumOffset + 2) {
+                        packet[checksumOffset] = 0
+                        packet[checksumOffset + 1] = 0
+                        val udpSum = computeTransportChecksum(
+                            packet = packet,
+                            headerOffset = headerLength,
+                            segmentLength = udpLength,
+                            protocol = protocol,
+                            srcAddress = tunnelInfo.addressBytes,
+                            dstAddress = destinationIp
+                        )
+                        packet[checksumOffset] = ((udpSum shr 8) and 0xFF).toByte()
+                        packet[checksumOffset + 1] = (udpSum and 0xFF).toByte()
+                    }
+                }
+            }
+        }
+
+        return packet
+    }
+
+    private fun rewritePacketForApp(tunnelId: String, original: ByteArray): ByteArray {
+        val assignedInfo = tunnelIpv4Addresses[tunnelId] ?: return original
+        val originalSource = tunnelOriginalSourceIps[tunnelId] ?: return original
+        if (originalSource.contentEquals(assignedInfo.addressBytes)) {
+            return original
+        }
+        if (original.size < 20) return original
+        val version = (original[0].toInt() ushr 4)
+        if (version != 4) return original
+        val ihlWords = original[0].toInt() and 0x0F
+        val headerLength = ihlWords * 4
+        if (headerLength < 20 || original.size < headerLength) return original
+        var needsRewrite = true
+        for (i in 0 until 4) {
+            if (original[16 + i] != assignedInfo.addressBytes[i]) {
+                needsRewrite = false
+                break
+            }
+        }
+        if (!needsRewrite) {
+            return original
+        }
+
+        val packet = original.copyOf()
+        System.arraycopy(originalSource, 0, packet, 16, 4)
+
+        // Update IPv4 checksum
+        packet[10] = 0
+        packet[11] = 0
+        val ipv4Sum = calculateChecksum(packet, 0, headerLength)
+        val ipv4Checksum = finalizeChecksum(ipv4Sum)
+        packet[10] = ((ipv4Checksum shr 8) and 0xFF).toByte()
+        packet[11] = (ipv4Checksum and 0xFF).toByte()
+
+        val protocol = packet[9].toInt() and 0xFF
+        val totalLength = readUint16(packet, 2)
+        val payloadLength = totalLength - headerLength
+        if (payloadLength <= 0 || packet.size < headerLength + payloadLength) {
+            return packet
+        }
+        val sourceAddress = packet.copyOfRange(12, 16)
+
+        when (protocol) {
+            6 -> {
+                if (payloadLength >= 20) {
+                    val checksumOffset = headerLength + 16
+                    if (packet.size >= checksumOffset + 2) {
+                        packet[checksumOffset] = 0
+                        packet[checksumOffset + 1] = 0
+                        val tcpSum = computeTransportChecksum(
+                            packet = packet,
+                            headerOffset = headerLength,
+                            segmentLength = payloadLength,
+                            protocol = protocol,
+                            srcAddress = sourceAddress,
+                            dstAddress = originalSource
+                        )
+                        packet[checksumOffset] = ((tcpSum shr 8) and 0xFF).toByte()
+                        packet[checksumOffset + 1] = (tcpSum and 0xFF).toByte()
+                    }
+                }
+            }
+            17 -> {
+                if (payloadLength >= 8) {
+                    val udpLength = readUint16(packet, headerLength + 4).coerceAtMost(payloadLength)
+                    val checksumOffset = headerLength + 6
+                    if (udpLength >= 8 && packet.size >= checksumOffset + 2) {
+                        packet[checksumOffset] = 0
+                        packet[checksumOffset + 1] = 0
+                        val udpSum = computeTransportChecksum(
+                            packet = packet,
+                            headerOffset = headerLength,
+                            segmentLength = udpLength,
+                            protocol = protocol,
+                            srcAddress = sourceAddress,
+                            dstAddress = originalSource
+                        )
+                        packet[checksumOffset] = ((udpSum shr 8) and 0xFF).toByte()
+                        packet[checksumOffset + 1] = (udpSum and 0xFF).toByte()
+                    }
+                }
+            }
+        }
+
+        return packet
+    }
+
+    private fun readUint16(buffer: ByteArray, offset: Int): Int {
+        if (offset + 1 >= buffer.size) return 0
+        return ((buffer[offset].toInt() and 0xFF) shl 8) or (buffer[offset + 1].toInt() and 0xFF)
+    }
+
+    private fun calculateChecksum(data: ByteArray, offset: Int, length: Int, initialSum: Int = 0): Int {
+        var sum = initialSum
+        var index = 0
+        while (index < length) {
+            val byte1 = data[offset + index].toInt() and 0xFF
+            val byte2 = if (index + 1 < length) data[offset + index + 1].toInt() and 0xFF else 0
+            val value = (byte1 shl 8) or byte2
+            sum = onesComplementAdd(sum, value)
+            index += 2
+        }
+        return sum
+    }
+
+    private fun onesComplementAdd(sum: Int, value: Int): Int {
+        var result = sum + value
+        while (result ushr 16 != 0) {
+            result = (result and 0xFFFF) + (result ushr 16)
+        }
+        return result
+    }
+
+    private fun finalizeChecksum(sum: Int): Int {
+        var result = sum
+        while (result ushr 16 != 0) {
+            result = (result and 0xFFFF) + (result ushr 16)
+        }
+        return result.inv() and 0xFFFF
+    }
+
+    private fun computeTransportChecksum(
+        packet: ByteArray,
+        headerOffset: Int,
+        segmentLength: Int,
+        protocol: Int,
+        srcAddress: ByteArray,
+        dstAddress: ByteArray
+    ): Int {
+        var sum = 0
+        sum = calculateChecksum(srcAddress, 0, srcAddress.size, sum)
+        sum = calculateChecksum(dstAddress, 0, dstAddress.size, sum)
+        sum = onesComplementAdd(sum, protocol)
+        sum = onesComplementAdd(sum, segmentLength)
+        sum = calculateChecksum(packet, headerOffset, segmentLength, sum)
+        return finalizeChecksum(sum)
+    }
     
     /**
      * Sets a callback to receive tunnel IP addresses when OpenVPN assigns them via DHCP.
@@ -73,6 +329,13 @@ class VpnConnectionManager(
      */
     fun setTunnelDnsCallback(callback: (tunnelId: String, dnsServers: List<String>) -> Unit) {
         tunnelDnsCallback = callback
+    }
+
+    /**
+     * Sets a callback to receive route pushes when OpenVPN provides them.
+     */
+    fun setTunnelRouteCallback(callback: (tunnelId: String, address: String, prefixLength: Int, isIpv6: Boolean) -> Unit) {
+        tunnelRouteCallback = callback
     }
     
     /**
@@ -131,6 +394,7 @@ class VpnConnectionManager(
             
             client.onTunnelIpReceived = { tid, ip, prefixLength ->
                 Log.d(TAG, "WireGuard tunnel $tid IP received: $ip/$prefixLength")
+                cacheTunnelIp(tid, ip, prefixLength)
                 tunnelIpCallback?.invoke(tid, ip, prefixLength)
             }
             
@@ -154,6 +418,8 @@ class VpnConnectionManager(
                         readinessState.ipAssigned = true
                         Log.i(TAG, "✅ Tunnel $tunnelId: IP assigned (readiness: ${getTunnelReadinessStatus(tunnelId)})")
                         
+                        cacheTunnelIp(tunnelId, ip, prefixLength)
+
                         // Forward to VpnEngineService callback
                         tunnelIpCallback?.invoke(tunnelId, ip, prefixLength)
                     }
@@ -170,6 +436,13 @@ class VpnConnectionManager(
                         
                         // Forward to VpnEngineService callback
                         tunnelDnsCallback?.invoke(tunnelId, dnsServers)
+                    }
+                }
+
+                val routeCallback = object : com.multiregionvpn.core.vpnclient.TunnelRouteCallback {
+                    override fun onTunnelRouteReceived(tunnelId: String, address: String, prefixLength: Int, isIpv6: Boolean) {
+                        Log.d(TAG, "Tunnel route received: tunnelId=$tunnelId, route=$address/$prefixLength (ipv6=$isIpv6)")
+                        tunnelRouteCallback?.invoke(tunnelId, address, prefixLength, isIpv6)
                     }
                 }
                 
@@ -190,18 +463,7 @@ class VpnConnectionManager(
                                 Log.d(TAG, "   OpenVPN 3 FD: $pipeReadFd (bidirectional)")
                                 Log.d(TAG, "   Kotlin FD: $kotlinFd (bidirectional)")
                                 
-                                // Store pipe FDs and PFDs (keep PFDs open)
-                                // CRITICAL FIX: Only create ONE PFD per FD to avoid double-close issues
-                                pipeWriteFds[tunnelId] = kotlinFd
-                                val pfd = android.os.ParcelFileDescriptor.fromFd(kotlinFd)
-                                pipeWritePfds[tunnelId] = pfd
-                                // Don't create a second PFD from same FD - reuse the same PFD for read/write
-                                // pipeReadPfds[tunnelId] = pfd  // REMOVED - was causing double-close
-                                
-                                // Start pipe reader coroutine to read response packets from OpenVPN 3
-                                // OpenVPN 3 writes responses to socket pair, we read them and forward to TUN
-                                startPipeReader(tunnelId, kotlinFd)
-                                
+                                installSocketPairFd(tunnelId, kotlinFd, restartReader = false)
                                 pipeReadFd
                             } else {
                             Log.w(TAG, "Failed to get socketpair FDs for tunnel $tunnelId, falling back to TUN FD duplication")
@@ -269,7 +531,8 @@ class VpnConnectionManager(
                     connectionFd,
                     tunnelId,  // Pass tunnel ID
                     ipCallback,   // Pass callback for IP addresses
-                    dnsCallback   // Pass callback for DNS servers
+                    dnsCallback,   // Pass callback for DNS servers
+                    routeCallback  // Pass callback for route pushes
                 )
             Log.d(TAG, "Created NativeOpenVpnClient with TUN FD: $connectionFd, tunnelId: $tunnelId")
             return client
@@ -279,6 +542,22 @@ class VpnConnectionManager(
         Log.w(TAG, "No context/vpnService provided, cannot create real client")
         throw IllegalStateException("Context and VpnService required for real OpenVPN client")
     }
+
+    private fun notifyReadinessListener() {
+        readinessListener?.invoke(readyTunnels.toSet())
+    }
+
+    private fun updateTunnelReadiness(tunnelId: String) {
+        val isReady = isTunnelReadyForRouting(tunnelId)
+        val wasReady = readyTunnels.contains(tunnelId)
+        if (isReady && !wasReady) {
+            readyTunnels.add(tunnelId)
+            notifyReadinessListener()
+        } else if (!isReady && wasReady) {
+            readyTunnels.remove(tunnelId)
+            notifyReadinessListener()
+        }
+    }
     
     /**
      * Sets a callback to receive packets from VPN tunnels.
@@ -286,6 +565,11 @@ class VpnConnectionManager(
      */
     fun setPacketReceiver(callback: (tunnelId: String, packet: ByteArray) -> Unit) {
         packetReceiver = callback
+    }
+
+    fun setTunnelReadinessListener(listener: (Set<String>) -> Unit) {
+        readinessListener = listener
+        listener.invoke(readyTunnels.toSet())
     }
     
     /**
@@ -309,12 +593,68 @@ class VpnConnectionManager(
         vpnInterface = pfd
         Log.d(TAG, "Base TUN file descriptor set: $fd (will be duplicated per connection)")
     }
+
+    fun clearTunFileDescriptor() {
+        baseTunFileDescriptor = -1
+        vpnInterface = null
+        Log.d(TAG, "Cleared base TUN file descriptor")
+    }
+
+    private fun installSocketPairFd(tunnelId: String, fd: Int, restartReader: Boolean) {
+        pipeWriters.remove(tunnelId)?.let { writer ->
+            runCatching { writer.close() }
+        }
+        pipeWritePfds.remove(tunnelId)?.let { pfd ->
+            runCatching { pfd.close() }
+        }
+
+        pipeWriteFds[tunnelId] = fd
+        val pfd = android.os.ParcelFileDescriptor.fromFd(fd)
+        pipeWritePfds[tunnelId] = pfd
+
+        if (restartReader) {
+            pipeReaders[tunnelId]?.cancel()
+            pipeReaders.remove(tunnelId)
+            startPipeReader(tunnelId, fd)
+        }
+    }
     
     fun sendPacketToTunnel(tunnelId: String, packet: ByteArray) {
         val client = connections[tunnelId]
         if (client != null && client.isConnected()) {
             // Tunnel is connected - send packet immediately
             try {
+                val packetToSend = rewritePacketSourceIp(tunnelId, packet)
+                val shouldForceLog = tunnelId.startsWith("local-test_")
+                if (shouldForceLog || sendSampleCounter.getAndIncrement() < DEBUG_SAMPLE_LIMIT) {
+                    Log.i(
+                        TAG,
+                        "➡️ sendPacketToTunnel($tunnelId): size=${packetToSend.size}, writerFd=${pipeWriteFds[tunnelId]}, queueSize=${packetQueues[tunnelId]?.size ?: 0}"
+                    )
+                    if (shouldForceLog && sendSampleCounter.get() >= DEBUG_SAMPLE_LIMIT) {
+                        Log.i(TAG, "   🪪 forced send log for diagnostic tunnel $tunnelId")
+                    }
+                    if (shouldForceLog) {
+                        val preview = packetToSend.take(minOf(packetToSend.size, 8))
+                            .joinToString(separator = " ") { b ->
+                                String.format("%02x", b.toInt() and 0xFF)
+                            }
+                        val protocol = packetToSend.getOrNull(9)?.toInt() ?: -1
+                        val destIpBytes = if (packetToSend.size >= 20) packetToSend.sliceArray(16..19) else null
+                        val destIp = destIpBytes?.joinToString(".") { (it.toInt() and 0xFF).toString() }
+                        val destPort = if (packetToSend.size >= 22) {
+                            val high = packetToSend[22].toInt() and 0xFF
+                            val low = packetToSend[23].toInt() and 0xFF
+                            (high shl 8) or low
+                        } else null
+                        val srcIpBytes = if (packetToSend.size >= 16) packetToSend.sliceArray(12..15) else null
+                        val srcIp = srcIpBytes?.joinToString(".") { (it.toInt() and 0xFF).toString() }
+                        Log.i(TAG, "   📦 packet preview: $preview proto=$protocol dest=$destIp:$destPort")
+                        if (srcIp != null) {
+                            Log.i(TAG, "   📡 rewritten src=$srcIp")
+                        }
+                    }
+                }
                     // Write packet to socket pair instead of calling client.sendPacket()
                     // OpenVPN 3 reads from socket pair, so writing to socket pair = injecting packet into OpenVPN 3
                     val pipeWriteFd = pipeWriteFds[tunnelId]
@@ -330,7 +670,7 @@ class VpnConnectionManager(
                             }
                         }
                         // PERFORMANCE: Removed per-packet logging to prevent binder exhaustion
-                        writer.write(packet)
+                        writer.write(packetToSend)
                         writer.flush()
                     } else {
                         // Fallback to old method if no socket pair
@@ -344,6 +684,12 @@ class VpnConnectionManager(
         } else if (client != null && !client.isConnected()) {
             // Tunnel exists but not connected yet - queue packet
             val queue = packetQueues.getOrPut(tunnelId) { java.util.concurrent.ConcurrentLinkedQueue() }
+            if (queueSampleCounter.getAndIncrement() < DEBUG_SAMPLE_LIMIT) {
+                Log.i(
+                    TAG,
+                    "⏳ Queueing packet for $tunnelId (connected=${client.isConnected()}, currentQueue=${queue.size}, size=${packet.size})"
+                )
+            }
             
             // Clean old packets from queue (older than QUEUE_TIMEOUT_MS)
             val now = System.currentTimeMillis()
@@ -441,18 +787,19 @@ class VpnConnectionManager(
                 Log.d(TAG, "Pipe reader started for tunnel $tunnelId")
                 
                 var responseCount = 0
-                while (isActive && connections.containsKey(tunnelId)) {
+                while (isActive) {
                     try {
                         val length = reader.read(buffer)
                         if (length > 0) {
                             responseCount++
                             val packet = buffer.copyOf(length)
                             Log.i(TAG, "📥 [Response #$responseCount] Read ${packet.size} bytes from socket pair for tunnel $tunnelId (response from OpenVPN 3)")
+                            val packetForApp = rewritePacketForApp(tunnelId, packet)
                             
                             // Forward packet to TUN interface via packetReceiver callback
                             // This writes the response packet to the TUN interface so apps receive it
                             if (packetReceiver != null) {
-                                packetReceiver!!.invoke(tunnelId, packet)
+                                packetReceiver!!.invoke(tunnelId, packetForApp)
                                 Log.d(TAG, "   ✅ Response #$responseCount forwarded to TUN via packetReceiver")
                             } else {
                                 Log.w(TAG, "   ⚠️  Response #$responseCount received but packetReceiver is null!")
@@ -464,13 +811,17 @@ class VpnConnectionManager(
                         } else if (length == 0) {
                             Log.v(TAG, "   No data available (length=0), continuing...")
                         }
-                    } catch (e: java.io.IOException) {
-                        if (isActive && connections.containsKey(tunnelId)) {
-                            Log.e(TAG, "❌ Error reading from socket pair for tunnel $tunnelId (read $responseCount responses so far)", e)
-                            kotlinx.coroutines.delay(100) // Wait before retrying
-                        } else {
-                            break // Connection closed, exit loop
+                    } catch (e: java.io.InterruptedIOException) {
+                        if (!isActive) {
+                            break
                         }
+                        Log.d(TAG, "Pipe reader interrupted for tunnel $tunnelId - retrying")
+                    } catch (e: java.io.IOException) {
+                        if (!isActive) {
+                            break
+                        }
+                        Log.e(TAG, "❌ Error reading from socket pair for tunnel $tunnelId (read $responseCount responses so far)", e)
+                        kotlinx.coroutines.delay(100) // Wait before retrying
                     }
                 }
                 Log.d(TAG, "📥 Socket pair reader stopped for tunnel $tunnelId (read $responseCount responses total)")
@@ -493,13 +844,15 @@ class VpnConnectionManager(
     private fun stopPipeReader(tunnelId: String) {
         pipeReaders[tunnelId]?.cancel()
         pipeReaders.remove(tunnelId)
-        pipeWriters[tunnelId]?.close()
+        pipeWriters[tunnelId]?.let { runCatching { it.close() } }
         pipeWriters.remove(tunnelId)
         
         // CRITICAL FIX: Only close PFD once (we removed the duplicate pipeReadPfds)
-        pipeWritePfds[tunnelId]?.close()
+        pipeWritePfds[tunnelId]?.let { runCatching { it.close() } }
         pipeWritePfds.remove(tunnelId)
         pipeWriteFds.remove(tunnelId)
+        tunnelIpv4Addresses.remove(tunnelId)
+        tunnelOriginalSourceIps.remove(tunnelId)
         
         Log.d(TAG, "Stopped pipe reader and writer for tunnel $tunnelId (FD properly closed once)")
     }
@@ -631,6 +984,11 @@ class VpnConnectionManager(
         // Add client to connections map BEFORE connecting (so it's tracked during connection)
         // This allows notifyConnectionStateChanged() to detect connecting state
         connections[tunnelId] = client
+
+        // Ensure the pipe reader is started now that the tunnel is tracked
+        pipeWriteFds[tunnelId]?.let { fd ->
+            installSocketPairFd(tunnelId, fd, restartReader = true)
+        }
         
         // Notify that connection is starting (event-based exclusive TUN access)
         onConnectionStarted(tunnelId)
@@ -786,20 +1144,7 @@ class VpnConnectionManager(
                                     Log.i(TAG, "═══════════════════════════════════════════════════════")
                                     
                                     // Update stored FD (overwrite the one from createPipe if it exists)
-                                    pipeWriteFds[tunnelId] = appFd
-                                    
-                                    // Create PFD from app FD (don't use dup, use the actual FD)
-                                    // Close old PFD if it exists to avoid FD leak
-                                    pipeWritePfds[tunnelId]?.close()
-                                    pipeWritePfds[tunnelId] = android.os.ParcelFileDescriptor.fromFd(appFd)
-                                    
-                                    // Restart pipe reader with correct FD
-                                    // Stop old reader if running
-                                    pipeReaders[tunnelId]?.cancel()
-                                    pipeReaders.remove(tunnelId)
-                                    
-                                    // Start new reader with app FD
-                                    startPipeReader(tunnelId, appFd)
+                            installSocketPairFd(tunnelId, appFd, restartReader = true)
                                     
                                     Log.i(TAG, "✅ External TUN Factory setup complete for tunnel $tunnelId")
                                 } else {
@@ -819,6 +1164,7 @@ class VpnConnectionManager(
                         
                         Log.i(TAG, "   Calling notifyConnectionStateChanged() to resume TUN reading...")
                         notifyConnectionStateChanged()
+                        updateTunnelReadiness(tunnelId)
                         return@launch
                     }
                     } else {
@@ -993,9 +1339,33 @@ class VpnConnectionManager(
                "ip=${if (ipAssigned) "✅" else "⏳"}, " +
                "dns=${if (dnsConfigured) "✅" else "⏳"}"
     }
+
+    @VisibleForTesting
+    internal fun registerTestClient(tunnelId: String, client: OpenVpnClient) {
+        connections[tunnelId] = client
+    }
+
+    @VisibleForTesting
+    internal fun simulateTunnelState(tunnelId: String, ipAssigned: Boolean, dnsConfigured: Boolean) {
+        val readinessState = tunnelReadinessStates.getOrPut(tunnelId) { TunnelReadinessState() }
+        readinessState.ipAssigned = ipAssigned
+        readinessState.dnsConfigured = dnsConfigured
+        updateTunnelReadiness(tunnelId)
+    }
+
+    @VisibleForTesting
+    internal fun refreshTunnelReadiness(tunnelId: String) {
+        updateTunnelReadiness(tunnelId)
+    }
+
+    @VisibleForTesting
+    internal fun replaceSocketPairForTest(tunnelId: String, fd: Int) {
+        installSocketPairFd(tunnelId, fd, restartReader = false)
+    }
     
     companion object {
         private const val TAG = "VpnConnectionManager"
+        private const val DEBUG_SAMPLE_LIMIT = 40
         @Volatile
         private var INSTANCE: VpnConnectionManager? = null
         

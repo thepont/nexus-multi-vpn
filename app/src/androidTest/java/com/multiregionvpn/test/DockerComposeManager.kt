@@ -115,11 +115,18 @@ object DockerComposeManager {
         serverType: String,
         hostIp: String
     ): String {
+        if (composeFile == ComposeFile.ROUTING) {
+            return when {
+                serverType.contains("UK", ignoreCase = true) -> "http://198.18.1.100"
+                serverType.contains("FR", ignoreCase = true) -> "http://198.18.2.100"
+                else -> {
+                    Log.w(TAG, "Unknown server type for routing compose file: $serverType")
+                    "http://198.18.1.100"
+                }
+            }
+        }
+
         val port = when {
-            composeFile == ComposeFile.ROUTING && serverType.contains("UK", ignoreCase = true) -> 
-                ServicePort.HTTP_UK.port
-            composeFile == ComposeFile.ROUTING && serverType.contains("FR", ignoreCase = true) -> 
-                ServicePort.HTTP_FR.port
             composeFile == ComposeFile.DNS -> 
                 ServicePort.HTTP_DNS.port
             composeFile == ComposeFile.DNS_DOMAIN -> 

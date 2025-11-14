@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,41 +25,27 @@ import androidx.compose.ui.unit.sp
 import com.multiregionvpn.ui.shared.RouterViewModel
 import com.multiregionvpn.ui.shared.ServerGroup
 
-/**
- * TV Tunnels Screen - Provider-first tunnel list
- * 
- * Shows:
- * - List of server groups (regions)
- * - Server count per group
- * - Active status (green indicator)
- * - Latency (if available)
- * 
- * D-pad navigation:
- * - Up/Down: Navigate list
- * - Select: Show group details
- * - Menu: Add new tunnel
- */
 @Composable
 fun TvTunnelsScreen(
     viewModel: RouterViewModel
 ) {
     val serverGroups by viewModel.allServerGroups.collectAsState()
     val selectedGroup by viewModel.selectedServerGroup.collectAsState()
-    
+
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Title
         Text(
             text = "VPN Tunnels",
             fontSize = 32.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier
+                .padding(bottom = 24.dp)
+                .semantics { contentDescription = "VPN Tunnels" }
         )
-        
+
         if (serverGroups.isEmpty()) {
-            // Empty state
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -79,7 +67,6 @@ fun TvTunnelsScreen(
                 }
             }
         } else {
-            // Tunnel list
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
@@ -97,15 +84,6 @@ fun TvTunnelsScreen(
     }
 }
 
-/**
- * TV Tunnel Card - Individual tunnel item
- * 
- * Layout:
- * ┌──────────────────────────────────────────────────────────────┐
- * │ [●] United Kingdom                          Connected (82ms) │
- * │     NordVPN - London #842 (OpenVPN)          3 servers       │
- * └──────────────────────────────────────────────────────────────┘
- */
 @Composable
 fun TvTunnelCard(
     group: ServerGroup,
@@ -114,7 +92,7 @@ fun TvTunnelCard(
     onDelete: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    
+
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -126,7 +104,7 @@ fun TvTunnelCard(
                 if (isFocused) {
                     Modifier.border(
                         width = 3.dp,
-                        color = Color(0xFF2196F3), // Blue focus indicator
+                        color = Color(0xFF2196F3),
                         shape = RoundedCornerShape(12.dp)
                     )
                 } else {
@@ -148,32 +126,28 @@ fun TvTunnelCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left: Region info
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Status indicator
                 Icon(
                     imageVector = Icons.Default.Circle,
                     contentDescription = null,
                     tint = if (group.isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
                     modifier = Modifier.size(16.dp)
                 )
-                
-                // Region name and details
+
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Line 1: Region name (large, bold)
                     Text(
                         text = group.name,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = Color.White,
+                        modifier = Modifier.semantics { contentDescription = group.name }
                     )
-                    
-                    // Line 2: Provider and server count (smaller, gray)
+
                     Text(
                         text = "${group.serverCount} server${if (group.serverCount != 1) "s" else ""} available",
                         fontSize = 16.sp,
@@ -182,31 +156,18 @@ fun TvTunnelCard(
                     )
                 }
             }
-            
-            // Right: Status
+
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Status text
                 Text(
                     text = if (group.isActive) "Connected" else "Idle",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (group.isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
                 )
-                
-                // Latency (if active)
-                if (group.isActive) {
-                    Text(
-                        text = "-- ms", // TODO: Add real latency
-                        fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF9E9E9E)
-                    )
-                }
             }
         }
     }
 }
-

@@ -17,7 +17,7 @@ import javax.inject.Singleton
 data class PreparedVpnConfig(
     val vpnConfig: VpnConfig,
     val ovpnFileContent: String,
-    val authFile: File? // A temporary file holding username/password
+    val authFile: File? // Temporary file holding username/password
 )
 
 @Singleton
@@ -29,6 +29,12 @@ class VpnTemplateService @Inject constructor(
 ) {
     companion object {
         private const val TAG = "VpnTemplateService"
+        /**
+         * Self-signed CA used exclusively for local instrumentation tests.
+         * The PEM is stored under `src/androidTest/resources/certs/local_test_ca.pem`.
+         * Do NOT reuse this in production builds.
+         */
+        private const val LOCAL_TEST_CA_RESOURCE = "certs/local_test_ca.pem"
     }
 
     /**
@@ -131,31 +137,52 @@ class VpnTemplateService @Inject constructor(
         
         // Local test servers don't use compression (matching server configs)
         val compressionLine = ""
-        
-        val ovpnConfig = """
-            client
-            dev tun
-            proto udp
-            remote $serverHost $serverPort
-            resolv-retry infinite
-            nobind
-            persist-key
-            persist-tun
-            auth-user-pass ${authFile.absolutePath}
-            verb 3
-            $compressionLine
-            verify-x509-name server name
-            remote-cert-tls server
-        """.trimIndent()
+
+        val ovpnConfig = buildString {
+            appendLine("client")
+            appendLine("dev tun")
+            appendLine("proto udp")
+            appendLine("remote $serverHost $serverPort")
+            appendLine("resolv-retry infinite")
+            appendLine("nobind")
+            appendLine("persist-key")
+            appendLine("persist-tun")
+            appendLine("auth-user-pass ${authFile.absolutePath}")
+            appendLine("cipher AES-256-GCM")
+            appendLine("auth SHA1")
+            appendLine("verb 3")
+            if (compressionLine.isNotBlank()) {
+                appendLine(compressionLine.trim())
+            } else {
+                appendLine("comp-lzo no")
+            }
+            appendLine("remote-cert-tls server")
+            loadLocalTestResource(LOCAL_TEST_CA_RESOURCE)?.let { pem ->
+                appendLine("<ca>")
+                appendLine(pem.trim())
+                appendLine("</ca>")
+            } ?: throw IllegalStateException("Local test CA bundle is missing; run the CA generation script.")
+        }
         
         Log.d(TAG, "Generated OpenVPN config for ${config.name}: ${ovpnConfig.length} bytes")
         Log.d(TAG, "Using verify-x509-name server name (matching working routing tests)")
+        Log.v(TAG, "Local test OpenVPN config:\n$ovpnConfig")
         
         return PreparedVpnConfig(
             vpnConfig = config,
             ovpnFileContent = ovpnConfig,
             authFile = authFile
         )
+    }
+
+    private fun loadLocalTestResource(path: String): String? {
+        return try {
+            val stream = this::class.java.classLoader?.getResourceAsStream(path)
+            stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText().trim() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read local test resource: $path", e)
+            null
+        }
     }
 }
 

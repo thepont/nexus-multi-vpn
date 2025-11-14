@@ -29,17 +29,6 @@ services:
       - ../../../../openvpn-dns-domain:/etc/openvpn
     networks:
       vpn-dns-domain:
-    command: >
-      sh -c "
-        if [ ! -f /etc/openvpn/pki/ca.crt ]; then
-          echo '⚠️  PKI not found - generating...'
-          ovpn_genconfig -u udp://vpn-server-dns-domain:1194 -N -d -s 10.5.0.0/24
-          EASYRSA_BATCH=1 ovpn_initpki nopass
-        fi
-        openvpn --config /etc/openvpn/server.conf
-      "
-    environment:
-      - OVPN_SERVER_URL=udp://vpn-server-dns-domain:1194
     depends_on:
       - dns-server
 

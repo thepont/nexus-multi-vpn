@@ -19,6 +19,9 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
+import org.junit.Rule
 
 /**
  * E2E Test using REAL production apps to verify VPN routing.
@@ -38,7 +41,11 @@ import org.junit.runner.RunWith
  *   com.multiregionvpn.test/androidx.test.runner.AndroidJUnitRunner
  */
 @RunWith(AndroidJUnit4::class)
+@HiltAndroidTest
 class ProductionAppRoutingTest {
+    
+    @get:Rule
+    val hiltRule = HiltAndroidRule(this)
     
     private lateinit var appContext: Context
     private lateinit var device: UiDevice
@@ -49,6 +56,7 @@ class ProductionAppRoutingTest {
     
     @Before
     fun setup() = runBlocking {
+        hiltRule.inject()
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("🌐 PRODUCTION APP ROUTING TEST SETUP")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
