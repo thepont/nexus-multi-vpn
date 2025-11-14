@@ -318,7 +318,7 @@ jobs:
       - name: Generate .env file
         shell: bash
         run: |
-          cat > .env <<'EOF'
+          cat > .env <<EOF
           NORDVPN_USERNAME=${NORDVPN_USERNAME}
           NORDVPN_PASSWORD=${NORDVPN_PASSWORD}
           TEST_VPN_HOSTNAME=${TEST_VPN_HOSTNAME}
