@@ -260,6 +260,80 @@ When generating code:
 7. **Logging**: Use appropriate log levels and messages
 8. **Comments**: Follow CODE_STYLE_GUIDE.md - direct, concise, professional
 
+## Pull Request Review Guidelines
+
+When reviewing pull requests, ensure all behaviors are thoroughly covered:
+
+### Behavior Coverage Checklist
+
+#### 1. **Functional Behavior**
+- [ ] All user-facing features have corresponding tests
+- [ ] Edge cases are identified and tested (null inputs, empty states, boundary conditions)
+- [ ] Error conditions are properly handled and tested
+- [ ] Success paths and failure paths are both covered
+
+#### 2. **Multi-Protocol Behavior**
+- [ ] Changes work correctly with OpenVPN 3
+- [ ] Changes work correctly with WireGuard
+- [ ] Mixed protocol scenarios are tested (if applicable)
+- [ ] Protocol detection logic is validated
+
+#### 3. **Multi-Tunnel Behavior**
+- [ ] Single tunnel scenarios are tested
+- [ ] Multiple simultaneous tunnels are tested
+- [ ] Tunnel isolation is maintained (no cross-tunnel packet leaks)
+- [ ] Per-app routing rules work correctly with multiple tunnels
+
+#### 4. **Concurrency & Thread Safety**
+- [ ] Race conditions are prevented
+- [ ] Shared state uses proper synchronization
+- [ ] Connection tracking cache is thread-safe
+- [ ] No deadlocks in multi-tunnel scenarios
+
+#### 5. **Native Code (C++) Behavior**
+- [ ] Buffer allocations include proper headroom (256 bytes for OpenVPN)
+- [ ] Memory management is correct (no leaks, proper cleanup)
+- [ ] JNI boundaries are properly handled
+- [ ] Native unit tests cover new C++ code
+
+#### 6. **Network Behavior**
+- [ ] DNS resolution works through VPN tunnels
+- [ ] Packet routing follows correct rules
+- [ ] Socket protection prevents routing loops
+- [ ] Network state changes are handled gracefully
+
+#### 7. **Test Coverage Requirements**
+- [ ] **C++ unit tests**: For native code changes
+- [ ] **Local Docker E2E tests**: For protocol/routing changes (no VPN subscription needed)
+- [ ] **Real-world E2E tests**: For end-to-end validation (if NordVPN credentials available)
+- [ ] **UI tests**: For user interface changes (Maestro tests if applicable)
+
+#### 8. **Documentation & Code Quality**
+- [ ] Code follows CODE_STYLE_GUIDE.md (direct, descriptive comments)
+- [ ] Public APIs have KDoc/Doxygen documentation
+- [ ] README.md is updated for new features
+- [ ] Architecture changes are documented
+
+#### 9. **Performance Behavior**
+- [ ] Connection tracking cache efficiency is maintained
+- [ ] Packet routing overhead is minimal
+- [ ] No blocking operations on main thread
+- [ ] Memory usage is reasonable for multi-tunnel scenarios
+
+#### 10. **Security & Compliance**
+- [ ] GPL v2 license compliance is maintained
+- [ ] No secrets or credentials in code
+- [ ] VPN permissions are properly requested
+- [ ] Packet encryption/decryption is correct
+
+### Review Process
+
+1. **Check test results**: Ensure all test tiers pass (C++ unit, Docker E2E, real-world E2E)
+2. **Verify behavior coverage**: Use the checklist above to identify gaps
+3. **Request missing tests**: If behaviors are untested, request appropriate test additions
+4. **Validate critical areas**: Pay special attention to thread safety, buffer management, and DNS configuration
+5. **Ensure minimal changes**: Verify the PR makes the smallest necessary changes
+
 ## Priority Areas
 
 When assisting with code:
