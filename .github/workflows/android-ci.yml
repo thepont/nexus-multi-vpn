@@ -85,11 +85,14 @@ jobs:
 
       - name: Download Dependencies (with enhanced logging and timeout monitoring)
         timeout-minutes: 30
+        env:
+          CI: true
         run: |
           echo "========================================"
           echo "Starting dependency download"
           echo "========================================"
           echo "Timestamp: $(date)"
+          echo "CI environment: $CI"
           echo "Java version: $(java -version 2>&1 | head -1)"
           echo "Gradle version: $(./gradlew --version | grep Gradle)"
           echo ""
@@ -235,11 +238,14 @@ jobs:
 
       - name: Run Robolectric Unit Tests
         timeout-minutes: 20
+        env:
+          CI: true
         run: |
           echo "========================================"
           echo "Starting Robolectric Unit Tests"
           echo "========================================"
           echo "Timestamp: $(date)"
+          echo "CI environment: $CI"
           
           # Create monitoring script
           cat > /tmp/test_monitor.sh << 'MONITOR_EOF'
@@ -308,6 +314,20 @@ jobs:
           echo "Exit code: $TEST_EXIT"
           
           # Show test summary
+          echo ""
+          echo "=== Test Summary ==="
+          grep -E "(BUILD SUCCESSFUL|BUILD FAILED|> Task :app:testDebugUnitTest|tests completed|test failed|tests? skipped|SKIPPED)" robolectric-test.log | tail -30 || echo "No test summary found"
+          
+          # Check for skipped tests
+          SKIPPED_COUNT=$(grep -c "SKIPPED" robolectric-test.log || echo "0")
+          echo ""
+          echo "=== Skipped tests: $SKIPPED_COUNT ==="
+          if [ "$SKIPPED_COUNT" -gt "0" ]; then
+            echo "⚠️  Some tests were skipped:"
+            grep "SKIPPED" robolectric-test.log || true
+          fi
+          
+          exit $TEST_EXIT
           echo ""
           echo "=== Test Summary ==="
           grep -E "(BUILD SUCCESSFUL|BUILD FAILED|> Task :app:testDebugUnitTest|tests completed|test failed)" robolectric-test.log | tail -30 || echo "No test summary found"
