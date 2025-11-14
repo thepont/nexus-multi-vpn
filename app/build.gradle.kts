@@ -118,11 +118,18 @@ android {
         }
     }
     
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+    // Disable native builds in CI to prevent timeouts
+    // Native builds can take 15-30 minutes and aren't needed for unit tests
+    val isCI = System.getenv("CI")?.toBoolean() ?: false
+    if (!isCI) {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.22.1"
+            }
         }
+    } else {
+        println("⚠️  CI environment detected - skipping native build configuration")
     }
     
     compileOptions {

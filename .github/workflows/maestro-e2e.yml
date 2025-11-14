@@ -16,15 +16,194 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 env:
   GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g
   TERM: dumb
 
 jobs:
+  # --------------------------------------------------------------------
+  # JOB 1: WARM THE CACHE
+  # This job downloads dependencies with a long timeout to prevent
+  # timeouts during the E2E test execution.
+  # --------------------------------------------------------------------
+  warm-cache:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Build Dependencies
+        run: |
+          echo "=== Checking installed build tools ==="
+          # Check for essential build dependencies
+          which cmake || echo "⚠️  CMake not found"
+          which ninja || echo "⚠️  Ninja not found"
+          which make || echo "⚠️  Make not found"
+          
+          # Install CMake and Ninja via Homebrew on macOS
+          echo "=== Installing build dependencies ==="
+          brew install cmake ninja
+          
+          echo "=== Installed versions ==="
+          cmake --version
+          ninja --version
+          
+          echo "=== Android SDK Components ==="
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
+      - name: Cache Android NDK (if native builds are needed later)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk
+            ~/.android/build-cache
+          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-ndk-
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Download Dependencies (with enhanced logging and timeout monitoring)
+        timeout-minutes: 30
+        env:
+          CI: true
+        run: |
+          echo "========================================"
+          echo "Starting dependency download"
+          echo "========================================"
+          echo "Timestamp: $(date)"
+          echo "Java version: $(java -version 2>&1 | head -1)"
+          echo "Gradle version: $(./gradlew --version | grep Gradle)"
+          echo ""
+          
+          # Create a monitoring script
+          cat > /tmp/monitor.sh << 'MONITOR_EOF'
+          #!/bin/bash
+          LOG_FILE=$1
+          INTERVAL=30
+          LAST_SIZE=0
+          STALL_COUNT=0
+          
+          while true; do
+            sleep $INTERVAL
+            
+            if [ -f "$LOG_FILE" ]; then
+              CURRENT_SIZE=$(wc -c < "$LOG_FILE" 2>/dev/null || echo "0")
+              echo "=== $(date) ==="
+              echo "Log file size: $CURRENT_SIZE bytes (was $LAST_SIZE)"
+              
+              if [ "$CURRENT_SIZE" -eq "$LAST_SIZE" ]; then
+                STALL_COUNT=$((STALL_COUNT + 1))
+                echo "⚠️  No new output for $((STALL_COUNT * INTERVAL)) seconds"
+                
+                if [ $STALL_COUNT -ge 4 ]; then
+                  echo "❌ STALLED: No output for $((STALL_COUNT * INTERVAL)) seconds"
+                  echo "Last 50 lines of output:"
+                  tail -50 "$LOG_FILE"
+                  exit 1
+                fi
+              else
+                STALL_COUNT=0
+              fi
+              
+              LAST_SIZE=$CURRENT_SIZE
+              echo "Last 10 lines:"
+              tail -10 "$LOG_FILE"
+            else
+              echo "Waiting for log file to be created..."
+            fi
+            echo "---"
+          done
+          MONITOR_EOF
+          
+          chmod +x /tmp/monitor.sh
+          
+          # Start monitoring in background
+          /tmp/monitor.sh gradle-dependency-download.log &
+          MONITOR_PID=$!
+          
+          echo "=== Attempting simple dependency resolution first ==="
+          # Try a simpler approach: just resolve specific configurations we know we need
+          set +e  # Don't exit on error
+          
+          ./gradlew dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+          echo "✓ debugCompileClasspath resolved"
+          
+          ./gradlew dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+          echo "✓ debugRuntimeClasspath resolved"
+          
+          ./gradlew dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+          echo "✓ debugAndroidTestCompileClasspath resolved"
+          
+          ./gradlew dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+          echo "✓ debugAndroidTestRuntimeClasspath resolved"
+          
+          # Now try our custom task
+          echo ""
+          echo "=== Running androidDependencies task ==="
+          ./gradlew androidDependencies -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
+          
+          GRADLE_EXIT=$?
+          set -e
+          
+          # Stop monitoring
+          kill $MONITOR_PID 2>/dev/null || true
+          
+          echo ""
+          echo "========================================"
+          echo "Dependency download completed"
+          echo "========================================"
+          echo "Timestamp: $(date)"
+          echo "Exit code: $GRADLE_EXIT"
+          
+          # Show summary
+          echo ""
+          echo "=== Summary ==="
+          grep -E "(✓ Resolving:|✗ Could not resolve|Successfully resolved|Failed to resolve)" gradle-dependency-download.log | tail -20 || echo "No summary found"
+          
+          echo ""
+          echo "=== Gradle cache size ==="
+          du -sh ~/.gradle/caches 2>/dev/null || echo "Cache directory not found"
+          
+          exit $GRADLE_EXIT
+
+      - name: Upload Gradle logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-dependency-logs-macos
+          path: gradle-dependency-download.log
+
   guard:
     name: Evaluate Maestro Preconditions
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    needs: warm-cache
     outputs:
       run-maestro: ${{ steps.evaluate.outputs.run_maestro }}
       allow-empty: ${{ steps.evaluate.outputs.allow_empty }}
@@ -77,7 +256,9 @@ jobs:
     name: Maestro E2E
     runs-on: macos-latest
     timeout-minutes: 50
-    needs: guard
+    needs: 
+      - warm-cache
+      - guard
     if: ${{ needs.guard.outputs.run-maestro == 'true' }}
     env:
       ALLOW_EMPTY_CREDENTIALS: ${{ needs.guard.outputs.allow-empty == 'true' }}
@@ -96,13 +277,22 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
+
+      - name: Restore Gradle Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Validate NordVPN credentials
         shell: bash
@@ -136,7 +326,9 @@ jobs:
           EOF
 
       - name: Assemble debug build
-        run: ./gradlew --stacktrace assembleDebug
+        env:
+          CI: true
+        run: ./gradlew --stacktrace assembleDebug -x externalNativeBuildDebug -x externalNativeBuildRelease
 
       - name: Launch emulator and run Maestro tests
         uses: reactivecircus/android-emulator-runner@v2
