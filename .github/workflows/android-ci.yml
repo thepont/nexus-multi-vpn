@@ -354,6 +354,7 @@ jobs:
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 34
+          arch: x86_64
           script: |
             echo "========================================"
             echo "Starting Instrumentation Tests"
