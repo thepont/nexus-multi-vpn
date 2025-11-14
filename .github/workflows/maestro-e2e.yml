@@ -332,7 +332,7 @@ jobs:
         run: ./gradlew --stacktrace assembleDebug -x externalNativeBuildDebug -x externalNativeBuildRelease
 
       - name: Launch emulator and run Maestro tests
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
@@ -343,7 +343,6 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             maestro test .maestro/
-            maestro report .maestro/ --output maestro-test-results.html
 
       - name: Upload Maestro artifacts
         if: always()
@@ -351,6 +350,7 @@ jobs:
         with:
           name: maestro-test-results
           path: |
-            maestro-test-results.html
-            .maestro/tests/
+            ~/.maestro/tests/
+            .maestro/
+          if-no-files-found: warn
 
