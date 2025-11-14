@@ -68,7 +68,7 @@ jobs:
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
 
-      - name: Cache Android NDK (if native builds are needed later)
+      - name: Cache Android NDK
         uses: actions/cache@v4
         with:
           path: |
@@ -77,6 +77,17 @@ jobs:
           key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
           restore-keys: |
             ${{ runner.os }}-ndk-
+
+      - name: Cache native build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/.cxx
+            app/build/intermediates/cxx
+            app/build/intermediates/cmake
+          key: ${{ runner.os }}-native-build-${{ hashFiles('app/src/main/cpp/**', '**/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-native-build-
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
@@ -285,6 +296,27 @@ jobs:
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
 
+      - name: Restore NDK Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk
+            ~/.android/build-cache
+          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-ndk-
+
+      - name: Restore native build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/.cxx
+            app/build/intermediates/cxx
+            app/build/intermediates/cmake
+          key: ${{ runner.os }}-native-build-${{ hashFiles('app/src/main/cpp/**', '**/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-native-build-
+
       - name: Restore Gradle Cache
         uses: actions/cache@v4
         with:
@@ -326,10 +358,16 @@ jobs:
           TEST_APP_PACKAGE=${TEST_APP_PACKAGE}
           EOF
 
-      - name: Assemble debug build
-        env:
-          CI: true
-        run: ./gradlew --stacktrace assembleDebug -x externalNativeBuildDebug -x externalNativeBuildRelease
+      - name: Assemble debug build with native libraries
+        timeout-minutes: 45
+        run: |
+          echo "========================================"
+          echo "Building APK with OpenVPN native libraries for E2E tests"
+          echo "========================================"
+          echo "Note: Native builds are required for actual VPN connections in E2E tests"
+          echo "This may take 15-30 minutes on first build, but will be cached for subsequent runs"
+          echo ""
+          ./gradlew --stacktrace assembleDebug
 
       - name: Launch emulator and run Maestro tests
         uses: ReactiveCircus/android-emulator-runner@v2
