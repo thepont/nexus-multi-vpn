@@ -195,10 +195,11 @@ A production-ready native Android (Kotlin/C++) application that functions as a s
 
 ### **Test Coverage**: 25+ tests
 
-#### **C++ Unit Tests** (18 tests) ✅
+#### **C++ Unit Tests** (27 tests) ✅
 - **Socketpair Tests** (7): I/O, boundaries, non-blocking
 - **Bidirectional Flow** (4): Async multi-threaded data flow
 - **Buffer Headroom** (7): OpenVPN buffer allocation fix
+- **Reconnect Session** (9): Session reconnection handling
 
 **Run**:
 ```bash
@@ -206,6 +207,8 @@ cd app/src/test/cpp/build
 cmake .. && make -j4
 ctest --output-on-failure
 ```
+
+**GitHub Actions**: These tests run automatically on every push/PR via the `cpp-unit-tests` job in `.github/workflows/android-ci.yml`.
 
 ---
 
