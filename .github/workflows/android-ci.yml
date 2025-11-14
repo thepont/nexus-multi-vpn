@@ -16,7 +16,57 @@ permissions:
 
 jobs:
   # --------------------------------------------------------------------
-  # JOB 1: WARM THE CACHE
+  # JOB 1: C++ UNIT TESTS
+  # Runs native C++ unit tests for OpenVPN integration layer.
+  # This job is independent and fast, so it runs first.
+  # --------------------------------------------------------------------
+  cpp-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Build Dependencies
+        run: |
+          echo "=== Installing C++ build tools ==="
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake build-essential
+          
+          echo "=== Installed versions ==="
+          cmake --version
+          g++ --version
+
+      - name: Configure C++ Tests
+        run: |
+          echo "=== Configuring C++ unit tests ==="
+          cd app/src/test/cpp
+          mkdir -p build
+          cd build
+          cmake ..
+
+      - name: Build C++ Tests
+        run: |
+          echo "=== Building C++ unit tests ==="
+          cd app/src/test/cpp/build
+          make -j4
+
+      - name: Run C++ Tests
+        run: |
+          echo "=== Running C++ unit tests ==="
+          cd app/src/test/cpp/build
+          ctest --output-on-failure --verbose
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-test-results
+          path: app/src/test/cpp/build/Testing/
+
+  # --------------------------------------------------------------------
+  # JOB 2: WARM THE CACHE
   # This job's ONLY purpose is to download dependencies.
   # We give it a long timeout so the slow Robolectric JAR download
   # can finish successfully just one time.
@@ -199,9 +249,9 @@ jobs:
           path: gradle-dependency-download.log
 
   # --------------------------------------------------------------------
-  # JOB 2: BUILD AND TEST
+  # JOB 3: BUILD AND TEST
   # This job will only run AFTER the 'warm-cache' job succeeds.
-  # It will be fast because it uses the cache from Job 1.
+  # It will be fast because it uses the cache from Job 2.
   # --------------------------------------------------------------------
   build-and-test:
     runs-on: ubuntu-latest

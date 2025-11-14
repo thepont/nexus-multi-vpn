@@ -65,9 +65,24 @@ target_link_libraries(buffer_headroom_test
 # Register test with CTest
 add_test(NAME BufferHeadroomTests COMMAND buffer_headroom_test)
 
+# Test 4: Session Reconnection Test
+add_executable(reconnect_session_test
+    reconnect_session_test.cpp
+)
+
+target_link_libraries(reconnect_session_test
+    GTest::gtest
+    GTest::gtest_main
+    GTest::gmock
+)
+
+# Register test with CTest
+add_test(NAME ReconnectSessionTests COMMAND reconnect_session_test)
+
 # Print message
 message(STATUS "C++ unit tests configured:")
 message(STATUS "  - socketpair_test")
 message(STATUS "  - bidirectional_flow_test (CRITICAL)")
 message(STATUS "  - buffer_headroom_test (OpenVPN fix coverage)")
+message(STATUS "  - reconnect_session_test")
 
