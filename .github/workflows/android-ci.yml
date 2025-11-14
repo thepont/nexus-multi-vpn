@@ -363,10 +363,7 @@ jobs:
             
             # Run with monitoring
             set +e
-            ./gradlew connectedDebugAndroidTest \
-              -x externalNativeBuildDebug \
-              -x externalNativeBuildRelease \
-              --info --stacktrace 2>&1 | tee instrumentation-test.log
+            ./gradlew connectedDebugAndroidTest -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee instrumentation-test.log
             
             TEST_EXIT=$?
             set -e
