@@ -251,6 +251,7 @@ jobs:
               echo "## Maestro E2E Tests"
               echo "- Skipped because NordVPN credentials were not provided and workflow_dispatch override not enabled."
             } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   maestro:
     name: Maestro E2E
