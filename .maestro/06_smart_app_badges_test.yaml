@@ -5,17 +5,12 @@ appId: "com.multiregionvpn"
 
 - launchApp
 
-# Prerequisites: Tunnels should be configured (UK and FR)
+# Prerequisites: Tunnels must be configured (UK and FR)
 - tapOn: "Tunnels"
+
+# Test will FAIL if no UK or France tunnels are configured
 - assertVisible:
     text: ".*UK.*|.*France.*"
-    optional: true
-
-- runFlow:
-    when:
-      notVisible: ".*UK.*"
-    commands:
-      - stopApp
 
 # Navigate to Apps tab
 - tapOn: "Apps"

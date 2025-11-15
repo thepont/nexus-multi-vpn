@@ -8,16 +8,10 @@ appId: "com.multiregionvpn"
 # Ensure we have credentials and a tunnel configured
 # (This test assumes bootstrap has been run)
 - tapOn: "Tunnels"
-- assertVisible:
-    text: ".*BBC.*|.*France.*"  # At least one tunnel exists
-    optional: true
 
-# If no tunnels, skip the rest of this test
-- runFlow:
-    when:
-      notVisible: ".*BBC.*"
-    commands:
-      - stopApp
+# Test will FAIL if no tunnels are configured
+- assertVisible:
+    text: ".*BBC.*|.*France.*"  # At least one tunnel must exist
 
 # Navigate to Apps tab
 - tapOn: "Apps"
