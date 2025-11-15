@@ -397,20 +397,7 @@ jobs:
           force-avd-creation: false
           emulator-boot-timeout: 600
           script: |
-            echo "Waiting for emulator to fully settle..."
-            sleep 30
-            echo "Installing APK (with retries)..."
-            i=1
-            while [ $i -le 3 ]; do
-              if adb install -r app/build/outputs/apk/debug/app-debug.apk; then
-                echo "✅ APK installed successfully"
-                break
-              else
-                echo "⚠️  Installation attempt $i failed, retrying..."
-                sleep 10
-                i=$((i + 1))
-              fi
-            done
+            ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
             echo "Running Maestro tests..."
             maestro test .maestro/
 
