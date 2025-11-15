@@ -1,0 +1,157 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Build Dependencies
+        run: |
+          echo "=== Installing build dependencies ==="
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build build-essential
+          
+          echo "=== Installed versions ==="
+          cmake --version
+          ninja --version
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Cache Android NDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk
+            ~/.android/build-cache
+          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-ndk-
+
+      - name: Build Universal Release APK
+        env:
+          CI: false
+        run: |
+          echo "=========================================="
+          echo "Building Universal Release APK"
+          echo "=========================================="
+          echo "Timestamp: $(date)"
+          
+          # Build release APK with all ABIs included
+          ./gradlew assembleRelease \
+            --info --stacktrace 2>&1 | tee build-release.log
+          
+          echo ""
+          echo "=========================================="
+          echo "Build completed"
+          echo "=========================================="
+          echo "Timestamp: $(date)"
+          
+          # List generated APKs
+          echo ""
+          echo "=== Generated APKs ==="
+          find app/build/outputs/apk/release -name "*.apk" -exec ls -lh {} \;
+
+      - name: Get APK Info
+        id: apk_info
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          APK_NAME=$(basename "$APK_PATH")
+          APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+          
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
+          echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+          
+          echo "APK Path: $APK_PATH"
+          echo "APK Name: $APK_NAME"
+          echo "APK Size: $APK_SIZE"
+
+      - name: Determine Release Tag
+        id: release_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG_NAME="${{ github.event.inputs.tag_name }}"
+          else
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "Release Tag: $TAG_NAME"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag_name }}
+          name: Release ${{ steps.release_tag.outputs.tag_name }}
+          body: |
+            ## Multi-Region VPN Router - Release ${{ steps.release_tag.outputs.tag_name }}
+            
+            ### 📦 Universal Android Build
+            - **APK Name**: `${{ steps.apk_info.outputs.apk_name }}`
+            - **APK Size**: `${{ steps.apk_info.outputs.apk_size }}`
+            - **Supported ABIs**: arm64-v8a, armeabi-v7a
+            - **Min SDK**: Android 10 (API 29)
+            - **Target SDK**: Android 14 (API 34)
+            
+            ### ✨ Features
+            - Multi-protocol VPN support (OpenVPN 3, WireGuard)
+            - Multi-tunnel routing
+            - Per-app routing rules
+            - DNS resolution through VPN tunnels
+            
+            ### 📥 Installation
+            1. Download the APK file below
+            2. Enable "Install from unknown sources" in Android settings
+            3. Install the APK
+            4. Grant VPN permissions when prompted
+            
+            ### ⚠️ Note
+            This is a release build without code signing. For production use, proper signing is required.
+          files: |
+            ${{ steps.apk_info.outputs.apk_path }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-logs
+          path: build-release.log

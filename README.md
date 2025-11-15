@@ -303,6 +303,14 @@ android-studio .
 ./gradlew :app:installDebug
 ```
 
+### **Release Builds**
+
+For production releases, see [RELEASE_WORKFLOW.md](RELEASE_WORKFLOW.md) for:
+- Automated release publishing via GitHub Actions
+- Building universal APKs with all ABIs
+- Code signing for production distribution
+- Version tagging and release management
+
 ---
 
 ## ⚙️ Configuration
