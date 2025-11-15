@@ -51,12 +51,13 @@ jobs:
           echo "=== Checking installed build tools ==="
           # Check for essential build dependencies
           which cmake || echo "⚠️  CMake not found"
-          which ninja || echo "⚠️  Ninja not found"
+          which ninja-build || which ninja || echo "⚠️  Ninja not found"
           which make || echo "⚠️  Make not found"
           
-          # Install CMake and Ninja via Homebrew on macOS
+          # Install CMake and Ninja via apt on Ubuntu
           echo "=== Installing build dependencies ==="
-          brew install cmake ninja
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
           
           echo "=== Installed versions ==="
           cmake --version
