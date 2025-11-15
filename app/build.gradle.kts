@@ -113,8 +113,9 @@ android {
         }
         
         ndk {
-            // Build for both ARM architectures - vcpkg libraries built for both triplets
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            // Build for ARM (real devices) and x86 (emulators) architectures
+            // Required for E2E tests which run on x86_64 emulators
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
         }
     }
     
