@@ -23,7 +23,7 @@ appId: "com.multiregionvpn"
 - assertVisible: "Chrome"
 
 # Clear search
-- clearText
+- eraseText
 - assertVisible:
     text: ".*BBC.*|.*Disney.*|.*Netflix.*"  # Geo-blocked apps should appear
 
