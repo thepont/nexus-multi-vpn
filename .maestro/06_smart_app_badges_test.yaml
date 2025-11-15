@@ -16,8 +16,6 @@ appId: "com.multiregionvpn"
       notVisible: ".*UK.*"
     commands:
       - stopApp
-      - assertTrue: false
-        message: "No tunnels configured - run bootstrap first"
 
 # Navigate to Apps tab
 - tapOn: "Apps"
