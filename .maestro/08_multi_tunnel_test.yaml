@@ -20,7 +20,7 @@ appId: "com.multiregionvpn"
     text: "Chrome"
     optional: true
 - tapOn: "UK - BBC"
-- wait: 500
+- waitForAnimationToEnd
 
 # Scroll to find another app
 - scroll
@@ -32,7 +32,7 @@ appId: "com.multiregionvpn"
     text: "Firefox"
     optional: true
 - tapOn: "France - Streaming"
-- wait: 500
+- waitForAnimationToEnd
 
 # Scroll to find third app
 - scroll
@@ -44,22 +44,22 @@ appId: "com.multiregionvpn"
     text: "Netflix|Disney"
     optional: true
 - tapOn: "UK - BBC"
-- wait: 500
+- waitForAnimationToEnd
 
 # ============================================
 # STEP 2: Start VPN (should start BOTH tunnels)
 # ============================================
 - tapOn:
     point: "90%,8%"  # Toggle switch in top right
-- wait: 15000  # Wait for both tunnels to connect
 
+# Wait for both tunnels to connect - assertion waits implicitly
 - assertVisible: "Protected"
 
 # ============================================
 # STEP 3: Verify both tunnels connected
 # ============================================
 - tapOn: "Tunnels"
-- wait: 2000
+- waitForAnimationToEnd
 
 # Both tunnels should show Connected status
 - assertVisible:
@@ -75,15 +75,15 @@ appId: "com.multiregionvpn"
 - tapOn: "Apps"
 - tapOn: "Chrome"
 - tapOn: "France - Streaming"  # Switch to FR
-- wait: 3000  # Wait for tunnel switch
+- waitForAnimationToEnd
 
-# VPN should stay Protected (no disconnection)
+# VPN should stay Protected (no disconnection) - assertion waits implicitly
 - assertVisible: "Protected"
 
 # Switch back to UK
 - tapOn: "Chrome"
 - tapOn: "UK - BBC"
-- wait: 3000
+- waitForAnimationToEnd
 
 - assertVisible: "Protected"
 
@@ -92,7 +92,7 @@ appId: "com.multiregionvpn"
 # ============================================
 - tapOn: "Chrome"
 - tapOn: "Direct Internet"
-- wait: 500
+- waitForAnimationToEnd
 
 # Chrome should now have no rule
 
@@ -101,7 +101,7 @@ appId: "com.multiregionvpn"
 # ============================================
 - tapOn:
     point: "90%,8%"  # Toggle switch in top right
-- wait: 2000
+- waitForAnimationToEnd
 - assertVisible: "Disconnected"
 
 # Both tunnels should show Disconnected

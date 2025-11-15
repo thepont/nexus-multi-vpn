@@ -14,7 +14,7 @@ appId: "com.multiregionvpn"
 
 # Navigate to Apps tab
 - tapOn: "Apps"
-- wait: 1000
+- waitForAnimationToEnd
 
 # Test: Smart ordering
 # Scroll to top to see priority apps (use swipe up since direction not supported)
@@ -80,7 +80,7 @@ appId: "com.multiregionvpn"
 
 # Clear search
 - eraseText
-- wait: 500
+- waitForAnimationToEnd
 
 # Search for Disney
 - inputText: "disney"
