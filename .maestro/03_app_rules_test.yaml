@@ -65,9 +65,19 @@ appId: "com.multiregionvpn"
 
 # Test: Smart app ordering
 # Geo-blocked apps should be at the top
-- scroll:
-    direction: UP  # Scroll to top
-    repeat: 5
+# Use swipe up to scroll to top (scroll direction not supported in Maestro)
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
 
 # UK apps should be visible near top
 - assertVisible:

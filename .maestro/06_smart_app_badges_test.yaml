@@ -17,10 +17,27 @@ appId: "com.multiregionvpn"
 - wait: 1000
 
 # Test: Smart ordering
-# Scroll to top to see priority apps
-- scroll:
-    direction: UP
-    repeat: 5
+# Scroll to top to see priority apps (use swipe up since direction not supported)
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
 
 # Geo-blocked apps should be near the top
 # UK apps (if user is NOT in UK)
@@ -38,9 +55,9 @@ appId: "com.multiregionvpn"
 # We can't directly check badge color, but we can verify the apps are there
 
 # Test: Assign app to correct region
-- scroll:
-    direction: DOWN
-    repeat: 3
+- scroll
+- scroll
+- scroll
 
 - tapOn:
     text: "BBC iPlayer"
@@ -73,9 +90,16 @@ appId: "com.multiregionvpn"
 - eraseText
 
 # Test: Scroll through app list
-- scroll:
-    direction: DOWN
-    repeat: 10
+- scroll
+- scroll
+- scroll
+- scroll
+- scroll
+- scroll
+- scroll
+- scroll
+- scroll
+- scroll
 
 # Multi-region apps should also be visible
 - assertVisible:

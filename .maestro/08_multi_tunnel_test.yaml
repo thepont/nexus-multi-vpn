@@ -23,9 +23,9 @@ appId: "com.multiregionvpn"
 - wait: 500
 
 # Scroll to find another app
-- scroll:
-    direction: DOWN
-    repeat: 3
+- scroll
+- scroll
+- scroll
 
 # Assign Firefox to France (if exists)
 - tapOn:
@@ -35,9 +35,9 @@ appId: "com.multiregionvpn"
 - wait: 500
 
 # Scroll to find third app
-- scroll:
-    direction: DOWN
-    repeat: 3
+- scroll
+- scroll
+- scroll
 
 # Assign a streaming app to UK
 - tapOn:
