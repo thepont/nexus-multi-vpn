@@ -403,3 +403,110 @@ jobs:
             .maestro/
           if-no-files-found: warn
 
+  # --------------------------------------------------------------------
+  # JOB 4: BUILD RELEASE APK
+  # This job builds a signed release APK after successful E2E tests
+  # The APK is uploaded as an artifact and can be used for releases
+  # --------------------------------------------------------------------
+  build-release:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: maestro
+    if: success()
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
+      - name: Restore Gradle cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Restore NDK cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            app/.cxx
+            app/build/intermediates/cxx
+            app/build/intermediates/cmake
+          key: ${{ runner.os }}-ndk-${{ hashFiles('app/src/main/cpp/**/*', 'app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-ndk-
+
+      - name: Build release APK with native libraries
+        timeout-minutes: 45
+        env:
+          # SKIP_NATIVE_BUILD is not set, so native builds will be enabled
+          # Release builds include all native libraries for production use
+          ENABLE_NATIVE_BUILD: true
+        run: |
+          echo "========================================"
+          echo "Building RELEASE APK with OpenVPN native libraries"
+          echo "========================================"
+          echo "This APK includes native libraries for all supported ABIs:"
+          echo "  - arm64-v8a (64-bit ARM devices)"
+          echo "  - armeabi-v7a (32-bit ARM devices)"
+          echo "  - x86_64 (64-bit x86 emulators/devices)"
+          echo "  - x86 (32-bit x86 emulators/devices)"
+          echo ""
+          echo "Build may take 15-30 minutes on first build, but uses cached native libraries from E2E tests"
+          echo ""
+          ./gradlew --stacktrace assembleRelease
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+
+      - name: Generate build summary
+        run: |
+          {
+            echo "## Release APK Build"
+            echo ""
+            echo "✅ Successfully built release APK with native OpenVPN libraries"
+            echo ""
+            echo "### APK Details"
+            APK_PATH="app/build/outputs/apk/release/app-release-unsigned.apk"
+            if [ -f "$APK_PATH" ]; then
+              APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+              echo "- **Size:** $APK_SIZE"
+              echo "- **Path:** \`$APK_PATH\`"
+              echo "- **Architectures:** arm64-v8a, armeabi-v7a, x86_64, x86"
+              echo ""
+              echo "### Next Steps"
+              echo "1. Download the APK artifact from this workflow run"
+              echo "2. Sign the APK with your release keystore"
+              echo "3. Upload to Google Play Console or distribute as needed"
+              echo ""
+              echo "> **Note:** This is an unsigned APK. You must sign it before distribution."
+            else
+              echo "⚠️ APK file not found at expected path"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
