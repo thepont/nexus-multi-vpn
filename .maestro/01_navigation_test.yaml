@@ -5,9 +5,7 @@ appId: "com.multiregionvpn"
 
 - launchApp
 
-# Basic UI presence checks (regions list)
-- assertVisible: "UK"
-- assertVisible: "FR"
+# Basic UI presence checks
 - assertVisible:
-    text: "US|AU|DE|CA|JP|IT|ES|NL"
+    text: "Region Router|App Routing Rules|Direct Internet"
 

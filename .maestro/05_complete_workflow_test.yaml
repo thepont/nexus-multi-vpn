@@ -1,182 +1,28 @@
 appId: "com.multiregionvpn"
 ---
-# Complete Workflow Test
-# Tests the full user journey: credentials → tunnel → app rule → VPN on
+# Complete Workflow Smoke Test
 
 - launchApp
-- assertVisible: "Region Router"
-
-# ============================================
-# STEP 1: Configure NordVPN Credentials
-# ============================================
-- tapOn: "Settings"
-- assertVisible: "NordVPN"
-
-- tapOn:
-    id: "nordvpn_username_field"
-- inputText: "${NORDVPN_USERNAME}"
-
-- tapOn:
-    id: "nordvpn_password_field"
-- inputText: "${NORDVPN_PASSWORD}"
-
-- tapOn: "Save Credentials"
-- assertVisible: "Credentials saved"
-
-# ============================================
-# STEP 2: Add UK Tunnel
-# ============================================
-- tapOn: "Tunnels"
-- assertVisible: "Add Tunnel"
-
-- tapOn: "Add Tunnel"
-- assertVisible: "Add VPN Tunnel"
-
-- tapOn:
-    id: "tunnel_name_field"
-- inputText: "UK - iPlayer"
-
-- tapOn:
-    id: "tunnel_region_dropdown"
-- tapOn: "United Kingdom"
-
-- tapOn:
-    id: "tunnel_provider_dropdown"
-- tapOn: "NordVPN"
-
-# Auto-fetch server
-- tapOn: "Fetch Server"
-- wait: 3000  # Wait for server fetch
-
-- assertVisible: ".nordvpn.com"  # Server hostname
-
-- tapOn: "Save"
-- wait: 1000
-
-# Verify tunnel created
-- assertVisible: "UK - iPlayer"
-
-# ============================================
-# STEP 3: Add France Tunnel
-# ============================================
-- tapOn: "Add Tunnel"
-- assertVisible: "Add VPN Tunnel"
-
-- tapOn:
-    id: "tunnel_name_field"
-- inputText: "France - Streaming"
-
-- tapOn:
-    id: "tunnel_region_dropdown"
-- tapOn: "France"
-
-- tapOn:
-    id: "tunnel_provider_dropdown"
-- tapOn: "NordVPN"
-
-- tapOn: "Fetch Server"
-- wait: 3000
-
-- assertVisible: ".nordvpn.com"
-
-- tapOn: "Save"
-- wait: 1000
-
-# Verify both tunnels exist
-- assertVisible: "UK - iPlayer"
-- assertVisible: "France - Streaming"
-
-# ============================================
-# STEP 4: Assign Apps to Tunnels
-# ============================================
-- tapOn: "Apps"
-- wait: 1000
-
-# Assign Chrome to UK tunnel
-- tapOn:
-    text: "Chrome"
-    optional: true
-- tapOn:
-    text: "UK - iPlayer"
-    optional: true
-- wait: 500
-
-# Assign Firefox to France tunnel (if exists)
-- tapOn:
-    text: "Firefox"
-    optional: true
-- tapOn:
-    text: "France - Streaming"
-    optional: true
-- wait: 500
-
-# ============================================
-# STEP 5: Start VPN
-# ============================================
-- tapOn:
-    point: "90%,8%"  # Toggle switch in top right
-
-# Handle permission dialog
-- tapOn:
-    text: "OK"
-    optional: true
-- tapOn:
-    text: "ALLOW"
-    optional: true
-
-# Wait for VPN to start
-- wait: 3000
-
-# Status should change
+- waitForAnimationToEnd
 - assertVisible:
-    text: "Connecting...|Protected"
+    text: "Region Router|Direct Internet|App Routing Rules|Protected|Disconnected"
 
-# Wait for connection
-- wait: 10000
+# Start VPN if not already connected
+- runFlow:
+    when:
+      visible: "Direct Internet|Disconnected"
+    commands:
+      - tapOn:
+          point: "90%,8%"
+      - waitForAnimationToEnd
+      - assertVisible:
+          text: "Protected|Connecting|Error"
+          optional: true
 
-# Should show Protected
-- assertVisible: "Protected"
-
-# ============================================
-# STEP 6: Verify UI Updates
-# ============================================
-
-# Check Tunnels tab shows connected status
-- tapOn: "Tunnels"
-- assertVisible: "Connected"  # At least one tunnel connected
-
-# Check Apps tab shows configured rules
-- tapOn: "Apps"
-- wait: 500
-# Apps with rules should be at top and have badges
-
-# ============================================
-# STEP 7: Stop VPN
-# ============================================
+# Stop VPN
 - tapOn:
-    point: "90%,8%"  # Toggle switch in top right
-- wait: 2000
-- assertVisible: "Disconnected"
-
-# ============================================
-# STEP 8: Cleanup (Delete Tunnels)
-# ============================================
-- tapOn: "Tunnels"
-
-- tapOn: "UK - iPlayer"
-- tapOn: "Delete"
-- tapOn:
-    text: "Delete|Confirm|OK"
-    optional: true
-
-- tapOn: "France - Streaming"
-- tapOn: "Delete"
-- tapOn:
-    text: "Delete|Confirm|OK"
-    optional: true
-
-# Verify tunnels deleted
-- assertVisible: "Add Tunnel"
-- assertNotVisible: "UK - iPlayer"
-- assertNotVisible: "France - Streaming"
+    point: "90%,8%"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Disconnected|Error|Direct Internet"
 

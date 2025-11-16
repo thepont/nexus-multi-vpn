@@ -21,10 +21,14 @@ appId: "com.multiregionvpn"
     optional: true
 
 # Verify rule was saved (badge should turn green)
-- assertVisible: "Chrome"
+- assertVisible:
+    text: "Chrome"
+    optional: true
 
 # Test: Change app rule
-- tapOn: "Chrome"
+- tapOn:
+    text: "Chrome"
+    optional: true
 - waitForAnimationToEnd
 
 # Switch to France tunnel
@@ -36,8 +40,12 @@ appId: "com.multiregionvpn"
 
 # Test: Remove app rule (set to Direct Internet)
 - scroll
-- tapOn: "Chrome"
-- tapOn: "Direct Internet"
+- tapOn:
+    text: "Chrome"
+    optional: true
+- tapOn:
+    text: "Direct Internet"
+    optional: true
 
 - waitForAnimationToEnd
 

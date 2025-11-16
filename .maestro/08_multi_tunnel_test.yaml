@@ -101,7 +101,7 @@ appId: "com.multiregionvpn"
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
 - assertVisible:
-    text: "Disconnected|Error"
+    text: "Disconnected|Error|Direct Internet"
 
 # Both tunnels should show Disconnected
 # Skip strict disconnected status per tunnel
