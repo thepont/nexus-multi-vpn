@@ -47,24 +47,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Build Dependencies
-        run: |
-          echo "=== Checking installed build tools ==="
-          # Check for essential build dependencies
-          which cmake || echo "⚠️  CMake not found"
-          which ninja-build || which ninja || echo "⚠️  Ninja not found"
-          which make || echo "⚠️  Make not found"
-          
-          # Install CMake and Ninja via apt on Ubuntu
-          echo "=== Installing build dependencies ==="
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
-          
-          echo "=== Installed versions ==="
-          cmake --version
-          ninja --version
-          
-          echo "=== Android SDK Components ==="
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed
+        run: ./scripts/ci/install-android-build-deps.sh
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
@@ -105,106 +88,7 @@ jobs:
         env:
           CI: true
           SKIP_NATIVE_BUILD: true
-        run: |
-          echo "========================================"
-          echo "Starting dependency download"
-          echo "========================================"
-          echo "Timestamp: $(date)"
-          echo "Java version: $(java -version 2>&1 | head -1)"
-          echo "Gradle version: $(./gradlew --version | grep Gradle)"
-          echo "SKIP_NATIVE_BUILD: $SKIP_NATIVE_BUILD (skipping native builds for dependency download)"
-          echo ""
-          
-          # Create a monitoring script
-          cat > /tmp/monitor.sh << 'MONITOR_EOF'
-          #!/bin/bash
-          LOG_FILE=$1
-          INTERVAL=30
-          LAST_SIZE=0
-          STALL_COUNT=0
-          
-          while true; do
-            sleep $INTERVAL
-            
-            if [ -f "$LOG_FILE" ]; then
-              CURRENT_SIZE=$(wc -c < "$LOG_FILE" 2>/dev/null || echo "0")
-              echo "=== $(date) ==="
-              echo "Log file size: $CURRENT_SIZE bytes (was $LAST_SIZE)"
-              
-              if [ "$CURRENT_SIZE" -eq "$LAST_SIZE" ]; then
-                STALL_COUNT=$((STALL_COUNT + 1))
-                echo "⚠️  No new output for $((STALL_COUNT * INTERVAL)) seconds"
-                
-                if [ $STALL_COUNT -ge 4 ]; then
-                  echo "❌ STALLED: No output for $((STALL_COUNT * INTERVAL)) seconds"
-                  echo "Last 50 lines of output:"
-                  tail -50 "$LOG_FILE"
-                  exit 1
-                fi
-              else
-                STALL_COUNT=0
-              fi
-              
-              LAST_SIZE=$CURRENT_SIZE
-              echo "Last 10 lines:"
-              tail -10 "$LOG_FILE"
-            else
-              echo "Waiting for log file to be created..."
-            fi
-            echo "---"
-          done
-          MONITOR_EOF
-          
-          chmod +x /tmp/monitor.sh
-          
-          # Start monitoring in background
-          /tmp/monitor.sh gradle-dependency-download.log &
-          MONITOR_PID=$!
-          
-          echo "=== Attempting simple dependency resolution first ==="
-          # Try a simpler approach: just resolve specific configurations we know we need
-          set +e  # Don't exit on error
-          
-          ./gradlew dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
-          echo "✓ debugCompileClasspath resolved"
-          
-          ./gradlew dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
-          echo "✓ debugRuntimeClasspath resolved"
-          
-          ./gradlew dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
-          echo "✓ debugAndroidTestCompileClasspath resolved"
-          
-          ./gradlew dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
-          echo "✓ debugAndroidTestRuntimeClasspath resolved"
-          
-          # Now try our custom task
-          echo ""
-          echo "=== Running androidDependencies task ==="
-          ./gradlew androidDependencies -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
-          
-          GRADLE_EXIT=$?
-          set -e
-          
-          # Stop monitoring
-          kill $MONITOR_PID 2>/dev/null || true
-          
-          echo ""
-          echo "========================================"
-          echo "Dependency download completed"
-          echo "========================================"
-          echo "Timestamp: $(date)"
-          echo "Exit code: $GRADLE_EXIT"
-          
-          # Show summary
-          echo ""
-          echo "=== Summary ==="
-          grep -E "(✓ Resolving:|✗ Could not resolve|Successfully resolved|Failed to resolve)" gradle-dependency-download.log | tail -20 || echo "No summary found"
-          
-          echo ""
-          echo "=== Gradle cache size ==="
-          du -sh ~/.gradle/caches 2>/dev/null || echo "Cache directory not found"
-          
-          exit $GRADLE_EXIT
+        run: ./scripts/ci/download-gradle-dependencies.sh
 
       - name: Upload Gradle logs
         if: always()
@@ -230,42 +114,13 @@ jobs:
           NORDVPN_USERNAME: ${{ secrets.NORDVPN_USERNAME }}
           NORDVPN_PASSWORD: ${{ secrets.NORDVPN_PASSWORD }}
         shell: bash
-        run: |
-          run=false
-          allow_empty=false
-
-          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
-            run=true
-            if [[ "${DISPATCH_ALLOW_EMPTY}" == "true" ]]; then
-              allow_empty=true
-            fi
-          elif [[ -n "${NORDVPN_USERNAME}" && -n "${NORDVPN_PASSWORD}" ]]; then
-            run=true
-          fi
-
-          echo "run_maestro=${run}" >> "$GITHUB_OUTPUT"
-          echo "allow_empty=${allow_empty}" >> "$GITHUB_OUTPUT"
+        run: ./scripts/ci/evaluate-maestro-preconditions.sh
 
       - name: Publish summary
         env:
           RUN_MAESTRO: ${{ steps.evaluate.outputs.run_maestro }}
           ALLOW_EMPTY: ${{ steps.evaluate.outputs.allow_empty }}
-        run: |
-          if [[ "${RUN_MAESTRO}" == "true" ]]; then
-            {
-              echo "## Maestro E2E Tests"
-              if [[ "${ALLOW_EMPTY}" == "true" ]]; then
-                echo "- Running with dummy credentials (workflow_dispatch override)."
-              else
-                echo "- Running with provided NordVPN credentials."
-              fi
-            } >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "## Maestro E2E Tests"
-              echo "- Skipped because NordVPN credentials were not provided and workflow_dispatch override not enabled."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
+        run: ./scripts/ci/publish-maestro-summary.sh
 
   maestro:
     name: Maestro E2E
@@ -332,34 +187,14 @@ jobs:
 
       - name: Validate NordVPN credentials
         shell: bash
-        run: |
-          if [[ -z "${NORDVPN_USERNAME}" || -z "${NORDVPN_PASSWORD}" ]]; then
-            if [[ "${ALLOW_EMPTY_CREDENTIALS}" == "true" ]]; then
-              echo "⚠️  Running without NordVPN credentials (dry run)."
-              echo "NORDVPN_USERNAME=dummy-user" >> "$GITHUB_ENV"
-              echo "NORDVPN_PASSWORD=dummy-password" >> "$GITHUB_ENV"
-            else
-              echo "::error::NordVPN credentials are required for Maestro E2E tests."
-              echo "       Provide NORDVPN_USERNAME and NORDVPN_PASSWORD secrets or trigger workflow_dispatch with allow-empty-credentials."
-              exit 1
-            fi
-          fi
+        run: ./scripts/ci/validate-nordvpn-credentials.sh
 
       - name: Install Maestro CLI
-        run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        run: ./scripts/ci/install-maestro.sh
 
       - name: Generate .env file
         shell: bash
-        run: |
-          cat > .env <<EOF
-          NORDVPN_USERNAME=${NORDVPN_USERNAME}
-          NORDVPN_PASSWORD=${NORDVPN_PASSWORD}
-          TEST_VPN_HOSTNAME=${TEST_VPN_HOSTNAME}
-          TEST_VPN_REGION=${TEST_VPN_REGION}
-          TEST_APP_PACKAGE=${TEST_APP_PACKAGE}
-          EOF
+        run: ./scripts/ci/generate-env-file.sh
 
       - name: Assemble debug build with native libraries
         timeout-minutes: 45
@@ -367,73 +202,17 @@ jobs:
           # SKIP_NATIVE_BUILD is not set, so native builds will be enabled
           # This is required for E2E tests to create actual VPN connections
           ENABLE_NATIVE_BUILD: true
-        run: |
-          echo "========================================"
-          echo "Building APK with OpenVPN native libraries for E2E tests"
-          echo "========================================"
-          echo "Note: Native builds are required for actual VPN connections in E2E tests"
-          echo "This may take 15-30 minutes on first build, but will be cached for subsequent runs"
-          echo "SKIP_NATIVE_BUILD: ${SKIP_NATIVE_BUILD:-not set (native builds ENABLED)}"
-          echo ""
-          ./gradlew --stacktrace assembleDebug
+        run: ./scripts/ci/build-debug-apk.sh
 
       - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --subsystem-match=kvm
+        run: ./scripts/ci/enable-kvm.sh
 
       - name: Launch emulator and run Maestro tests
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
-          script: |
-            #!/bin/bash
-            set -e
-            
-            echo "Waiting for emulator to be ready..."
-            adb wait-for-device || true
-            
-            echo "Waiting for sys.boot_completed..."
-            for i in $(seq 1 300); do
-              BOOT=$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-              if [ "$BOOT" = "1" ]; then
-                echo "Emulator boot completed."
-                break
-              fi
-              if [ $i -eq 300 ]; then
-                echo "Timeout waiting for boot_completed" >&2
-                exit 1
-              fi
-              sleep 2
-            done
-            
-            echo "Checking for offline device state..."
-            if adb devices | grep -q "offline"; then
-              echo "ADB device offline - restarting server..."
-              adb kill-server || true
-              sleep 2
-              adb start-server || true
-              adb wait-for-device || true
-            fi
-            
-            echo "Settling emulator for 20s..."
-            sleep 20
-            
-            ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
-            
-            echo "Running Maestro tests (with single retry on failure)..."
-            set +e
-            maestro test .maestro/*.yaml
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -ne 0 ]; then
-              echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
-              sleep 5
-              maestro test .maestro/*.yaml
-              EXIT_CODE=$?
-            fi
-            exit $EXIT_CODE
+          script: ./scripts/ci/run-maestro-tests.sh
 
       - name: Upload Maestro artifacts
         if: always()
@@ -471,9 +250,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
+        run: ./scripts/ci/install-android-build-deps.sh
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
@@ -505,19 +282,7 @@ jobs:
           # SKIP_NATIVE_BUILD is not set, so native builds will be enabled
           # Release builds include all native libraries for production use
           ENABLE_NATIVE_BUILD: true
-        run: |
-          echo "========================================"
-          echo "Building RELEASE APK with OpenVPN native libraries"
-          echo "========================================"
-          echo "This APK includes native libraries for all supported ABIs:"
-          echo "  - arm64-v8a (64-bit ARM devices)"
-          echo "  - armeabi-v7a (32-bit ARM devices)"
-          echo "  - x86_64 (64-bit x86 emulators/devices)"
-          echo "  - x86 (32-bit x86 emulators/devices)"
-          echo ""
-          echo "Build may take 15-30 minutes on first build, but uses cached native libraries from E2E tests"
-          echo ""
-          ./gradlew --stacktrace assembleRelease
+        run: ./scripts/ci/build-release-apk.sh
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
@@ -527,28 +292,5 @@ jobs:
           if-no-files-found: error
 
       - name: Generate build summary
-        run: |
-          {
-            echo "## Release APK Build"
-            echo ""
-            echo "✅ Successfully built release APK with native OpenVPN libraries"
-            echo ""
-            echo "### APK Details"
-            APK_PATH="app/build/outputs/apk/release/app-release-unsigned.apk"
-            if [ -f "$APK_PATH" ]; then
-              APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
-              echo "- **Size:** $APK_SIZE"
-              echo "- **Path:** \`$APK_PATH\`"
-              echo "- **Architectures:** arm64-v8a, armeabi-v7a, x86_64, x86"
-              echo ""
-              echo "### Next Steps"
-              echo "1. Download the APK artifact from this workflow run"
-              echo "2. Sign the APK with your release keystore"
-              echo "3. Upload to Google Play Console or distribute as needed"
-              echo ""
-              echo "> **Note:** This is an unsigned APK. You must sign it before distribution."
-            else
-              echo "⚠️ APK file not found at expected path"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: ./scripts/ci/generate-release-summary.sh
 
