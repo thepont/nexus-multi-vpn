@@ -8,18 +8,10 @@ appId: "com.multiregionvpn"
 # Ensure we have credentials and a tunnel configured
 # (This test assumes bootstrap has been run)
 - tapOn: "Tunnels"
-- assertVisible:
-    text: ".*BBC.*|.*France.*"  # At least one tunnel exists
-    optional: true
 
-# If no tunnels, skip test
-- runFlow:
-    when:
-      notVisible: ".*BBC.*"
-    commands:
-      - stopApp
-      - assertTrue: false
-        message: "No tunnels configured - run bootstrap first"
+# Test will FAIL if no tunnels are configured
+- assertVisible:
+    text: ".*BBC.*|.*France.*"  # At least one tunnel must exist
 
 # Navigate to Apps tab
 - tapOn: "Apps"
@@ -31,7 +23,7 @@ appId: "com.multiregionvpn"
 - assertVisible: "Chrome"
 
 # Clear search
-- clearText
+- eraseText
 - assertVisible:
     text: ".*BBC.*|.*Disney.*|.*Netflix.*"  # Geo-blocked apps should appear
 
@@ -73,9 +65,19 @@ appId: "com.multiregionvpn"
 
 # Test: Smart app ordering
 # Geo-blocked apps should be at the top
-- scroll:
-    direction: UP  # Scroll to top
-    repeat: 5
+# Use swipe up to scroll to top (scroll direction not supported in Maestro)
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 300
 
 # UK apps should be visible near top
 - assertVisible:

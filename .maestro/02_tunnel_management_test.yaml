@@ -63,7 +63,7 @@ appId: "com.multiregionvpn"
 - tapOn: "Edit"
 - tapOn:
     id: "tunnel_name_field"
-- clearText
+- eraseText
 - inputText: "UK - iPlayer"
 - tapOn: "Save"
 - assertVisible: "UK - iPlayer"
