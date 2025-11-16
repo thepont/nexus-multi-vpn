@@ -17,22 +17,22 @@ appId: "com.multiregionvpn"
     text: ".*Tunnel.*|Add Tunnel"  # Tunnels section
 
 - tapOn: "Apps"
-- runScript: sleep 1000
+- waitForAnimationToEnd
 # Apps screen loaded (search field may have different placeholder)
 
 - tapOn: "Connections"
-- runScript: sleep 1000
+- waitForAnimationToEnd
 - assertVisible:
     text: ".*Connection.*|Coming Soon"  # Connections screen
 
 - tapOn: "Settings"
-- runScript: sleep 1000
+- waitForAnimationToEnd
 - assertVisible:
     text: ".*NordVPN.*|Credentials"  # Settings section
 
 # Navigate back to Tunnels
 - tapOn: "Tunnels"
-- runScript: sleep 500
+- waitForAnimationToEnd
 - assertVisible:
     text: ".*Tunnel.*"  # Back on tunnels
 
