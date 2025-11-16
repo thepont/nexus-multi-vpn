@@ -389,8 +389,12 @@ jobs:
           api-level: 34
           arch: x86_64
           script: |
+            #!/bin/bash
+            set -e
+            
             echo "Waiting for emulator to be ready..."
             adb wait-for-device || true
+            
             echo "Waiting for sys.boot_completed..."
             for i in $(seq 1 300); do
               BOOT=$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
@@ -404,6 +408,7 @@ jobs:
               fi
               sleep 2
             done
+            
             echo "Checking for offline device state..."
             if adb devices | grep -q "offline"; then
               echo "ADB device offline - restarting server..."
@@ -412,10 +417,12 @@ jobs:
               adb start-server || true
               adb wait-for-device || true
             fi
+            
             echo "Settling emulator for 20s..."
             sleep 20
-
+            
             ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
+            
             echo "Running Maestro tests (with single retry on failure)..."
             set +e
             maestro test .maestro/*.yaml
@@ -426,7 +433,6 @@ jobs:
               maestro test .maestro/*.yaml
               EXIT_CODE=$?
             fi
-            set -e
             exit $EXIT_CODE
 
       - name: Upload Maestro artifacts
