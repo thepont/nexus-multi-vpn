@@ -418,12 +418,12 @@ jobs:
             ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
             echo "Running Maestro tests (with single retry on failure)..."
             set +e
-            maestro test '.maestro/*.yaml'
+            maestro test .maestro/*.yaml
             EXIT_CODE=$?
             if [ $EXIT_CODE -ne 0 ]; then
               echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
               sleep 5
-              maestro test '.maestro/*.yaml'
+              maestro test .maestro/*.yaml
               EXIT_CODE=$?
             fi
             set -e
