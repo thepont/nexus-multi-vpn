@@ -5,52 +5,52 @@ appId: "com.multiregionvpn"
 
 - launchApp
 - assertVisible: "Region Router"
-- wait: 2000
+- waitForAnimationToEnd
 
 # ============================================
 # Navigate to Settings to enter credentials
 # ============================================
 - pressKey: Down  # Focus content
-- wait: 500
+- waitForAnimationToEnd
 
 # Navigate to Settings tab (3 presses right: Tunnels → Apps → Connections → Settings)
 - pressKey: Right
-- wait: 300
+- waitForAnimationToEnd
 - pressKey: Right  
-- wait: 300
+- waitForAnimationToEnd
 - pressKey: Right
-- wait: 300
+- waitForAnimationToEnd
 - pressKey: Enter  # Select Settings tab
-- wait: 1000
+- waitForAnimationToEnd
 
 - assertVisible: "NordVPN"
 
 # Focus on username field
 - pressKey: Down
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter  # Open keyboard
-- wait: 1000
+- waitForAnimationToEnd
 
 # Note: On TV, text input requires on-screen keyboard
 # Maestro can input text directly
 - inputText: "${NORDVPN_USERNAME}"
 - pressKey: Enter  # Confirm
-- wait: 1000
+- waitForAnimationToEnd
 
 # Focus on password field
 - pressKey: Down
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter
-- wait: 1000
+- waitForAnimationToEnd
 - inputText: "${NORDVPN_PASSWORD}"
 - pressKey: Enter
-- wait: 1000
+- waitForAnimationToEnd
 
 # Focus on Save button
 - pressKey: Down
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter  # Save credentials
-- wait: 2000
+- waitForAnimationToEnd
 
 - assertVisible: "Credentials saved"
 
@@ -58,21 +58,21 @@ appId: "com.multiregionvpn"
 # Navigate to Tunnels tab to add tunnel
 # ============================================
 - pressKey: Left  # Back to Tunnels (going left from Settings)
-- wait: 300
+- waitForAnimationToEnd
 - pressKey: Left
-- wait: 300
+- waitForAnimationToEnd
 - pressKey: Left
-- wait: 300
+- waitForAnimationToEnd
 - pressKey: Enter
-- wait: 1000
+- waitForAnimationToEnd
 
 - assertVisible: "Add Tunnel"
 
 # Focus on Add Tunnel button
 - pressKey: Down
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter  # Open Add Tunnel dialog
-- wait: 1000
+- waitForAnimationToEnd
 
 - assertVisible: "Add VPN Tunnel"
 
@@ -82,22 +82,22 @@ appId: "com.multiregionvpn"
 
 # Press Back to close dialog
 - pressKey: Back
-- wait: 1000
+- waitForAnimationToEnd
 
 # ============================================
 # Test VPN Toggle with D-pad
 # ============================================
 - pressKey: Up  # Focus header
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Right  # Navigate to toggle
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter  # Toggle VPN
-- wait: 3000
+- waitForAnimationToEnd
 
 # Handle permission dialog
 - pressKey: Enter  # OK/Allow
   optional: true
-- wait: 2000
+- waitForAnimationToEnd
 
 # Status should update
 - assertVisible:
@@ -105,11 +105,11 @@ appId: "com.multiregionvpn"
 
 # Toggle off
 - pressKey: Up
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Right
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter
-- wait: 2000
+- waitForAnimationToEnd
 
 - assertVisible: "Disconnected"
 
