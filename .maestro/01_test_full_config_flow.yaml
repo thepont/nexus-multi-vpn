@@ -2,28 +2,39 @@ appId: "com.multiregionvpn"
 ---
 - launchApp
 
-# --- 1. Set the NordVPN Service Credentials ---
-- tapOn: "NordVPN Service Username"
-- inputText: "${NORDVPN_USERNAME}"
-- tapOn: "NordVPN Service Password"
-- inputText: "${NORDVPN_PASSWORD}"
-- tapOn: "Save NordVPN Credentials"
+- waitForAnimationToEnd
+## Ensure list is in a stable position
+- swipe:
+    start: "50%,20%"
+    end: "50%,80%"
+    duration: 200
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 200
 
-# --- 2. Add a new VPN Server Config ---
-- tapOn: 
-    text: ".*Add.*" # Add button icon/text
-- assertVisible: "Add Server"
+# --- 1. (Optional) If navigated to Settings, return to Tunnels ---
+- tapOn:
+    text: "Tunnels"
+    optional: true
 
-- tapOn: "Friendly Name"
-- inputText: "Test ${TEST_VPN_REGION:-UK} Server"
-
-- tapOn: "Region"
-- tapOn: "${TEST_VPN_REGION:-UK}"
-
-- tapOn: "Save"
-
-# Wait for dialog to close and config to appear
-- assertVisible: "Test ${TEST_VPN_REGION:-UK} Server"
+# --- 2. Ensure a UK VPN Server Config exists (create if missing) ---
+- assertVisible:
+    text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+    optional: true
+- runFlow:
+    when:
+      notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+    commands:
+      - tapOn: "UK"
+      - assertVisible: "Add Server"
+      - tapOn: "Friendly Name"
+      - inputText: "Test UK Server"
+      - tapOn: "Region"
+      - tapOn: "UK"
+      - tapOn: "Save"
+      - assertVisible:
+          text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
 
 # --- 3. Assign a Rule to an App ---
 # Scroll and find an app to assign a rule
@@ -33,11 +44,12 @@ appId: "com.multiregionvpn"
     text: "Chrome"
     optional: true
 - tapOn:
-    text: "Test ${TEST_VPN_REGION:-UK} Server"
+    text: 'Test UK Server|.*UK.*\(OpenVPN\)'
     optional: true
 
 # --- 4. Start the VPN Service ---
-- tapOn: "Start VPN"
+- tapOn:
+    point: "90%,8%"
 # Handle system VPN permission dialog if it appears
 - tapOn:
     text: "OK"

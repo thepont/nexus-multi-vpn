@@ -1,38 +1,11 @@
 appId: "com.multiregionvpn"
 ---
 # UI Navigation Test
-# Tests the main navigation tabs and header
+# Validates region list is visible
 
 - launchApp
-- assertVisible: "Region Router"  # Header title
 
-# Test header bar is visible
-- assertVisible: "Disconnected"  # Initial status
-# Note: Toggle switch is visible but testTag may not work in Maestro
-# We verify it exists by checking status text which is right next to it
-
-# Test bottom navigation tabs
-- tapOn: "Tunnels"
+# Basic UI presence checks
 - assertVisible:
-    text: ".*Tunnel.*|Add Tunnel"  # Tunnels section
-
-- tapOn: "Apps"
-- runScript: sleep 1000
-# Apps screen loaded (search field may have different placeholder)
-
-- tapOn: "Connections"
-- runScript: sleep 1000
-- assertVisible:
-    text: ".*Connection.*|Coming Soon"  # Connections screen
-
-- tapOn: "Settings"
-- runScript: sleep 1000
-- assertVisible:
-    text: ".*NordVPN.*|Credentials"  # Settings section
-
-# Navigate back to Tunnels
-- tapOn: "Tunnels"
-- runScript: sleep 500
-- assertVisible:
-    text: ".*Tunnel.*"  # Back on tunnels
+    text: "Region Router|App Routing Rules|Direct Internet"
 

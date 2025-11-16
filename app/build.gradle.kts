@@ -113,23 +113,26 @@ android {
         }
         
         ndk {
-            // Build for both ARM architectures - vcpkg libraries built for both triplets
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            // Build for ARM (real devices) and x86 (emulators) architectures
+            // Required for E2E tests which run on x86_64 emulators
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
         }
     }
     
-    // Disable native builds in CI to prevent timeouts
+    // Disable native builds for unit tests to prevent timeouts
     // Native builds can take 15-30 minutes and aren't needed for unit tests
-    val isCI = System.getenv("CI")?.toBoolean() ?: false
-    if (!isCI) {
+    // E2E tests require native builds for actual VPN connections
+    val skipNativeBuild = System.getenv("SKIP_NATIVE_BUILD")?.toBoolean() ?: false
+    if (!skipNativeBuild) {
         externalNativeBuild {
             cmake {
                 path = file("src/main/cpp/CMakeLists.txt")
                 version = "3.22.1"
             }
         }
+        println("✅ Native build configuration enabled (OpenVPN libraries will be compiled)")
     } else {
-        println("⚠️  CI environment detected - skipping native build configuration")
+        println("⚠️  SKIP_NATIVE_BUILD=true - skipping native build configuration")
     }
     
     compileOptions {

@@ -8,52 +8,52 @@ appId: "com.multiregionvpn"
 
 # Test D-pad DOWN to focus on content
 - pressKey: Down
-- wait: 500
+- waitForAnimationToEnd
 
 # Test D-pad RIGHT to navigate tabs
 - pressKey: Right
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter  # Select Apps tab
-- wait: 1000
+- waitForAnimationToEnd
 - assertVisible: "Search apps..."
 
 # Navigate to Connections tab
 - pressKey: Right
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter
-- wait: 1000
+- waitForAnimationToEnd
 - assertVisible: "Connection Log"
 
 # Navigate to Settings tab
 - pressKey: Right
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter
-- wait: 1000
+- waitForAnimationToEnd
 - assertVisible: "NordVPN"
 
 # Navigate back to Tunnels
 - pressKey: Left
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Left
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Left
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter
-- wait: 1000
+- waitForAnimationToEnd
 - assertVisible: "Add Tunnel"
 
 # Test D-pad UP to access header
 - pressKey: Up
-- wait: 500
+- waitForAnimationToEnd
 
 # Should focus on toggle switch
 - pressKey: Enter  # Toggle VPN
-- wait: 2000
+- waitForAnimationToEnd
 
 # Handle permission dialog if appears
 - pressKey: Enter  # OK/Allow button
   optional: true
-- wait: 1000
+- waitForAnimationToEnd
 
 # Status should change
 - assertVisible:
@@ -61,9 +61,9 @@ appId: "com.multiregionvpn"
 
 # Toggle back off
 - pressKey: Up
-- wait: 500
+- waitForAnimationToEnd
 - pressKey: Enter
-- wait: 2000
+- waitForAnimationToEnd
 
 # Should return to Disconnected
 - assertVisible: "Disconnected"
