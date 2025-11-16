@@ -106,6 +106,9 @@ jobs:
       run-maestro: ${{ steps.evaluate.outputs.run_maestro }}
       allow-empty: ${{ steps.evaluate.outputs.allow_empty }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Evaluate run conditions
         id: evaluate
         env:
