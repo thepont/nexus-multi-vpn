@@ -15,18 +15,25 @@ if ! command -v docker &> /dev/null; then
     exit 0
 fi
 
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+# Determine which docker-compose command to use
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+elif docker compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE="docker compose"
+else
     echo "Docker Compose not found - nothing to stop"
     exit 0
 fi
 
+echo "Using Docker Compose command: $DOCKER_COMPOSE"
+echo ""
 echo "=== Stopping test containers ==="
 
 # Stop all docker-compose files
 for compose_file in "$COMPOSE_DIR"/*.yaml; do
     if [ -f "$compose_file" ]; then
         echo "Stopping $(basename $compose_file)..."
-        docker-compose -f "$compose_file" down || true
+        $DOCKER_COMPOSE -f "$compose_file" down || true
     fi
 done
 

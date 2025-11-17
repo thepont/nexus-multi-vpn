@@ -16,18 +16,25 @@ if ! command -v docker &> /dev/null; then
     exit 0
 fi
 
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+# Determine which docker-compose command to use
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+elif docker compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE="docker compose"
+else
     echo "⚠️  Docker Compose not found - skipping container setup"
     echo "   Tests requiring Docker will be skipped"
     exit 0
 fi
 
+echo "Using Docker Compose command: $DOCKER_COMPOSE"
+echo ""
 echo "=== Starting OpenVPN and HTTP test containers ==="
 
 # Start routing containers (OpenVPN UK/FR + HTTP servers)
 if [ -f "$COMPOSE_DIR/docker-compose.routing.yaml" ]; then
     echo "Starting routing containers..."
-    docker-compose -f "$COMPOSE_DIR/docker-compose.routing.yaml" up -d
+    $DOCKER_COMPOSE -f "$COMPOSE_DIR/docker-compose.routing.yaml" up -d
     echo "✅ Routing containers started"
 else
     echo "⚠️  docker-compose.routing.yaml not found"
@@ -36,7 +43,7 @@ fi
 # Start DNS containers
 if [ -f "$COMPOSE_DIR/docker-compose.dns.yaml" ]; then
     echo "Starting DNS containers..."
-    docker-compose -f "$COMPOSE_DIR/docker-compose.dns.yaml" up -d
+    $DOCKER_COMPOSE -f "$COMPOSE_DIR/docker-compose.dns.yaml" up -d
     echo "✅ DNS containers started"
 else
     echo "⚠️  docker-compose.dns.yaml not found"
@@ -45,7 +52,7 @@ fi
 # Start DNS domain containers
 if [ -f "$COMPOSE_DIR/docker-compose.dns-domain.yaml" ]; then
     echo "Starting DNS domain containers..."
-    docker-compose -f "$COMPOSE_DIR/docker-compose.dns-domain.yaml" up -d
+    $DOCKER_COMPOSE -f "$COMPOSE_DIR/docker-compose.dns-domain.yaml" up -d
     echo "✅ DNS domain containers started"
 else
     echo "⚠️  docker-compose.dns-domain.yaml not found"
@@ -54,7 +61,7 @@ fi
 # Start conflict test containers
 if [ -f "$COMPOSE_DIR/docker-compose.conflict.yaml" ]; then
     echo "Starting conflict test containers..."
-    docker-compose -f "$COMPOSE_DIR/docker-compose.conflict.yaml" up -d
+    $DOCKER_COMPOSE -f "$COMPOSE_DIR/docker-compose.conflict.yaml" up -d
     echo "✅ Conflict test containers started"
 else
     echo "⚠️  docker-compose.conflict.yaml not found"
