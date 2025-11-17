@@ -12,7 +12,7 @@ services:
     ports:
       - "1194:1194/udp"
     volumes:
-      - ../../../../openvpn-uk:/etc/openvpn
+      - ../../../../../openvpn-uk:/etc/openvpn
     networks:
       vpn-uk:
         ipv4_address: 10.1.0.1
@@ -39,7 +39,7 @@ services:
     ports:
       - "1195:1194/udp"
     volumes:
-      - ../../../../openvpn-fr:/etc/openvpn
+      - ../../../../../openvpn-fr:/etc/openvpn
     networks:
       vpn-fr:
         ipv4_address: 10.2.0.1
@@ -65,7 +65,7 @@ services:
       vpn-uk:
         ipv4_address: 10.1.0.2
     volumes:
-      - ../../../../http-uk:/usr/share/nginx/html:ro
+      - ../../../../../http-uk:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
 
   # HTTP Server on FR VPN Network
@@ -78,7 +78,7 @@ services:
       vpn-fr:
         ipv4_address: 10.2.0.2
     volumes:
-      - ../../../../http-fr:/usr/share/nginx/html:ro
+      - ../../../../../http-fr:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
 
 networks:

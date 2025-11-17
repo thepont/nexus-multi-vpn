@@ -8,7 +8,13 @@ echo "Stopping Docker Containers"
 echo "========================================"
 echo "Timestamp: $(date)"
 
-COMPOSE_DIR="app/src/androidTest/resources/docker-compose"
+# Save current directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+COMPOSE_DIR="$PROJECT_DIR/app/src/androidTest/resources/docker-compose"
+
+echo "Project directory: $PROJECT_DIR"
+echo "Compose directory: $COMPOSE_DIR"
 
 # Check if Docker is available
 if ! command -v docker &> /dev/null; then
@@ -34,11 +40,14 @@ echo ""
 echo "=== Stopping test containers ==="
 
 # Function to run docker-compose with proper handling
+# This function changes to the compose directory to run commands
 run_compose() {
+    local compose_file="$1"
+    shift
     if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
-        docker compose "$@"
+        (cd "$COMPOSE_DIR" && docker compose -f "$(basename "$compose_file")" "$@")
     else
-        docker-compose "$@"
+        (cd "$COMPOSE_DIR" && docker-compose -f "$(basename "$compose_file")" "$@")
     fi
 }
 
@@ -46,7 +55,7 @@ run_compose() {
 for compose_file in "$COMPOSE_DIR"/*.yaml; do
     if [ -f "$compose_file" ]; then
         echo "Stopping $(basename $compose_file)..."
-        run_compose -f "$compose_file" down || echo "⚠️  Could not stop $(basename $compose_file)"
+        run_compose "$compose_file" down || echo "⚠️  Could not stop $(basename $compose_file)"
     fi
 done
 
