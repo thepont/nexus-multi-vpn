@@ -39,6 +39,24 @@ fi
 
 echo "Using Docker Compose command: $DOCKER_COMPOSE"
 echo ""
+echo "=== Cleaning up old containers first ==="
+
+# Function to stop and remove containers for a project
+cleanup_project() {
+    local project_name="$1"
+    if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
+        (cd "$COMPOSE_DIR" && docker compose -p "$project_name" down --remove-orphans 2>/dev/null || true)
+    else
+        (cd "$COMPOSE_DIR" && docker-compose -p "$project_name" down --remove-orphans 2>/dev/null || true)
+    fi
+}
+
+# Clean up any existing containers with our project names
+cleanup_project "e2e-routing"
+cleanup_project "e2e-dns"
+cleanup_project "e2e-dns-domain"
+cleanup_project "e2e-conflict"
+
 echo "=== Starting OpenVPN and HTTP test containers ==="
 
 # Function to run docker-compose with proper handling
