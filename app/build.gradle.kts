@@ -234,6 +234,22 @@ android {
                 "--add-opens=java.base/java.util=ALL-UNNAMED",
                 "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
             )
+            
+            // Prevent tests from running in parallel to reduce resource contention
+            // This helps avoid deadlocks and race conditions in CI
+            it.maxParallelForks = 1
+            
+            // Enable fail-fast: stop on first test failure to provide quicker feedback
+            it.failFast = true
+            
+            // Configure test logging for better visibility
+            it.testLogging {
+                events("passed", "skipped", "failed", "standardOut", "standardError")
+                showExceptions = true
+                showCauses = true
+                showStackTraces = true
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
         }
     }
     

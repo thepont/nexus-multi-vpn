@@ -150,7 +150,7 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Run Robolectric Unit Tests
-        timeout-minutes: 20
+        timeout-minutes: 15
         env:
           CI: true
         run: ./scripts/ci/run-robolectric-tests.sh

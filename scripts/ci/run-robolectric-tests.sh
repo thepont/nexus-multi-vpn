@@ -13,12 +13,20 @@ echo "SKIP_NATIVE_BUILD: $SKIP_NATIVE_BUILD"
 cat > /tmp/test_monitor.sh << 'MONITOR_EOF'
 #!/bin/bash
 LOG_FILE=$1
+GRADLE_PID=$2
 INTERVAL=30
 LAST_SIZE=0
 STALL_COUNT=0
+MAX_STALL_COUNT=3  # Reduced from 4 to 3 (90 seconds total)
 
 while true; do
   sleep $INTERVAL
+  
+  # Check if gradle process is still running
+  if ! kill -0 $GRADLE_PID 2>/dev/null; then
+    echo "Gradle process completed"
+    exit 0
+  fi
   
   if [ -f "$LOG_FILE" ]; then
     CURRENT_SIZE=$(wc -c < "$LOG_FILE" 2>/dev/null || echo "0")
@@ -29,10 +37,19 @@ while true; do
       STALL_COUNT=$((STALL_COUNT + 1))
       echo "⚠️  No new test output for $((STALL_COUNT * INTERVAL)) seconds"
       
-      if [ $STALL_COUNT -ge 4 ]; then
+      if [ $STALL_COUNT -ge $MAX_STALL_COUNT ]; then
         echo "❌ TESTS STALLED: No output for $((STALL_COUNT * INTERVAL)) seconds"
         echo "Last 100 lines of test output:"
         tail -100 "$LOG_FILE"
+        echo ""
+        echo "Killing stalled Gradle process (PID: $GRADLE_PID) and all child processes..."
+        # Kill the entire process group
+        pkill -TERM -P $GRADLE_PID 2>/dev/null || true
+        sleep 2
+        pkill -KILL -P $GRADLE_PID 2>/dev/null || true
+        kill -TERM $GRADLE_PID 2>/dev/null || true
+        sleep 2
+        kill -KILL $GRADLE_PID 2>/dev/null || true
         exit 1
       fi
     else
@@ -51,22 +68,24 @@ MONITOR_EOF
 
 chmod +x /tmp/test_monitor.sh
 
-# Start monitoring
-/tmp/test_monitor.sh robolectric-test.log &
-MONITOR_PID=$!
-
 # Run tests with detailed logging
 set +e
-# Don't exclude native build tasks when SKIP_NATIVE_BUILD=true, as they don't exist
 ./gradlew testDebugUnitTest \
-  --info --stacktrace 2>&1 | tee robolectric-test.log
+  --info --stacktrace 2>&1 | tee robolectric-test.log &
+GRADLE_PID=$!
 
-# Capture exit code of the gradle command (first command in pipeline), not tee
-TEST_EXIT=${PIPESTATUS[0]}
-set -e
+# Start monitoring with Gradle PID
+/tmp/test_monitor.sh robolectric-test.log $GRADLE_PID &
+MONITOR_PID=$!
+
+# Wait for gradle to finish
+wait $GRADLE_PID
+TEST_EXIT=$?
 
 # Stop monitoring
 kill $MONITOR_PID 2>/dev/null || true
+
+set -e
 
 echo ""
 echo "========================================"
