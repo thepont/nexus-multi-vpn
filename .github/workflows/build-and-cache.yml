@@ -1,0 +1,156 @@
+name: Build and Cache APK
+
+on:
+  workflow_call:
+    outputs:
+      cache-key:
+        description: "Cache key for build artifacts"
+        value: ${{ jobs.build.outputs.cache-key }}
+
+permissions:
+  contents: read
+
+jobs:
+  # --------------------------------------------------------------------
+  # JOB 1: WARM THE CACHE
+  # Downloads dependencies with a long timeout
+  # --------------------------------------------------------------------
+  warm-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Build Dependencies
+        run: ./scripts/ci/install-android-build-deps.sh
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
+      - name: Cache Android NDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk
+            ~/.android/build-cache
+          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-ndk-
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Download Dependencies
+        timeout-minutes: 30
+        env:
+          CI: true
+        run: ./scripts/ci/download-gradle-dependencies.sh
+
+      - name: Upload Gradle logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-dependency-logs
+          path: gradle-dependency-download.log
+
+  # --------------------------------------------------------------------
+  # JOB 2: BUILD DEBUG APK WITH NATIVE LIBRARIES
+  # Builds the APK and caches it for use by test jobs
+  # --------------------------------------------------------------------
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: warm-cache
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
+      - name: Restore Gradle Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Restore NDK Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk
+            ~/.android/build-cache
+          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-ndk-
+
+      - name: Build Debug APK with Native Libraries
+        timeout-minutes: 45
+        env:
+          CI: true
+        run: |
+          echo "Building debug APK with native libraries..."
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          CACHE_KEY="build-artifacts-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
+          echo "Generated cache key: $CACHE_KEY"
+
+      - name: Cache build artifacts
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            app/build/outputs/apk/debug/
+            app/build/intermediates/
+            app/.cxx/
+          key: ${{ steps.cache-key.outputs.key }}
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Build summary
+        run: |
+          echo "✅ Build completed successfully"
+          echo "APK: app/build/outputs/apk/debug/app-debug.apk"
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
