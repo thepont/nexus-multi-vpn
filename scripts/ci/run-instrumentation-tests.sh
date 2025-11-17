@@ -11,7 +11,8 @@ echo "Timestamp: $(date)"
 set +e
 ./gradlew connectedDebugAndroidTest -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee instrumentation-test.log
 
-TEST_EXIT=$?
+# Capture exit code of the gradle command (first command in pipeline), not tee
+TEST_EXIT=${PIPESTATUS[0]}
 set -e
 
 echo ""

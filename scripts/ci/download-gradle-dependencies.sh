@@ -82,7 +82,8 @@ echo "=== Running androidDependencies task ==="
   -x externalNativeBuildRelease \
   --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
 
-GRADLE_EXIT=$?
+# Capture exit code of the gradle command (first command in pipeline), not tee
+GRADLE_EXIT=${PIPESTATUS[0]}
 set -e
 
 # Stop monitoring

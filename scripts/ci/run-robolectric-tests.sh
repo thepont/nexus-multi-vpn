@@ -62,7 +62,8 @@ set +e
   -x externalNativeBuildRelease \
   --info --stacktrace 2>&1 | tee robolectric-test.log
 
-TEST_EXIT=$?
+# Capture exit code of the gradle command (first command in pipeline), not tee
+TEST_EXIT=${PIPESTATUS[0]}
 set -e
 
 # Stop monitoring
