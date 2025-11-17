@@ -155,9 +155,6 @@ cd app/openvpn-dns-domain && docker-compose up -d
 - `test_routeTrafficThroughUKServer()` - Route via WireGuard UK
 - `test_multiTunnelRouting()` - Two WireGuard tunnels
 - `test_wireGuardProtocolDetection()` - Config parsing
-- `test_openVpnDnsIssue_EXPECTED_TO_FAIL()` - ⚠️ OUTDATED (OpenVPN now works!)
-
-**Note**: The last test comment is outdated since we fixed OpenVPN!
 
 ---
 
