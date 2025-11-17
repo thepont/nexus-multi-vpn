@@ -29,34 +29,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Build Dependencies
-        run: |
-          echo "=== Installing C++ build tools ==="
-          sudo apt-get update -qq
-          sudo apt-get install -y cmake build-essential
-          
-          echo "=== Installed versions ==="
-          cmake --version
-          g++ --version
+        run: ./scripts/ci/install-cpp-build-deps.sh
 
       - name: Configure C++ Tests
-        run: |
-          echo "=== Configuring C++ unit tests ==="
-          cd app/src/test/cpp
-          mkdir -p build
-          cd build
-          cmake ..
+        run: ./scripts/ci/configure-cpp-tests.sh
 
       - name: Build C++ Tests
-        run: |
-          echo "=== Building C++ unit tests ==="
-          cd app/src/test/cpp/build
-          make -j4
+        run: ./scripts/ci/build-cpp-tests.sh
 
       - name: Run C++ Tests
-        run: |
-          echo "=== Running C++ unit tests ==="
-          cd app/src/test/cpp/build
-          ctest --output-on-failure --verbose
+        run: ./scripts/ci/run-cpp-tests.sh
 
       - name: Upload Test Results
         if: always()
@@ -91,24 +73,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Build Dependencies
-        run: |
-          echo "=== Checking installed build tools ==="
-          # Check for essential build dependencies
-          which cmake || echo "⚠️  CMake not found"
-          which ninja || echo "⚠️  Ninja not found"
-          which make || echo "⚠️  Make not found"
-          
-          # Install CMake and Ninja if not present (for potential native builds)
-          echo "=== Installing build dependencies ==="
-          sudo apt-get update -qq
-          sudo apt-get install -y cmake ninja-build build-essential
-          
-          echo "=== Installed versions ==="
-          cmake --version
-          ninja --version
-          
-          echo "=== Android SDK Components ==="
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed
+        run: ./scripts/ci/install-android-build-deps.sh
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
@@ -138,110 +103,7 @@ jobs:
         env:
           CI: true
           SKIP_NATIVE_BUILD: true
-        run: |
-          echo "========================================"
-          echo "Starting dependency download"
-          echo "========================================"
-          echo "Timestamp: $(date)"
-          echo "CI environment: $CI"
-          echo "SKIP_NATIVE_BUILD: $SKIP_NATIVE_BUILD"
-          echo "Java version: $(java -version 2>&1 | head -1)"
-          echo "Gradle version: $(./gradlew --version | grep Gradle)"
-          echo ""
-          
-          # Create a monitoring script
-          cat > /tmp/monitor.sh << 'MONITOR_EOF'
-          #!/bin/bash
-          LOG_FILE=$1
-          INTERVAL=30
-          LAST_SIZE=0
-          STALL_COUNT=0
-          
-          while true; do
-            sleep $INTERVAL
-            
-            if [ -f "$LOG_FILE" ]; then
-              CURRENT_SIZE=$(wc -c < "$LOG_FILE" 2>/dev/null || echo "0")
-              echo "=== $(date) ==="
-              echo "Log file size: $CURRENT_SIZE bytes (was $LAST_SIZE)"
-              
-              if [ "$CURRENT_SIZE" -eq "$LAST_SIZE" ]; then
-                STALL_COUNT=$((STALL_COUNT + 1))
-                echo "⚠️  No new output for $((STALL_COUNT * INTERVAL)) seconds"
-                
-                if [ $STALL_COUNT -ge 4 ]; then
-                  echo "❌ STALLED: No output for $((STALL_COUNT * INTERVAL)) seconds"
-                  echo "Last 50 lines of output:"
-                  tail -50 "$LOG_FILE"
-                  exit 1
-                fi
-              else
-                STALL_COUNT=0
-              fi
-              
-              LAST_SIZE=$CURRENT_SIZE
-              echo "Last 10 lines:"
-              tail -10 "$LOG_FILE"
-            else
-              echo "Waiting for log file to be created..."
-            fi
-            echo "---"
-          done
-          MONITOR_EOF
-          
-          chmod +x /tmp/monitor.sh
-          
-          # Start monitoring in background
-          /tmp/monitor.sh gradle-dependency-download.log &
-          MONITOR_PID=$!
-          
-          echo "=== Attempting simple dependency resolution first ==="
-          # Try a simpler approach: just resolve specific configurations we know we need
-          set +e  # Don't exit on error
-          
-          ./gradlew dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
-          echo "✓ debugCompileClasspath resolved"
-          
-          ./gradlew dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
-          echo "✓ debugRuntimeClasspath resolved"
-          
-          ./gradlew dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
-          echo "✓ debugAndroidTestCompileClasspath resolved"
-          
-          ./gradlew dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
-          echo "✓ debugAndroidTestRuntimeClasspath resolved"
-          
-          # Now try our custom task
-          echo ""
-          echo "=== Running androidDependencies task ==="
-          ./gradlew androidDependencies \
-            -x externalNativeBuildDebug \
-            -x externalNativeBuildRelease \
-            --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
-          
-          GRADLE_EXIT=$?
-          set -e
-          
-          # Stop monitoring
-          kill $MONITOR_PID 2>/dev/null || true
-          
-          echo ""
-          echo "========================================"
-          echo "Dependency download completed"
-          echo "========================================"
-          echo "Timestamp: $(date)"
-          echo "Exit code: $GRADLE_EXIT"
-          
-          # Show summary
-          echo ""
-          echo "=== Summary ==="
-          grep -E "(✓ Resolving:|✗ Could not resolve|Successfully resolved|Failed to resolve)" gradle-dependency-download.log | tail -20 || echo "No summary found"
-          
-          echo ""
-          echo "=== Gradle cache size ==="
-          du -sh ~/.gradle/caches 2>/dev/null || echo "Cache directory not found"
-          
-          exit $GRADLE_EXIT
+        run: ./scripts/ci/download-gradle-dependencies.sh
 
       - name: Upload Gradle logs
         if: always()
@@ -293,100 +155,7 @@ jobs:
         env:
           CI: true
           SKIP_NATIVE_BUILD: true
-        run: |
-          echo "========================================"
-          echo "Starting Robolectric Unit Tests"
-          echo "========================================"
-          echo "Timestamp: $(date)"
-          echo "CI environment: $CI"
-          echo "SKIP_NATIVE_BUILD: $SKIP_NATIVE_BUILD"
-          
-          # Create monitoring script
-          cat > /tmp/test_monitor.sh << 'MONITOR_EOF'
-          #!/bin/bash
-          LOG_FILE=$1
-          INTERVAL=30
-          LAST_SIZE=0
-          STALL_COUNT=0
-          
-          while true; do
-            sleep $INTERVAL
-            
-            if [ -f "$LOG_FILE" ]; then
-              CURRENT_SIZE=$(wc -c < "$LOG_FILE" 2>/dev/null || echo "0")
-              echo "=== $(date) ==="
-              echo "Test log size: $CURRENT_SIZE bytes (was $LAST_SIZE)"
-              
-              if [ "$CURRENT_SIZE" -eq "$LAST_SIZE" ]; then
-                STALL_COUNT=$((STALL_COUNT + 1))
-                echo "⚠️  No new test output for $((STALL_COUNT * INTERVAL)) seconds"
-                
-                if [ $STALL_COUNT -ge 4 ]; then
-                  echo "❌ TESTS STALLED: No output for $((STALL_COUNT * INTERVAL)) seconds"
-                  echo "Last 100 lines of test output:"
-                  tail -100 "$LOG_FILE"
-                  exit 1
-                fi
-              else
-                STALL_COUNT=0
-              fi
-              
-              LAST_SIZE=$CURRENT_SIZE
-              echo "Last 20 lines of test output:"
-              tail -20 "$LOG_FILE"
-            else
-              echo "Waiting for test log file..."
-            fi
-            echo "---"
-          done
-          MONITOR_EOF
-          
-          chmod +x /tmp/test_monitor.sh
-          
-          # Start monitoring
-          /tmp/test_monitor.sh robolectric-test.log &
-          MONITOR_PID=$!
-          
-          # Run tests with detailed logging
-          set +e
-          ./gradlew testDebugUnitTest \
-            -x externalNativeBuildDebug \
-            -x externalNativeBuildRelease \
-            --info --stacktrace 2>&1 | tee robolectric-test.log
-          
-          TEST_EXIT=$?
-          set -e
-          
-          # Stop monitoring
-          kill $MONITOR_PID 2>/dev/null || true
-          
-          echo ""
-          echo "========================================"
-          echo "Robolectric Unit Tests completed"
-          echo "========================================"
-          echo "Timestamp: $(date)"
-          echo "Exit code: $TEST_EXIT"
-          
-          # Show test summary
-          echo ""
-          echo "=== Test Summary ==="
-          grep -E "(BUILD SUCCESSFUL|BUILD FAILED|> Task :app:testDebugUnitTest|tests completed|test failed|tests? skipped|SKIPPED)" robolectric-test.log | tail -30 || echo "No test summary found"
-          
-          # Check for skipped tests
-          SKIPPED_COUNT=$(grep -c "SKIPPED" robolectric-test.log || echo "0")
-          echo ""
-          echo "=== Skipped tests: $SKIPPED_COUNT ==="
-          if [ "$SKIPPED_COUNT" -gt "0" ]; then
-            echo "⚠️  Some tests were skipped:"
-            grep "SKIPPED" robolectric-test.log || true
-          fi
-          
-          exit $TEST_EXIT
-          echo ""
-          echo "=== Test Summary ==="
-          grep -E "(BUILD SUCCESSFUL|BUILD FAILED|> Task :app:testDebugUnitTest|tests completed|test failed)" robolectric-test.log | tail -30 || echo "No test summary found"
-          
-          exit $TEST_EXIT
+        run: ./scripts/ci/run-robolectric-tests.sh
 
       - name: Upload Robolectric Test Logs
         if: always()
@@ -398,10 +167,7 @@ jobs:
       # --- Steps for Instrumentation Tests ---
 
       - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --subsystem-match=kvm
+        run: ./scripts/ci/enable-kvm.sh
 
       - name: Run Instrumentation Tests on Emulator
         timeout-minutes: 25
@@ -409,32 +175,7 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
-          script: |
-            echo "========================================"
-            echo "Starting Instrumentation Tests"
-            echo "========================================"
-            echo "Timestamp: $(date)"
-            
-            # Run with monitoring
-            set +e
-            ./gradlew connectedDebugAndroidTest -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee instrumentation-test.log
-            
-            TEST_EXIT=$?
-            set -e
-            
-            echo ""
-            echo "========================================"
-            echo "Instrumentation Tests completed"
-            echo "========================================"
-            echo "Timestamp: $(date)"
-            echo "Exit code: $TEST_EXIT"
-            
-            # Show test summary
-            echo ""
-            echo "=== Test Summary ==="
-            grep -E "(BUILD SUCCESSFUL|BUILD FAILED|tests completed|test failed|INSTRUMENTATION_STATUS)" instrumentation-test.log | tail -50 || echo "No test summary found"
-            
-            exit $TEST_EXIT
+          script: ./scripts/ci/run-instrumentation-tests.sh
 
       - name: Upload Instrumentation Test Logs
         if: always()
