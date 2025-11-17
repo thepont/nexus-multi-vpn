@@ -124,7 +124,10 @@ jobs:
           CI: true
         run: |
           echo "Building debug APK with native libraries..."
+          echo "Building main app APK..."
           ./gradlew assembleDebug --stacktrace
+          echo "Building diagnostic client APKs (required for instrumentation tests)..."
+          ./gradlew :diagnostic-client-uk:assembleDebug :diagnostic-client-fr:assembleDebug :diagnostic-client-direct:assembleDebug --stacktrace
 
       - name: Generate cache key
         id: cache-key
@@ -140,6 +143,9 @@ jobs:
             app/build/outputs/apk/debug/
             app/build/intermediates/
             app/.cxx/
+            diagnostic-client-uk/build/outputs/apk/debug/
+            diagnostic-client-fr/build/outputs/apk/debug/
+            diagnostic-client-direct/build/outputs/apk/debug/
           key: ${{ steps.cache-key.outputs.key }}
 
       - name: Upload APK as artifact

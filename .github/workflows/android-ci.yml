@@ -145,6 +145,9 @@ jobs:
             app/build/outputs/apk/debug/
             app/build/intermediates/
             app/.cxx/
+            diagnostic-client-uk/build/outputs/apk/debug/
+            diagnostic-client-fr/build/outputs/apk/debug/
+            diagnostic-client-direct/build/outputs/apk/debug/
           key: ${{ needs.build.outputs.cache-key }}
           fail-on-cache-miss: true
 

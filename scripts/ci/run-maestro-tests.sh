@@ -80,6 +80,21 @@ if ! adb -s emulator-5554 shell echo "ready" >/dev/null 2>&1; then
   adb wait-for-device || true
 fi
 
+# Try to enable ADB over TCP for better reliability
+echo "Checking ADB connection method..."
+adb -s emulator-5554 tcpip 5555 || echo "⚠️  Could not enable TCP/IP mode"
+
+# Additional wait to ensure everything is stable
+echo "Final stabilization wait (10s)..."
+sleep 10
+
+# Verify app is still running
+if ! adb -s emulator-5554 shell pidof com.multiregionvpn >/dev/null 2>&1; then
+  echo "App not running, restarting..."
+  adb -s emulator-5554 shell am start -n com.multiregionvpn/.ui.MainActivity || true
+  sleep 3
+fi
+
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
 # Try using explicit device flag first, fallback to default if not supported
@@ -89,6 +104,8 @@ if maestro test --help 2>&1 | grep -q "\-\-device"; then
   EXIT_CODE=$?
 else
   echo "Using default Maestro test command..."
+  # Set environment variable to potentially help with timeout
+  export MAESTRO_ANDROID_DRIVER_TIMEOUT=180
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
 fi
