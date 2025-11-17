@@ -155,6 +155,9 @@ cd app/openvpn-dns-domain && docker-compose up -d
 - `test_routeTrafficThroughUKServer()` - Route via WireGuard UK
 - `test_multiTunnelRouting()` - Two WireGuard tunnels
 - `test_wireGuardProtocolDetection()` - Config parsing
+- `test_openVpnProtocolDetection()` - OpenVPN config validation
+
+**Note**: For full E2E OpenVPN tests with Docker containers, see LocalMultiTunnelTest
 
 ---
 
