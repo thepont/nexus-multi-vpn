@@ -60,15 +60,50 @@ fi
 echo "Final wait before Maestro tests (5s)..."
 sleep 5
 
+# Start the app to ensure it's ready for Maestro
+echo "Starting the app to ensure it's ready..."
+adb -s emulator-5554 shell am start -n com.multiregionvpn/.ui.MainActivity || echo "⚠️  Could not start app (may already be running)"
+sleep 3
+
+# Ensure ADB is in a good state - restart if needed
+echo "Ensuring ADB is ready..."
+adb -s emulator-5554 root || echo "⚠️  Could not restart ADB as root"
+sleep 2
+adb -s emulator-5554 wait-for-device || true
+
+# Verify ADB connection one more time
+if ! adb -s emulator-5554 shell echo "ready" >/dev/null 2>&1; then
+  echo "⚠️  ADB connection not stable, restarting ADB server..."
+  adb kill-server || true
+  sleep 2
+  adb start-server || true
+  adb wait-for-device || true
+fi
+
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
-# Set Maestro timeout environment variable to give more time for driver startup
-export MAESTRO_DRIVER_TIMEOUT=120
-maestro test .maestro/*.yaml
-EXIT_CODE=$?
+# Try using explicit device flag first, fallback to default if not supported
+if maestro test --help 2>&1 | grep -q "\-\-device"; then
+  echo "Using --device flag..."
+  maestro test --device emulator-5554 .maestro/*.yaml
+  EXIT_CODE=$?
+else
+  echo "Using default Maestro test command..."
+  maestro test .maestro/*.yaml
+  EXIT_CODE=$?
+fi
+
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
-  sleep 5
+  sleep 10
+  # On retry, ensure ADB is still working
+  adb -s emulator-5554 shell echo "retry-check" >/dev/null 2>&1 || {
+    echo "⚠️  ADB connection lost, restarting..."
+    adb kill-server || true
+    sleep 2
+    adb start-server || true
+    adb wait-for-device || true
+  }
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
 fi

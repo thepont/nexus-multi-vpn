@@ -28,4 +28,14 @@ echo ""
 echo "=== Test Summary ==="
 grep -E "(BUILD SUCCESSFUL|BUILD FAILED|tests completed|test failed|INSTRUMENTATION_STATUS)" instrumentation-test.log | tail -50 || echo "No test summary found"
 
+# If tests failed, show more details
+if [ $TEST_EXIT -ne 0 ]; then
+    echo ""
+    echo "=== Failed Test Details ==="
+    grep -E "FAILED|FAILURE|Exception|Error" instrumentation-test.log | grep -v "^\s*at " | tail -30 || echo "No detailed failure info found"
+    echo ""
+    echo "=== Test Report Location ==="
+    echo "See detailed report at: app/build/reports/androidTests/connected/debug/index.html"
+fi
+
 exit $TEST_EXIT
