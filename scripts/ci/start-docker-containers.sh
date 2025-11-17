@@ -46,18 +46,19 @@ echo "=== Starting OpenVPN and HTTP test containers ==="
 # so that relative paths in docker-compose files work correctly
 run_compose() {
     local compose_file="$1"
-    shift
+    local project_name="$2"
+    shift 2
     if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
-        (cd "$COMPOSE_DIR" && docker compose -f "$(basename "$compose_file")" "$@")
+        (cd "$COMPOSE_DIR" && docker compose -p "$project_name" -f "$(basename "$compose_file")" "$@")
     else
-        (cd "$COMPOSE_DIR" && docker-compose -f "$(basename "$compose_file")" "$@")
+        (cd "$COMPOSE_DIR" && docker-compose -p "$project_name" -f "$(basename "$compose_file")" "$@")
     fi
 }
 
 # Start routing containers (OpenVPN UK/FR + HTTP servers)
 if [ -f "$COMPOSE_DIR/docker-compose.routing.yaml" ]; then
     echo "Starting routing containers..."
-    if run_compose "$COMPOSE_DIR/docker-compose.routing.yaml" up -d; then
+    if run_compose "$COMPOSE_DIR/docker-compose.routing.yaml" "e2e-routing" up -d; then
         echo "✅ Routing containers started"
     else
         echo "⚠️  Failed to start routing containers (exit code: $?)"
@@ -69,7 +70,7 @@ fi
 # Start DNS containers
 if [ -f "$COMPOSE_DIR/docker-compose.dns.yaml" ]; then
     echo "Starting DNS containers..."
-    if run_compose "$COMPOSE_DIR/docker-compose.dns.yaml" up -d; then
+    if run_compose "$COMPOSE_DIR/docker-compose.dns.yaml" "e2e-dns" up -d; then
         echo "✅ DNS containers started"
     else
         echo "⚠️  Failed to start DNS containers (exit code: $?)"
@@ -81,7 +82,7 @@ fi
 # Start DNS domain containers
 if [ -f "$COMPOSE_DIR/docker-compose.dns-domain.yaml" ]; then
     echo "Starting DNS domain containers..."
-    if run_compose "$COMPOSE_DIR/docker-compose.dns-domain.yaml" up -d; then
+    if run_compose "$COMPOSE_DIR/docker-compose.dns-domain.yaml" "e2e-dns-domain" up -d; then
         echo "✅ DNS domain containers started"
     else
         echo "⚠️  Failed to start DNS domain containers (exit code: $?)"
@@ -93,7 +94,7 @@ fi
 # Start conflict test containers
 if [ -f "$COMPOSE_DIR/docker-compose.conflict.yaml" ]; then
     echo "Starting conflict test containers..."
-    if run_compose "$COMPOSE_DIR/docker-compose.conflict.yaml" up -d; then
+    if run_compose "$COMPOSE_DIR/docker-compose.conflict.yaml" "e2e-conflict" up -d; then
         echo "✅ Conflict test containers started"
     else
         echo "⚠️  Failed to start conflict containers (exit code: $?)"

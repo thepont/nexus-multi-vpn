@@ -43,19 +43,33 @@ echo "=== Stopping test containers ==="
 # This function changes to the compose directory to run commands
 run_compose() {
     local compose_file="$1"
-    shift
+    local project_name="$2"
+    shift 2
     if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
-        (cd "$COMPOSE_DIR" && docker compose -f "$(basename "$compose_file")" "$@")
+        (cd "$COMPOSE_DIR" && docker compose -p "$project_name" -f "$(basename "$compose_file")" "$@")
     else
-        (cd "$COMPOSE_DIR" && docker-compose -f "$(basename "$compose_file")" "$@")
+        (cd "$COMPOSE_DIR" && docker-compose -p "$project_name" -f "$(basename "$compose_file")" "$@")
     fi
 }
 
-# Stop all docker-compose files
+# Stop all docker-compose files with their project names
+declare -A compose_projects=(
+    ["docker-compose.routing.yaml"]="e2e-routing"
+    ["docker-compose.dns.yaml"]="e2e-dns"
+    ["docker-compose.dns-domain.yaml"]="e2e-dns-domain"
+    ["docker-compose.conflict.yaml"]="e2e-conflict"
+)
+
 for compose_file in "$COMPOSE_DIR"/*.yaml; do
     if [ -f "$compose_file" ]; then
-        echo "Stopping $(basename $compose_file)..."
-        run_compose "$compose_file" down || echo "⚠️  Could not stop $(basename $compose_file)"
+        filename=$(basename "$compose_file")
+        project_name="${compose_projects[$filename]}"
+        if [ -n "$project_name" ]; then
+            echo "Stopping $filename (project: $project_name)..."
+            run_compose "$compose_file" "$project_name" down || echo "⚠️  Could not stop $filename"
+        else
+            echo "Skipping $filename (no project name defined)"
+        fi
     fi
 done
 
