@@ -77,9 +77,8 @@ echo "✓ debugAndroidTestRuntimeClasspath resolved"
 # Now try our custom task
 echo ""
 echo "=== Running androidDependencies task ==="
+# Don't exclude native build tasks when SKIP_NATIVE_BUILD=true, as they don't exist
 ./gradlew androidDependencies \
-  -x externalNativeBuildDebug \
-  -x externalNativeBuildRelease \
   --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
 
 # Capture exit code of the gradle command (first command in pipeline), not tee

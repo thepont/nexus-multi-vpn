@@ -9,7 +9,8 @@ echo "Timestamp: $(date)"
 
 # Run with monitoring
 set +e
-./gradlew connectedDebugAndroidTest -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee instrumentation-test.log
+# Don't exclude native build tasks when SKIP_NATIVE_BUILD=true, as they don't exist
+./gradlew connectedDebugAndroidTest --info --stacktrace 2>&1 | tee instrumentation-test.log
 
 # Capture exit code of the gradle command (first command in pipeline), not tee
 TEST_EXIT=${PIPESTATUS[0]}

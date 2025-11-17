@@ -57,9 +57,8 @@ MONITOR_PID=$!
 
 # Run tests with detailed logging
 set +e
+# Don't exclude native build tasks when SKIP_NATIVE_BUILD=true, as they don't exist
 ./gradlew testDebugUnitTest \
-  -x externalNativeBuildDebug \
-  -x externalNativeBuildRelease \
   --info --stacktrace 2>&1 | tee robolectric-test.log
 
 # Capture exit code of the gradle command (first command in pipeline), not tee
