@@ -374,10 +374,12 @@ dependencies {
 
 gradle.projectsEvaluated {
     tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
+        // Explicitly depend on packageDebug tasks to satisfy Gradle's dependency validation
+        // The androidTestUtil() declarations above use these APK files, so we must declare the dependency
         dependsOn(
-            ":diagnostic-client-uk:assembleDebug",
-            ":diagnostic-client-fr:assembleDebug",
-            ":diagnostic-client-direct:assembleDebug"
+            ":diagnostic-client-uk:packageDebug",
+            ":diagnostic-client-fr:packageDebug",
+            ":diagnostic-client-direct:packageDebug"
         )
     }
 }
