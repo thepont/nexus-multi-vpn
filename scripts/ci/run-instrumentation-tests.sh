@@ -7,6 +7,56 @@ echo "Starting Instrumentation Tests"
 echo "========================================"
 echo "Timestamp: $(date)"
 
+# Wait for emulator to be fully ready - verify package manager service is available
+echo "Verifying emulator is fully ready..."
+echo "Waiting for ADB device..."
+adb wait-for-device || true
+
+echo "Waiting for boot completion..."
+for i in $(seq 1 300); do
+  BOOT=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+  if [ "$BOOT" = "1" ]; then
+    echo "Boot completed."
+    break
+  fi
+  if [ $i -eq 300 ]; then
+    echo "⚠️  Timeout waiting for boot_completed" >&2
+  fi
+  sleep 1
+done
+
+echo "Verifying package manager service is available..."
+for i in $(seq 1 60); do
+  # Check if package manager service is available by trying to list packages
+  if adb shell pm list packages >/dev/null 2>&1; then
+    echo "✅ Package manager service is ready (attempt $i/60)"
+    break
+  fi
+  if [ $i -eq 60 ]; then
+    echo "⚠️  Package manager service not ready after 60 attempts, but continuing..."
+  fi
+  sleep 1
+done
+
+# Additional wait for system services to fully initialize
+echo "Waiting for system services to stabilize (10s)..."
+sleep 10
+
+# Verify ADB connection is stable
+echo "Verifying ADB connection stability..."
+for i in $(seq 1 10); do
+  if adb shell echo "ready" >/dev/null 2>&1; then
+    echo "✅ ADB connection verified (attempt $i/10)"
+    break
+  fi
+  if [ $i -eq 10 ]; then
+    echo "⚠️  ADB connection verification failed after 10 attempts"
+  fi
+  sleep 1
+done
+
+echo "Emulator readiness checks complete. Starting tests..."
+
 # Run with monitoring
 set +e
 # Don't exclude native build tasks when SKIP_NATIVE_BUILD=true, as they don't exist

@@ -97,9 +97,31 @@ fi
 
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
-# Force Maestro to use classic ADB driver for stability
+
+# Try to start dadb service manually to help Maestro connect
+echo "Attempting to start dadb service for Maestro..."
+adb -s emulator-5554 shell "setprop persist.vendor.dadb.enable 1" 2>/dev/null || true
+adb -s emulator-5554 shell "setprop ro.adb.secure 0" 2>/dev/null || true
+
+# Wait a bit for dadb to potentially initialize
+sleep 5
+
+# Verify ADB is still working after property changes
+if ! adb -s emulator-5554 shell echo "dadb-check" >/dev/null 2>&1; then
+  echo "⚠️  ADB connection lost after property changes, restarting..."
+  adb kill-server || true
+  sleep 2
+  adb start-server || true
+  adb wait-for-device || true
+fi
+
+# Set Maestro environment variables for better timeout handling
 export MAESTRO_DRIVER="adb"
 export MAESTRO_ANDROID_DRIVER="adb"
+# Increase timeout significantly for dadb connection
+export MAESTRO_ANDROID_DRIVER_TIMEOUT=300
+export MAESTRO_DRIVER_TIMEOUT=300
+
 # Try using explicit device flag first, fallback to default if not supported
 if maestro test --help 2>&1 | grep -q "\-\-device"; then
   echo "Using --device flag..."
@@ -107,8 +129,6 @@ if maestro test --help 2>&1 | grep -q "\-\-device"; then
   EXIT_CODE=$?
 else
   echo "Using default Maestro test command..."
-  # Set environment variable to potentially help with timeout
-  export MAESTRO_ANDROID_DRIVER_TIMEOUT=180
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
 fi
