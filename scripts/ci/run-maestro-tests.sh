@@ -97,6 +97,9 @@ fi
 
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
+# Force Maestro to use classic ADB driver for stability
+export MAESTRO_DRIVER="adb"
+export MAESTRO_ANDROID_DRIVER="adb"
 # Try using explicit device flag first, fallback to default if not supported
 if maestro test --help 2>&1 | grep -q "\-\-device"; then
   echo "Using --device flag..."

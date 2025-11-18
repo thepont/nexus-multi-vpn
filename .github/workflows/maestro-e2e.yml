@@ -83,6 +83,7 @@ jobs:
       TEST_VPN_HOSTNAME: ${{ secrets.TEST_VPN_HOSTNAME != '' && secrets.TEST_VPN_HOSTNAME || 'uk1234.nordvpn.com' }}
       TEST_VPN_REGION: ${{ secrets.TEST_VPN_REGION != '' && secrets.TEST_VPN_REGION || 'UK' }}
       TEST_APP_PACKAGE: ${{ secrets.TEST_APP_PACKAGE != '' && secrets.TEST_APP_PACKAGE || 'com.android.chrome' }}
+      MAESTRO_VERSION: "1.39.0"
 
     steps:
       - name: Checkout repository
@@ -117,6 +118,9 @@ jobs:
             app/build/outputs/apk/debug/
             app/build/intermediates/
             app/.cxx/
+            diagnostic-client-uk/build/outputs/apk/debug/
+            diagnostic-client-fr/build/outputs/apk/debug/
+            diagnostic-client-direct/build/outputs/apk/debug/
           key: ${{ needs.build.outputs.cache-key }}
           fail-on-cache-miss: true
 

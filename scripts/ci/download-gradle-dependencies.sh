@@ -62,16 +62,16 @@ echo "=== Attempting simple dependency resolution first ==="
 # Try a simpler approach: just resolve specific configurations we know we need
 set +e  # Don't exit on error
 
-./gradlew dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugCompileClasspath resolved"
 
-./gradlew dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugRuntimeClasspath resolved"
 
-./gradlew dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugAndroidTestCompileClasspath resolved"
 
-./gradlew dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugAndroidTestRuntimeClasspath resolved"
 
 # Now try our custom task
