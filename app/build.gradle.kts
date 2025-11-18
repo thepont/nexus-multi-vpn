@@ -253,9 +253,23 @@ android {
         }
     }
     
-    // Note: Diagnostic client APKs are built separately in CI scripts (run-instrumentation-tests.sh)
-    // The androidTestUtil declarations below reference the APK files directly
-    // No need for explicit task dependencies since we build them before running tests
+    // Configure connectedDebugAndroidTest dependencies
+    // Diagnostic client APKs are built separately in CI scripts, but Gradle needs explicit dependencies
+    // to satisfy validation. We use evaluationDependsOn to ensure projects are evaluated, then declare dependencies.
+    afterEvaluate {
+        // Ensure diagnostic client projects are evaluated
+        evaluationDependsOn(":diagnostic-client-uk")
+        evaluationDependsOn(":diagnostic-client-fr")
+        evaluationDependsOn(":diagnostic-client-direct")
+        
+        tasks.matching { it.name.contains("connectedDebugAndroidTest") }.configureEach {
+            dependsOn(
+                project(":diagnostic-client-uk").tasks.named("packageDebug"),
+                project(":diagnostic-client-fr").tasks.named("packageDebug"),
+                project(":diagnostic-client-direct").tasks.named("packageDebug")
+            )
+        }
+    }
     
     packaging {
         resources {
