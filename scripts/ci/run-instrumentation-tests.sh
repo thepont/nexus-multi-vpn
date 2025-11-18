@@ -55,11 +55,36 @@ for i in $(seq 1 10); do
   sleep 1
 done
 
-echo "Emulator readiness checks complete. Starting tests..."
+echo "Emulator readiness checks complete."
 
-# Run with monitoring
+# Build diagnostic client APKs if they don't exist (they should be cached, but verify)
+echo "Checking diagnostic client APKs..."
+if [ ! -f "diagnostic-client-uk/build/outputs/apk/debug/diagnostic-client-uk-debug.apk" ] || \
+   [ ! -f "diagnostic-client-fr/build/outputs/apk/debug/diagnostic-client-fr-debug.apk" ] || \
+   [ ! -f "diagnostic-client-direct/build/outputs/apk/debug/diagnostic-client-direct-debug.apk" ]; then
+    echo "Building diagnostic client APKs..."
+    ./gradlew :diagnostic-client-uk:assemble :diagnostic-client-fr:assemble :diagnostic-client-direct:assemble --stacktrace
+else
+    echo "✅ Diagnostic client APKs found (using cached builds)"
+fi
+
+# Build only the test APK (androidTest), not the main APK
+# The main APK should already be built and cached from the build job
+echo "Building test APK (androidTest) only..."
+./gradlew assembleDebugAndroidTest --stacktrace
+
+# Verify main APK exists (should be from cache)
+if [ ! -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+    echo "⚠️  Main APK not found! Building it now..."
+    ./gradlew assembleDebug --stacktrace
+else
+    echo "✅ Main APK found (using cached build)"
+fi
+
+# Run tests with monitoring
 set +e
-# Don't exclude native build tasks when SKIP_NATIVE_BUILD=true, as they don't exist
+# Use connectedDebugAndroidTest - it will install both APKs and run tests
+# Since we've already built everything, this should just install and run
 ./gradlew connectedDebugAndroidTest --info --stacktrace 2>&1 | tee instrumentation-test.log
 
 # Capture exit code of the gradle command (first command in pipeline), not tee

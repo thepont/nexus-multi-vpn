@@ -10,9 +10,12 @@ import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
@@ -24,8 +27,12 @@ import org.junit.Assert.assertTrue
  * Ensures that when an app rule changes from one tunnel to another, the
  * ConnectionTracker remaps the UID to the new tunnel.
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class AppRuleRemapTest {
+
+    @get:Rule(order = 0)
+    val hiltRule = HiltAndroidRule(this)
 
     private lateinit var context: Context
     private lateinit var database: AppDatabase
@@ -38,6 +45,7 @@ class AppRuleRemapTest {
 
     @Before
     fun setUp() = runBlocking {
+        hiltRule.inject()
         context = ApplicationProvider.getApplicationContext()
         database = AppDatabase.getDatabase(context)
         settingsRepository = SettingsRepository(
