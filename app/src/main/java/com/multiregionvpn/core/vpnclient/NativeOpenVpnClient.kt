@@ -35,6 +35,21 @@ interface TunnelDnsCallback {
 }
 
 /**
+ * Callback interface for receiving route pushes from OpenVPN.
+ * This is called from native code when tun_builder_add_route() is invoked.
+ */
+interface TunnelRouteCallback {
+    /**
+     * Called when OpenVPN pushes a route for a tunnel.
+     * @param tunnelId The tunnel identifier (e.g., "nordvpn_UK")
+     * @param address The route network address (e.g., "10.1.0.0")
+     * @param prefixLength The subnet prefix length (e.g., 24 for /24)
+     * @param isIpv6 True if the route is IPv6, false for IPv4
+     */
+    fun onTunnelRouteReceived(tunnelId: String, address: String, prefixLength: Int, isIpv6: Boolean)
+}
+
+/**
  * Native OpenVPN client implementation using OpenVPN 3 C++ library via JNI.
  * 
  * This replaces RealOpenVpnClient and uses the native OpenVPN 3 library
@@ -46,7 +61,8 @@ class NativeOpenVpnClient(
     private val tunFd: Int = -1,  // Optional: TUN file descriptor if already available
     private val tunnelId: String? = null,  // Tunnel ID for identifying this connection
     private val ipCallback: TunnelIpCallback? = null,  // Callback for IP address notifications
-    private val dnsCallback: TunnelDnsCallback? = null  // Callback for DNS server notifications
+    private val dnsCallback: TunnelDnsCallback? = null,  // Callback for DNS server notifications
+    private val routeCallback: TunnelRouteCallback? = null  // Callback for route notifications
 ) : OpenVpnClient {
 
     private val connected = AtomicBoolean(false)
@@ -91,7 +107,10 @@ class NativeOpenVpnClient(
         vpnBuilder: android.net.VpnService.Builder?,  // Pass VpnService.Builder for TunBuilderBase
         tunFd: Int,  // File descriptor of already-established TUN interface
         vpnService: android.net.VpnService,  // Pass VpnService instance for protect() calls
-        tunnelId: String  // Tunnel ID for External TUN Factory (must be set BEFORE connect)
+        tunnelId: String,  // Tunnel ID for External TUN Factory (must be set BEFORE connect)
+        ipCallback: TunnelIpCallback?,  // Callback for IP assignments (set before connect)
+        dnsCallback: TunnelDnsCallback?,  // Callback for DNS assignments (set before connect)
+        routeCallback: TunnelRouteCallback?  // Callback for route pushes (set before connect)
     ): Long // Returns session handle (0 = error)
 
     @JvmName("nativeDisconnect")
@@ -110,7 +129,13 @@ class NativeOpenVpnClient(
     private external fun nativeGetLastError(sessionHandle: Long): String
 
     @JvmName("nativeSetTunnelIdAndCallback")
-    private external fun nativeSetTunnelIdAndCallback(sessionHandle: Long, tunnelId: String, ipCallback: TunnelIpCallback, dnsCallback: TunnelDnsCallback?)
+    private external fun nativeSetTunnelIdAndCallback(
+        sessionHandle: Long,
+        tunnelId: String,
+        ipCallback: TunnelIpCallback,
+        dnsCallback: TunnelDnsCallback?,
+        routeCallback: TunnelRouteCallback?
+    )
 
     @JvmName("getAppFd")
     external fun getAppFd(tunnelId: String): Int  // Get app FD from External TUN Factory
@@ -229,7 +254,18 @@ class NativeOpenVpnClient(
                 
                 // Call native connect with VpnService.Builder, TUN FD, VpnService, and tunnel ID
                 val handle = try {
-                    nativeConnect(ovpnConfig, username, password, builder, finalTunFd, vpnService, tunnelIdForConnect)
+                    nativeConnect(
+                        ovpnConfig,
+                        username,
+                        password,
+                        builder,
+                        finalTunFd,
+                        vpnService,
+                        tunnelIdForConnect,
+                        ipCallback,
+                        dnsCallback,
+                        routeCallback
+                    )
                 } catch (e: UnsatisfiedLinkError) {
                     Log.e(TAG, "❌ UnsatisfiedLinkError - native library not loaded properly", e)
                     lastError = "Native library not loaded: ${e.message}"
@@ -283,7 +319,7 @@ class NativeOpenVpnClient(
                 // This ensures callbacks are registered even if set during connect failed
                 if (tunnelId != null && ipCallback != null) {
                     try {
-                        nativeSetTunnelIdAndCallback(handle, tunnelId, ipCallback, dnsCallback)
+                    nativeSetTunnelIdAndCallback(handle, tunnelId, ipCallback, dnsCallback, routeCallback)
                         Log.d(TAG, "✅ Tunnel ID and callbacks confirmed: tunnelId=$tunnelId")
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to set tunnel ID and callbacks: ${e.message}")

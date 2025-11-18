@@ -7,6 +7,8 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.multiregionvpn.core.ConnectionTracker
 import com.multiregionvpn.core.VpnEngineService
+import com.multiregionvpn.core.VpnServiceStateTracker
+import com.multiregionvpn.core.VpnConnectionManager
 import com.multiregionvpn.data.GeoBlockedApps
 import com.multiregionvpn.data.database.AppRule as DbAppRule
 import com.multiregionvpn.data.database.VpnConfig
@@ -18,6 +20,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.Socket
+import java.net.SocketTimeoutException
 import javax.inject.Inject
 
 /**
@@ -74,13 +81,14 @@ class RouterViewModelImpl @Inject constructor(
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         
         // Initialize state from backend
-        viewModelScope.launch(exceptionHandler) {
-            loadServerGroups()
-            loadAppRules()
-            loadInstalledApps()
-            observeVpnStatus()
-            observeLiveStats()
-        }
+        viewModelScope.launch(exceptionHandler) { loadServerGroups() }
+        viewModelScope.launch(exceptionHandler) { loadAppRules() }
+        viewModelScope.launch(exceptionHandler) { loadInstalledApps() }
+        observeVpnStatus()
+        observeLiveStats()
+        
+        // Start monitoring tunnel connection status and latency
+        viewModelScope.launch(exceptionHandler) { monitorTunnelStatus() }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -118,12 +126,39 @@ class RouterViewModelImpl @Inject constructor(
                     // Get human-readable region name
                     val regionName = getRegionDisplayName(regionId)
                     
+                    // Check connection status and latency (will be updated by monitorTunnelStatus)
+                    val connectionManager = try {
+                        VpnConnectionManager.getInstance()
+                    } catch (e: IllegalStateException) {
+                        null
+                    }
+                    
+                    // Find first connected tunnel in this region
+                    var isConnected = false
+                    var latencyMs: Int? = null
+                    
+                    if (connectionManager != null) {
+                        for (config in configs) {
+                            val tunnelId = "${config.templateId}_${config.regionId}"
+                            if (connectionManager.isTunnelConnected(tunnelId)) {
+                                isConnected = true
+                                // Measure latency for the first connected tunnel
+                                if (latencyMs == null && config.serverHostname.isNotEmpty()) {
+                                    latencyMs = measureLatency(config.serverHostname)
+                                }
+                                break
+                            }
+                        }
+                    }
+                    
                     ServerGroup(
                         id = regionId,
                         name = regionName,
                         region = regionId,
                         serverCount = configs.size,
-                        isActive = isActive
+                        isActive = isActive,
+                        isConnected = isConnected,
+                        latencyMs = latencyMs
                     )
                 }
                 
@@ -218,53 +253,62 @@ class RouterViewModelImpl @Inject constructor(
         try {
             Log.d(TAG, "📱 Loading ALL installed apps...")
             
-            val packageManager = application.packageManager
+            val pm = application.packageManager
+            val allApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            Log.d(TAG, "   PackageManager returned ${allApps.size} apps (system + user)")
             
-            // Get ALL installed user apps (excluding system apps)
-            val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 }
-                .sortedBy { packageManager.getApplicationLabel(it).toString().lowercase() }
+            val filteredApps = allApps.filter { appInfo ->
+                val pkg = appInfo.packageName
+                
+                if (pkg == application.packageName) return@filter false
+                
+                // Allow all user-installed apps
+                if ((appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0) return@filter true
+                
+                // Allow updated system apps
+                if ((appInfo.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) return@filter true
+                
+                // Allow core Google / store apps so routing works for them
+                pkg.startsWith("com.android.vending") || // Play Store
+                pkg.startsWith("com.google.android.apps.") ||
+                pkg.startsWith("com.google.android.youtube") ||
+                pkg.startsWith("com.google.android.tv") ||
+                pkg.startsWith("com.android.chrome") ||
+                pkg.startsWith("com.amazon") // Fire TV sideloaded stores, etc.
+            }
             
-            Log.d(TAG, "   Found ${installedApps.size} installed user apps")
+            Log.d(TAG, "   Filtered to ${filteredApps.size} apps after removing pure system packages")
             
-            // Get current app rules from database
             val dbAppRules = settingsRepository.getAllAppRules().first()
             val rulesMap = dbAppRules.associateBy { it.packageName }
             
-            // Create AppRule for EVERY installed app
-            val appRules = installedApps.mapNotNull { appInfo ->
-                try {
-                    val packageName = appInfo.packageName
-                    val appName = packageManager.getApplicationLabel(appInfo).toString()
-                    val icon: Drawable? = try {
-                        packageManager.getApplicationIcon(packageName)
-                    } catch (e: Exception) {
-                        null
-                    }
-                    
-                    // Look up rule for this app (if it exists)
-                    val dbRule = rulesMap[packageName]
-                    val groupId = if (dbRule?.vpnConfigId != null) {
-                        val vpnConfig = settingsRepository.getVpnConfigById(dbRule.vpnConfigId!!)
-                        vpnConfig?.regionId  // Use regionId as groupId
-                    } else {
-                        null  // No rule = bypass VPN
-                    }
-                    
-                    AppRule(
-                        packageName = packageName,
-                        appName = appName,
-                        icon = icon,
-                        routedGroupId = groupId
-                    )
+            val appRules = filteredApps.map { appInfo ->
+                val packageName = appInfo.packageName
+                val appName = pm.getApplicationLabel(appInfo).toString()
+                val icon: Drawable? = try {
+                    pm.getApplicationIcon(packageName)
                 } catch (e: Exception) {
-                    Log.w(TAG, "   ⚠️  Error loading app ${appInfo.packageName}", e)
                     null
                 }
-            }
+                
+                val dbRule = rulesMap[packageName]
+                val groupId = if (dbRule?.vpnConfigId != null) {
+                    val vpnConfig = settingsRepository.getVpnConfigById(dbRule.vpnConfigId!!)
+                    vpnConfig?.regionId
+                } else {
+                    null
+                }
+                
+                AppRule(
+                    packageName = packageName,
+                    appName = appName,
+                    icon = icon,
+                    routedGroupId = groupId
+                )
+            }.sortedBy { it.appName.lowercase() }
             
             _allInstalledApps.value = appRules
-            Log.i(TAG, "✅ Loaded ${appRules.size} installed apps (including ${appRules.count { it.routedGroupId != null }} with routing rules)")
+            Log.i(TAG, "✅ Loaded ${appRules.size} installed apps (rules exist for ${appRules.count { it.routedGroupId != null }})")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error loading installed apps", e)
             _allInstalledApps.value = emptyList()
@@ -306,23 +350,13 @@ class RouterViewModelImpl @Inject constructor(
      * Polls VpnEngineService.isRunning() every second to update UI status.
      * In a future refactor, this could be replaced with a StateFlow from the service.
      */
-    private suspend fun observeVpnStatus() {
-        viewModelScope.launch {
-            Log.d(TAG, "🔍 Starting VPN status observation...")
-            while (true) {
-                val isRunning = VpnEngineService.isRunning()
-                val newStatus = when {
-                    isRunning -> VpnStatus.CONNECTED
-                    else -> VpnStatus.DISCONNECTED
+    private fun observeVpnStatus() {
+        viewModelScope.launch(exceptionHandler) {
+            VpnServiceStateTracker.status.collect { status ->
+                if (_vpnStatus.value != status) {
+                    Log.d(TAG, "   VPN status update: ${_vpnStatus.value} → $status")
+                    _vpnStatus.value = status
                 }
-                
-                // Only update if status changed (reduces UI churn)
-                if (_vpnStatus.value != newStatus) {
-                    Log.d(TAG, "   Status changed: ${_vpnStatus.value} → $newStatus")
-                    _vpnStatus.value = newStatus
-                }
-                
-                kotlinx.coroutines.delay(1000)
             }
         }
     }
@@ -336,46 +370,10 @@ class RouterViewModelImpl @Inject constructor(
      * NOTE: ConnectionTracker is instantiated by VpnEngineService, so it's only
      * available when the service is running. We access it via a static reference.
      */
-    private suspend fun observeLiveStats() {
-        viewModelScope.launch {
-            Log.d(TAG, "📊 Starting live stats observation...")
-            var connectionStartTime: Long? = null
-            
-            while (true) {
-                try {
-                    if (VpnEngineService.isRunning()) {
-                        // Service is running - update connection time
-                        if (connectionStartTime == null) {
-                            connectionStartTime = System.currentTimeMillis()
-                            Log.d(TAG, "   Connection started - tracking time")
-                        }
-                        
-                        val connectionTimeSeconds = (System.currentTimeMillis() - connectionStartTime) / 1000
-                        
-                        // Get stats from ConnectionTracker (if available)
-                        // NOTE: In a production app, we'd expose these via VpnConnectionManager
-                        // For now, we show connection time and estimate active connections from server groups
-                        val activeConnections = _allServerGroups.value.count { it.isActive }
-                        
-                        _liveStats.value = VpnStats(
-                            bytesSent = 0L,  // TODO: Expose from ConnectionTracker
-                            bytesReceived = 0L,  // TODO: Expose from ConnectionTracker
-                            connectionTimeSeconds = connectionTimeSeconds,
-                            activeConnections = activeConnections
-                        )
-                    } else {
-                        // Service not running - reset stats
-                        if (connectionStartTime != null) {
-                            connectionStartTime = null
-                            _liveStats.value = VpnStats()
-                            Log.d(TAG, "   Connection stopped - reset stats")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "   Error updating stats: ${e.message}")
-                }
-                
-                kotlinx.coroutines.delay(1000)
+    private fun observeLiveStats() {
+        viewModelScope.launch(exceptionHandler) {
+            VpnServiceStateTracker.stats.collect { stats ->
+                _liveStats.value = stats
             }
         }
     }
@@ -410,7 +408,7 @@ class RouterViewModelImpl @Inject constructor(
                     }
                     
                     Log.i(TAG, "✅ VPN service start intent sent")
-                    // Note: Status will be updated by observeVpnStatus() polling
+                    // Status updates flow via VpnServiceStateTracker
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Failed to start VPN service", e)
                     _vpnStatus.value = VpnStatus.ERROR
@@ -496,6 +494,102 @@ class RouterViewModelImpl @Inject constructor(
         Log.d(TAG, "➕ Add server group (delegated to existing UI)")
         // In production, this would open a dialog to configure new VPN servers
         // For now, this is handled by existing UI (not part of RouterViewModel)
+    }
+    
+    /**
+     * Measure latency to a server by attempting a TCP connection
+     */
+    private suspend fun measureLatency(hostname: String, timeoutMs: Int = 2000): Int? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val host = hostname.split(":").first()
+                val port = if (hostname.contains(":")) {
+                    hostname.split(":").getOrNull(1)?.toIntOrNull() ?: 443
+                } else {
+                    443 // Default to HTTPS port
+                }
+                
+                val startTime = System.currentTimeMillis()
+                Socket().use { socket ->
+                    socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
+                }
+                val latency = (System.currentTimeMillis() - startTime).toInt()
+                if (latency >= 0 && latency < timeoutMs) {
+                    Log.d(TAG, "Latency measurement: $host:$port = ${latency}ms")
+                    latency
+                } else {
+                    Log.w(TAG, "Latency measurement invalid: $host:$port = ${latency}ms")
+                    null
+                }
+            } catch (e: SocketTimeoutException) {
+                Log.d(TAG, "Latency measurement timeout: $hostname")
+                null
+            } catch (e: Exception) {
+                Log.w(TAG, "Latency measurement error: $hostname - ${e.message}")
+                null
+            }
+        }
+    }
+    
+    /**
+     * Monitor tunnel connection status and latency, updating ServerGroups periodically
+     */
+    private suspend fun monitorTunnelStatus() {
+        while (true) {
+            try {
+                delay(5000) // Update every 5 seconds
+                
+                val connectionManager = try {
+                    VpnConnectionManager.getInstance()
+                } catch (e: IllegalStateException) {
+                    // VpnConnectionManager not initialized yet
+                    continue
+                }
+                
+                val vpnConfigs = settingsRepository.getAllVpnConfigs().first()
+                val appRules = settingsRepository.appRuleDao.getAllRulesList()
+                val activeVpnConfigIds = appRules.mapNotNull { it.vpnConfigId }.toSet()
+                
+                // Group by region
+                val groupedByRegion = vpnConfigs.groupBy { it.regionId }
+                
+                // Update ServerGroups with connection status and latency
+                val updatedGroups = groupedByRegion.map { (regionId, configs) ->
+                    val isActive = configs.any { config -> activeVpnConfigIds.contains(config.id) }
+                    val regionName = getRegionDisplayName(regionId)
+                    
+                    // Find first connected tunnel in this region
+                    var isConnected = false
+                    var latencyMs: Int? = null
+                    
+                    for (config in configs) {
+                        val tunnelId = "${config.templateId}_${config.regionId}"
+                        if (connectionManager.isTunnelConnected(tunnelId)) {
+                            isConnected = true
+                            // Measure latency for the first connected tunnel
+                            if (latencyMs == null && config.serverHostname.isNotEmpty()) {
+                                latencyMs = measureLatency(config.serverHostname)
+                            }
+                            break
+                        }
+                    }
+                    
+                    ServerGroup(
+                        id = regionId,
+                        name = regionName,
+                        region = regionId,
+                        serverCount = configs.size,
+                        isActive = isActive,
+                        isConnected = isConnected,
+                        latencyMs = latencyMs
+                    )
+                }
+                
+                _allServerGroups.value = updatedGroups
+            } catch (e: Exception) {
+                Log.w(TAG, "Error monitoring tunnel status: ${e.message}")
+            }
+        }
     }
     
     override fun onRemoveServerGroup(group: ServerGroup) {

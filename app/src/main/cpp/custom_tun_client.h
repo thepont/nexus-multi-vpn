@@ -9,6 +9,7 @@
 #include <android/log.h>
 #include <string>
 #include <sstream>
+#include <iomanip>
 #include <array>
 #include <memory>
 #include <sys/socket.h>
@@ -16,6 +17,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <cstring>
+#include <arpa/inet.h>
 
 // Logging configuration (compile-time flags)
 #include "logging_config.h"
@@ -32,6 +34,10 @@ public:
     virtual ~CustomTunCallback() {}
     virtual void on_ip_assigned(const std::string& tunnel_id, const std::string& ip, int prefix_len) = 0;
     virtual void on_dns_configured(const std::string& tunnel_id, const std::vector<std::string>& dns_servers) = 0;
+    virtual void on_route_pushed(const std::string& tunnel_id,
+                                 const std::string& address,
+                                 int prefix_len,
+                                 bool ipv6) = 0;
 };
 
 /**
@@ -96,18 +102,14 @@ public:
         app_fd_ = sockets[0];   // Our application's end
         lib_fd_ = sockets[1];   // OpenVPN 3's end
         
-        OPENVPN_LOG("Socket pair created: app_fd=" << app_fd_ << " lib_fd=" << lib_fd_);
+        OPENVPN_LOG("Socket pair created (SOCK_SEQPACKET): app_fd=" << app_fd_ << " lib_fd=" << lib_fd_);
         
-        // Set non-blocking on both ends
+        // Set non-blocking on OpenVPN side only
         int flags = fcntl(lib_fd_, F_GETFL, 0);
         if (flags != -1) {
             fcntl(lib_fd_, F_SETFL, flags | O_NONBLOCK);
         }
-        
-        flags = fcntl(app_fd_, F_GETFL, 0);
-        if (flags != -1) {
-            fcntl(app_fd_, F_SETFL, flags | O_NONBLOCK);
-        }
+        // Leave app_fd_ in blocking mode so FileInputStream/FileOutputStream behave as expected
         
         // Extract TUN configuration from options
         extract_tun_config(opt);
@@ -159,6 +161,20 @@ public:
         
         // Write decrypted packet to lib_fd
         // Our app will read this from app_fd
+        if (buf.size() > 0) {
+            size_t log_len = buf.size() < 8 ? buf.size() : 8;
+            std::ostringstream preview;
+            for (size_t i = 0; i < log_len; ++i) {
+                preview << std::hex << std::uppercase << std::setfill('0')
+                        << std::setw(2) << static_cast<int>(buf.c_data()[i]);
+                if (i + 1 < log_len) preview << " ";
+            }
+            __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                "📥 INBOUND preview (%zu bytes): %s", buf.size(), preview.str().c_str());
+        }
+        // Write to lib_fd_ so that the peer endpoint (app_fd_) receives the packet.
+        // app_fd_ is the descriptor exposed to the Kotlin layer; data written on lib_fd_
+        // will be readable from app_fd_ on the Android side.
         ssize_t n = write(lib_fd_, buf.c_data(), buf.size());
         
         if (n < 0) {
@@ -181,7 +197,7 @@ public:
         
         // Successfully wrote packet
         __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
-            "✅ tun_send: Successfully wrote %zu bytes to lib_fd=%d", buf.size(), lib_fd_);
+            "✅ tun_send: Successfully wrote %zu bytes to app_fd=%d", buf.size(), app_fd_);
         return true;
     }
     
@@ -298,6 +314,17 @@ private:
         if (!error && bytes_read > 0) {
             LOG_HOT_PATH("OpenVPN-CustomTUN",
                 "📤 OUTBOUND: Read %zu bytes from lib_fd (from app) - feeding to OpenVPN", bytes_read);
+            if (bytes_read >= 1) {
+                size_t log_len = bytes_read < 8 ? bytes_read : 8;
+                std::ostringstream preview;
+                for (size_t i = 0; i < log_len; ++i) {
+                    preview << std::hex << std::uppercase << std::setfill('0')
+                            << std::setw(2) << static_cast<int>(read_buf->data()[i]);
+                    if (i + 1 < log_len) preview << " ";
+                }
+                __android_log_print(ANDROID_LOG_INFO, "OpenVPN-CustomTUN",
+                    "📦 OUTBOUND preview (%zu bytes): %s", bytes_read, preview.str().c_str());
+            }
             
             try {
                 // CRITICAL: Allocate buffer with headroom for encryption headers!
@@ -362,6 +389,9 @@ private:
      * Extract TUN configuration from OpenVPN options
      */
     void extract_tun_config(const OptionList& opt) {
+        __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-CustomTUN",
+                            "extract_tun_config() called for tunnel=%s", tunnel_id_.c_str());
+
         // Extract IP address
         const Option* ip_opt = opt.get_ptr("ifconfig");
         if (ip_opt && ip_opt->size() >= 2) {
@@ -386,12 +416,51 @@ private:
         // Extract DNS servers from dhcp-option
         std::vector<std::string> dns_servers;
         for (const auto& option : opt) {
+            if (option.size() > 0) {
+                std::string opt_name = option.get(0, 64);
+                __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-CustomTUN",
+                                    "Option: name=%s size=%zu", opt_name.c_str(), option.size());
+            }
             if (option.size() >= 3 && option.ref(0) == "dhcp-option") {
                 const std::string& opt_type = option.get(1, 32);
                 if (opt_type == "DNS") {
                     const std::string& dns = option.get(2, 256);
                     dns_servers.push_back(dns);
                     OPENVPN_LOG("TUN DNS: " << dns);
+                    __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-CustomTUN",
+                                        "📡 DNS option detected: %s", dns.c_str());
+                }
+            }
+            if (option.size() >= 2 && option.ref(0) == "route") {
+                const std::string& route_addr = option.get(1, 256);
+                bool is_ipv6 = route_addr.find(':') != std::string::npos;
+                std::string netmask;
+                if (option.size() >= 3) {
+                    netmask = option.get(2, 256);
+                }
+
+                int prefix_len = is_ipv6 ? 128 : 32;
+                if (!netmask.empty() && !is_ipv6) {
+                    prefix_len = netmask_to_prefix(netmask);
+                    if (prefix_len < 0) {
+                        OPENVPN_LOG("⚠️  Failed to parse netmask " << netmask << " for route " << route_addr
+                                                                  << ", defaulting to /32");
+                        prefix_len = 32;
+                    }
+                }
+
+                __android_log_print(ANDROID_LOG_DEBUG, "OpenVPN-CustomTUN",
+                                    "📡 Route option detected: tunnel=%s, address=%s, netmask=%s, prefix=%d, ipv6=%s",
+                                    tunnel_id_.c_str(),
+                                    route_addr.c_str(),
+                                    netmask.c_str(),
+                                    prefix_len,
+                                    is_ipv6 ? "true" : "false");
+
+                if (callback_) {
+                    OPENVPN_LOG("Notifying callback: route " << route_addr << "/" << prefix_len
+                                                            << " (ipv6=" << (is_ipv6 ? "true" : "false") << ")");
+                    callback_->on_route_pushed(tunnel_id_, route_addr, prefix_len, is_ipv6);
                 }
             }
         }
@@ -450,6 +519,29 @@ private:
     int mtu_;
     std::string vpn_ip4_;
     std::string vpn_ip6_;
+
+    int netmask_to_prefix(const std::string& netmask) {
+        in_addr addr{};
+        if (inet_pton(AF_INET, netmask.c_str(), &addr) != 1) {
+            return -1;
+        }
+        uint32_t mask = ntohl(addr.s_addr);
+        int prefix = 0;
+        bool zero_seen = false;
+        for (int i = 31; i >= 0; --i) {
+            bool bit_set = (mask >> i) & 1U;
+            if (bit_set) {
+                if (zero_seen) {
+                    // Non-contiguous netmask
+                    return -1;
+                }
+                ++prefix;
+            } else {
+                zero_seen = true;
+            }
+        }
+        return prefix;
+    }
 };
 
 /**

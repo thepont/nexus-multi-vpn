@@ -7,18 +7,23 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.common.truth.Truth.assertThat
 import com.multiregionvpn.MainCoroutineRule
+import com.multiregionvpn.core.VpnServiceStateTracker
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.network.NordVpnApiService
+import com.multiregionvpn.ui.components.VpnStatus as ComponentsVpnStatus
+import com.multiregionvpn.ui.shared.VpnStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Rule
@@ -69,6 +74,8 @@ class SettingsViewModelTest {
     @org.junit.After
     fun tearDown() {
         unmockkStatic(LocalBroadcastManager::class)
+        // Reset VpnServiceStateTracker to default state
+        VpnServiceStateTracker.reset()
     }
     
     private fun createViewModel() {
@@ -272,5 +279,140 @@ class SettingsViewModelTest {
         assertThat(state.appRules).containsKey("com.bbc.iplayer")
         assertThat(state.appRules).containsKey("com.itv.hub")
         assertThat(state.appRules["com.bbc.iplayer"]).isEqualTo("id1")
+    }
+
+    @Test
+    fun `given VPN service is connected, when ViewModel is created, then status is restored to PROTECTED`() = runTest {
+        // GIVEN: VPN service is running (simulating app resume scenario)
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTED)
+        
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        // WHEN: ViewModel is created (simulating app resume)
+        createViewModel()
+        
+        // Give it time to observe the status
+        delay(200)
+        
+        // THEN: Status should be restored to PROTECTED (from CONNECTED)
+        val state = viewModel.uiState.value
+        assertThat(state.vpnStatus).isEqualTo(ComponentsVpnStatus.PROTECTED)
+        assertThat(state.isVpnRunning).isTrue()
+    }
+
+    @Test
+    fun `given VPN service is disconnected, when ViewModel is created, then status is DISCONNECTED`() = runTest {
+        // GIVEN: VPN service is not running
+        VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
+        
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        // WHEN: ViewModel is created
+        createViewModel()
+        
+        // Give it time to observe the status
+        delay(200)
+        
+        // THEN: Status should be DISCONNECTED
+        val state = viewModel.uiState.value
+        assertThat(state.vpnStatus).isEqualTo(ComponentsVpnStatus.DISCONNECTED)
+        assertThat(state.isVpnRunning).isFalse()
+    }
+
+    @Test
+    fun `given VPN service status changes after ViewModel creation, then status updates correctly`() = runTest {
+        // GIVEN: VPN service starts disconnected
+        VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
+        
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        // WHEN: ViewModel is created
+        createViewModel()
+        delay(200)
+        
+        // Initial state should be DISCONNECTED
+        assertThat(viewModel.uiState.value.vpnStatus).isEqualTo(ComponentsVpnStatus.DISCONNECTED)
+        
+        // THEN: When VPN service connects, status should update
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTING)
+        delay(100)
+        assertThat(viewModel.uiState.value.vpnStatus).isEqualTo(ComponentsVpnStatus.CONNECTING)
+        
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTED)
+        delay(100)
+        assertThat(viewModel.uiState.value.vpnStatus).isEqualTo(ComponentsVpnStatus.PROTECTED)
+        assertThat(viewModel.uiState.value.isVpnRunning).isTrue()
+    }
+
+    @Test
+    fun `given VPN is connected, when app is backgrounded and resumed, then status is restored`() = runTest {
+        // GIVEN: VPN service is running
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTED)
+        
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        // WHEN: First ViewModel instance (app is active)
+        val firstViewModel = SettingsViewModel(settingsRepo, nordVpnApiService, application)
+        delay(200)
+        
+        // Verify initial state
+        assertThat(firstViewModel.uiState.value.vpnStatus).isEqualTo(ComponentsVpnStatus.PROTECTED)
+        
+        // Simulate app being backgrounded (first ViewModel would be cleared by system)
+        // and resumed (new ViewModel instance created)
+        // This is the critical test - does the new ViewModel restore the status?
+        val resumedViewModel = SettingsViewModel(settingsRepo, nordVpnApiService, application)
+        delay(200)
+        
+        // THEN: Status should be restored to PROTECTED
+        val resumedState = resumedViewModel.uiState.value
+        assertThat(resumedState.vpnStatus).isEqualTo(ComponentsVpnStatus.PROTECTED)
+        assertThat(resumedState.isVpnRunning).isTrue()
+    }
+
+    @Test
+    fun `given VPN status is CONNECTING, when ViewModel is created, then status is CONNECTING`() = runTest {
+        // GIVEN: VPN service is connecting
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTING)
+        
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        // WHEN: ViewModel is created
+        createViewModel()
+        delay(200)
+        
+        // THEN: Status should be CONNECTING
+        val state = viewModel.uiState.value
+        assertThat(state.vpnStatus).isEqualTo(ComponentsVpnStatus.CONNECTING)
+        assertThat(state.isVpnRunning).isTrue() // CONNECTING means VPN is running
+    }
+
+    @Test
+    fun `given VPN status is ERROR, when ViewModel is created, then status is ERROR`() = runTest {
+        // GIVEN: VPN service has an error
+        VpnServiceStateTracker.updateStatus(VpnStatus.ERROR)
+        
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        // WHEN: ViewModel is created
+        createViewModel()
+        delay(200)
+        
+        // THEN: Status should be ERROR
+        val state = viewModel.uiState.value
+        assertThat(state.vpnStatus).isEqualTo(ComponentsVpnStatus.ERROR)
+        assertThat(state.isVpnRunning).isTrue() // ERROR might mean VPN was running but failed
     }
 }

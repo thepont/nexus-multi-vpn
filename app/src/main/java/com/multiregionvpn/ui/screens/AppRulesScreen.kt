@@ -130,7 +130,7 @@ fun AppRulesScreen(
 @Composable
 fun SmartAppRuleItem(
     app: InstalledApp,
-    currentRule: String?,
+    currentRule: com.multiregionvpn.data.database.AppRule?,
     vpnConfigs: List<com.multiregionvpn.data.database.VpnConfig>,
     isGeoBlocked: Boolean,
     recommendedRegion: String?,
@@ -153,11 +153,11 @@ fun SmartAppRuleItem(
         recommendedRegion == "Multiple" -> true
         
         // App is for user's current region - Direct Internet (null) is valid!
-        recommendedRegion.equals(userRegion, ignoreCase = true) && currentRule == null -> true
+        recommendedRegion.equals(userRegion, ignoreCase = true) && currentRule?.vpnConfigId == null -> true
         
         // App routed through matching tunnel
-        currentRule != null -> {
-            val currentTunnel = vpnConfigs.find { it.id == currentRule }
+        currentRule?.vpnConfigId != null -> {
+            val currentTunnel = vpnConfigs.find { it.id == currentRule.vpnConfigId }
             currentTunnel?.regionId?.equals(recommendedRegion, ignoreCase = true) == true
         }
         
@@ -193,10 +193,16 @@ fun SmartAppRuleItem(
         },
         supportingContent = {
             Column {
-                if (currentRule != null) {
-                    val tunnel = vpnConfigs.find { it.id == currentRule }
+                if (currentRule?.vpnConfigId != null) {
+                    val tunnel = vpnConfigs.find { it.id == currentRule.vpnConfigId }
                     Text(
                         "→ ${tunnel?.name ?: "Unknown"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else if (currentRule?.providerAccountId != null) {
+                    Text(
+                        "→ JIT VPN (On-Demand)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -223,7 +229,8 @@ fun SmartAppRuleItem(
                 TextButton(onClick = { expanded = true }) {
                     Text(
                         text = when {
-                            currentRule != null -> vpnConfigs.find { it.id == currentRule }?.name ?: "Set"
+                            currentRule?.vpnConfigId != null -> vpnConfigs.find { it.id == currentRule.vpnConfigId }?.name ?: "Set"
+                            currentRule?.providerAccountId != null -> "JIT VPN"
                             suggestedTunnel != null -> "Set"
                             else -> "None"
                         }
@@ -235,7 +242,7 @@ fun SmartAppRuleItem(
                     onDismissRequest = { expanded = false }
                 ) {
                     // Suggestion first if available
-                    if (suggestedTunnel != null && currentRule == null) {
+                    if (suggestedTunnel != null && currentRule?.vpnConfigId == null && currentRule?.providerAccountId == null) {
                         DropdownMenuItem(
                             text = {
                                 Text(

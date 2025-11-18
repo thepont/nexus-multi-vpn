@@ -6,8 +6,13 @@ import com.multiregionvpn.data.database.PresetRule
 import com.multiregionvpn.data.database.PresetRuleDao
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.ProviderCredentialsDao
+import com.multiregionvpn.data.database.ProviderAccountEntity
+import com.multiregionvpn.data.database.ProviderAccountDao
+import com.multiregionvpn.data.database.ProviderServerCacheEntity
+import com.multiregionvpn.data.database.ProviderServerCacheDao
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.database.VpnConfigDao
+import com.multiregionvpn.core.VpnEngineService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -18,7 +23,9 @@ class SettingsRepository @Inject constructor(
     private val vpnConfigDao: VpnConfigDao,
     val appRuleDao: AppRuleDao,  // Public for direct DB queries (bypass Flow caching)
     private val providerCredentialsDao: ProviderCredentialsDao,
-    private val presetRuleDao: PresetRuleDao
+    private val presetRuleDao: PresetRuleDao,
+    private val providerAccountDao: ProviderAccountDao,
+    private val providerServerCacheDao: ProviderServerCacheDao
 ) {
     // VpnConfig operations
     fun getAllVpnConfigs(): Flow<List<VpnConfig>> = vpnConfigDao.getAll()
@@ -44,10 +51,12 @@ class SettingsRepository @Inject constructor(
     
     suspend fun saveAppRule(rule: AppRule) {
         appRuleDao.save(rule)
+        VpnEngineService.notifyAppRuleChanged(rule.packageName, rule.vpnConfigId ?: return)
     }
     
     suspend fun deleteAppRule(packageName: String) {
         appRuleDao.delete(packageName)
+        VpnEngineService.notifyAppRuleRemoved(packageName)
     }
     
     suspend fun getAppRuleByPackageName(packageName: String): AppRule? {
@@ -76,19 +85,56 @@ class SettingsRepository @Inject constructor(
         // Verify it was actually saved
         val saved = appRuleDao.getRuleForPackage(packageName)
         android.util.Log.i("SettingsRepository", "🔍 Verification query: ${saved?.packageName} → ${saved?.vpnConfigId}")
+        VpnEngineService.notifyAppRuleChanged(packageName, vpnConfigId)
     }
     
     suspend fun updateAppRule(packageName: String, vpnConfigId: String) {
         // Update or create the app rule with new VPN config
         appRuleDao.save(AppRule(packageName = packageName, vpnConfigId = vpnConfigId))
+        VpnEngineService.notifyAppRuleChanged(packageName, vpnConfigId)
     }
     
     // Test helper methods
     suspend fun clearAllAppRules() {
         appRuleDao.clearAll()
+        VpnEngineService.notifyAllAppRulesCleared()
     }
     
     suspend fun clearAllVpnConfigs() {
         vpnConfigDao.clearAll()
+    }
+    
+    // ProviderAccount operations
+    fun getAllProviderAccounts(): Flow<List<ProviderAccountEntity>> = providerAccountDao.getAllAccounts()
+
+    fun getProviderAccountsByProvider(providerId: String): Flow<List<ProviderAccountEntity>> =
+        providerAccountDao.getAccountsByProvider(providerId)
+
+    suspend fun getProviderAccountById(id: String): ProviderAccountEntity? =
+        providerAccountDao.getAccountById(id)
+
+    suspend fun saveProviderAccount(account: ProviderAccountEntity) {
+        providerAccountDao.insertAccount(account)
+    }
+
+    suspend fun updateProviderAccount(account: ProviderAccountEntity) {
+        providerAccountDao.updateAccount(account)
+    }
+
+    suspend fun deleteProviderAccount(id: String) {
+        providerAccountDao.deleteAccountById(id)
+    }
+
+    // ProviderServerCache operations
+    suspend fun getProviderServerCache(providerId: String, regionCode: String): ProviderServerCacheEntity? {
+        return providerServerCacheDao.getCache(providerId, regionCode)
+    }
+
+    suspend fun insertProviderServerCache(cacheEntry: ProviderServerCacheEntity) {
+        providerServerCacheDao.insertCache(cacheEntry)
+    }
+
+    suspend fun deleteProviderServerCache(providerId: String, regionCode: String) {
+        providerServerCacheDao.clearCacheForRegion(providerId, regionCode)
     }
 }

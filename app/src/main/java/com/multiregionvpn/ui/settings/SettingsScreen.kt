@@ -42,6 +42,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.multiregionvpn.ui.settings.composables.AppRuleSection
 import com.multiregionvpn.ui.settings.composables.ProviderCredentialsSection
+import com.multiregionvpn.ui.settings.composables.ProviderAccountSection
 import com.multiregionvpn.ui.settings.composables.VpnConfigSection
 import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.ui.components.VpnHeaderBar
@@ -126,7 +127,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Section 1: Provider Credentials
+            // Section 1: Provider Credentials (Legacy - can be removed later)
             ProviderCredentialsSection(
                 credentials = uiState.nordCredentials,
                 onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
@@ -134,7 +135,19 @@ fun SettingsScreen(
             
             Divider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // Section 2: My VPN Servers (CRUD)
+            // Section 2: VPN Provider Accounts (New)
+            ProviderAccountSection(
+                providerAccounts = uiState.providerAccounts,
+                providers = viewModel.getAllProviders(),
+                onAddAccount = { providerId, displayLabel, credentials ->
+                    viewModel.saveProviderAccount(providerId, displayLabel, credentials)
+                },
+                onDeleteAccount = { id -> viewModel.deleteProviderAccount(id) }
+            )
+            
+            Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+            // Section 3: My VPN Servers (CRUD)
             VpnConfigSection(
                 configs = uiState.vpnConfigs,
                 onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
@@ -144,12 +157,16 @@ fun SettingsScreen(
 
             Divider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // Section 3: App Routing Rules
+            // Section 4: App Routing Rules
             AppRuleSection(
                 installedApps = uiState.installedApps,
                 appRules = uiState.appRules,
                 vpnConfigs = uiState.vpnConfigs,
-                onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
+                providerAccounts = uiState.providerAccounts,
+                onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) },
+                onJitRuleChanged = { pkg, vpnConfigId, providerAccountId, regionCode, preferredProtocol, fallbackDirect ->
+                    viewModel.saveAppRuleWithJit(pkg, vpnConfigId, providerAccountId, regionCode, preferredProtocol, fallbackDirect)
+                }
             )
         }
         

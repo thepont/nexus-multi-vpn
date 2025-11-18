@@ -8,6 +8,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito
 import org.mockito.Mockito.`when`
+import java.net.InetAddress
 
 class ConnectionTrackerTest {
 
@@ -51,6 +52,28 @@ class ConnectionTrackerTest {
         tracker.clearAllMappings()
 
         assertThat(tracker.getCurrentPackageMappings()).isEmpty()
+    }
+
+    @Test
+    fun addRouteMapsDestination() {
+        val address = InetAddress.getByName("10.1.0.0")
+        tracker.addRouteForTunnel("local-test_UK", address, 24)
+
+        val matchedTunnel = tracker.getTunnelForDestination(InetAddress.getByName("10.1.0.123"))
+
+        assertThat(matchedTunnel).isEqualTo("local-test_UK")
+    }
+
+    @Test
+    fun removeRoutesForTunnelClearsMapping() {
+        val address = InetAddress.getByName("10.2.0.0")
+        tracker.addRouteForTunnel("local-test_FR", address, 24)
+
+        tracker.removeRoutesForTunnel("local-test_FR")
+
+        val matchedTunnel = tracker.getTunnelForDestination(InetAddress.getByName("10.2.0.42"))
+
+        assertThat(matchedTunnel).isNull()
     }
 
     private fun mockApp(packageName: String, uid: Int) {

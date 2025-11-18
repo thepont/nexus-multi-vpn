@@ -1,6 +1,10 @@
 // OpenVPN 3 C++ wrapper implementation
 // This file contains the integration with the OpenVPN 3 library
 
+#ifndef OPENVPN_EXTERNAL_TUN_FACTORY
+#define OPENVPN_EXTERNAL_TUN_FACTORY 1
+#endif
+
 #include "openvpn_wrapper.h"
 #include <jni.h>  // For JNI types (JavaVM, JNIEnv, jobject)
 #include <android/log.h>
@@ -58,7 +62,7 @@ using namespace openvpn::ClientAPI;
 // ALSO implements CustomTunCallback to receive IP/DNS notifications from CustomTunClient
 class AndroidOpenVPNClient : public OpenVPNClient, public openvpn::CustomTunCallback {
 public:
-    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), vpnService_(nullptr), tunFd_(-1), session_(nullptr), ipAddressCallback_(nullptr), dnsCallback_(nullptr), sessionJavaVM_(nullptr), destroying_(false)
+    AndroidOpenVPNClient() : OpenVPNClient(), javaVM_(nullptr), vpnBuilder_(nullptr), vpnService_(nullptr), tunFd_(-1), session_(nullptr), ipAddressCallback_(nullptr), dnsCallback_(nullptr), routeCallback_(nullptr), sessionJavaVM_(nullptr), destroying_(false)
 #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
         , customTunClientFactory_(nullptr), factoryCreated_(false)
 #endif
@@ -80,6 +84,7 @@ public:
         // Clear callback pointers to prevent dangling references
         ipAddressCallback_ = nullptr;
         dnsCallback_ = nullptr;
+        routeCallback_ = nullptr;
         sessionJavaVM_ = nullptr;
         
         LOGI("AndroidOpenVPNClient destroyed");
@@ -329,6 +334,16 @@ public:
             }
         }
     }
+
+    // Implement CustomTunCallback::on_route_pushed
+    virtual void on_route_pushed(const std::string& tunnel_id,
+                                 const std::string& address,
+                                 int prefix_len,
+                                 bool ipv6) override {
+        LOGI("✅ on_route_pushed callback: tunnel=%s, route=%s/%d (ipv6=%s)",
+             tunnel_id.c_str(), address.c_str(), prefix_len, ipv6 ? "true" : "false");
+        notifyRouteCallback(tunnel_id, address, prefix_len, ipv6);
+    }
     
     // Get the app FD for packet I/O (call after connection established)
     int getAppFd() const {
@@ -364,7 +379,8 @@ private:
     // Callbacks (stored from session for use in tun_builder_add_address and tun_builder_set_dns_options)
     jobject ipAddressCallback_;  // Global reference to Kotlin IP callback object
     jobject dnsCallback_;  // Global reference to Kotlin DNS callback object
-    JavaVM* sessionJavaVM_;  // JavaVM from session for callback
+    jobject routeCallback_;  // Global reference to Kotlin route callback object
+    JavaVM* sessionJavaVM_;  // JavaVM for callback (per session)
     std::string tunnelId_;  // Tunnel ID from session
     std::atomic<bool> destroying_;  // Flag to prevent callback access during destruction
     
@@ -377,6 +393,69 @@ private:
     
     // Helper to set connected flag - implemented after OpenVpnSession definition
     void setConnectedFromEvent();
+
+    void notifyRouteCallback(const std::string& tunnel_id,
+                             const std::string& address,
+                             int prefix_length,
+                             bool ipv6) {
+        if (destroying_ || !routeCallback_ || !sessionJavaVM_ || tunnel_id.empty()) {
+            LOGW("⚠️  Route callback skipped (destroying=%d, callback=%p, javaVM=%p, tunnelId=%s)",
+                 destroying_.load(), routeCallback_, sessionJavaVM_, tunnel_id.c_str());
+            return;
+        }
+
+        JNIEnv* env = nullptr;
+        jint result = sessionJavaVM_->GetEnv((void**)&env, JNI_VERSION_1_6);
+        if (result == JNI_EDETACHED) {
+            result = sessionJavaVM_->AttachCurrentThread(&env, nullptr);
+            if (result != JNI_OK || env == nullptr) {
+                LOGW("Cannot attach thread to JNI for route callback");
+                return;
+            }
+        } else if (result != JNI_OK || env == nullptr) {
+            LOGW("Cannot get JNIEnv for route callback");
+            return;
+        }
+
+        jclass callbackClass = env->GetObjectClass(routeCallback_);
+        if (!callbackClass) {
+            LOGW("Cannot get callback class for route callback");
+            return;
+        }
+
+        jmethodID methodId = env->GetMethodID(
+            callbackClass,
+            "onTunnelRouteReceived",
+            "(Ljava/lang/String;Ljava/lang/String;IZ)V"
+        );
+
+        if (!methodId) {
+            LOGW("Cannot find onTunnelRouteReceived method in callback");
+            env->DeleteLocalRef(callbackClass);
+            return;
+        }
+
+        jstring tunnelIdStr = env->NewStringUTF(tunnel_id.c_str());
+        jstring addressStr = env->NewStringUTF(address.c_str());
+
+        env->CallVoidMethod(
+            routeCallback_,
+            methodId,
+            tunnelIdStr,
+            addressStr,
+            static_cast<jint>(prefix_length),
+            ipv6 ? JNI_TRUE : JNI_FALSE
+        );
+
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
+
+        env->DeleteLocalRef(addressStr);
+        env->DeleteLocalRef(tunnelIdStr);
+        env->DeleteLocalRef(callbackClass);
+    }
     
     // Implement LogReceiver::log
     virtual void log(const LogInfo &log_info) override {
@@ -587,6 +666,8 @@ private:
                                        int metric,
                                        bool ipv6) override {
         LOGI("tun_builder_add_route: %s/%d (ipv6=%s)", address.c_str(), prefix_length, ipv6 ? "true" : "false");
+        notifyRouteCallback(tunnelId_, address, prefix_length, ipv6);
+
         // Routes are already configured by VpnEngineService
         // Additional routes from OpenVPN config can be logged but don't need action
         return true;
@@ -870,11 +951,12 @@ struct OpenVpnSession {
     // These are global references to Kotlin objects that implement the callback interfaces
     jobject ipAddressCallback;  // Global reference to Kotlin IP callback object
     jobject dnsCallback;  // Global reference to Kotlin DNS callback object
+    jobject routeCallback;  // Global reference to Kotlin route callback object
     JavaVM* javaVM;  // For calling callback from any thread
     
     // Note: No separate tunFactory needed - AndroidOpenVPNClient implements ExternalTun::Factory
     
-    OpenVpnSession() : connected(false), connecting(false), androidClient(nullptr), client(nullptr), should_stop(false), ipAddressCallback(nullptr), dnsCallback(nullptr), javaVM(nullptr) {
+    OpenVpnSession() : connected(false), connecting(false), androidClient(nullptr), client(nullptr), should_stop(false), ipAddressCallback(nullptr), dnsCallback(nullptr), routeCallback(nullptr), javaVM(nullptr) {
         // atomic<bool> is initialized with false above
         // Initialize Android-specific OpenVPN 3 Client - This implements all required virtual methods
         androidClient = new AndroidOpenVPNClient();
@@ -940,6 +1022,17 @@ struct OpenVpnSession {
             }
             dnsCallback = nullptr;
         }
+        
+        if (routeCallback && javaVM) {
+            JNIEnv* env = nullptr;
+            if (javaVM->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_OK) {
+                env->DeleteGlobalRef(routeCallback);
+            } else if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) {
+                env->DeleteGlobalRef(routeCallback);
+                javaVM->DetachCurrentThread();
+            }
+            routeCallback = nullptr;
+        }
     }
 #else
     void* client; // Placeholder until OpenVPN 3 is integrated
@@ -976,6 +1069,7 @@ void AndroidOpenVPNClient::setSession(OpenVpnSession* session) {
     if (session) {
         ipAddressCallback_ = session->ipAddressCallback;
         dnsCallback_ = session->dnsCallback;
+        routeCallback_ = session->routeCallback;
         sessionJavaVM_ = session->javaVM;
         tunnelId_ = session->tunnelId;
         LOGI("Set session pointer and updated callback info: tunnelId=%s", tunnelId_.c_str());
@@ -987,10 +1081,11 @@ void AndroidOpenVPNClient::updateSessionCallbackInfo(OpenVpnSession* session) {
     if (session) {
         ipAddressCallback_ = session->ipAddressCallback;
         dnsCallback_ = session->dnsCallback;
+        routeCallback_ = session->routeCallback;
         sessionJavaVM_ = session->javaVM;
         tunnelId_ = session->tunnelId;
-        LOGI("Updated callback info: tunnelId=%s, ipCallback=%p, dnsCallback=%p, javaVM=%p", 
-             tunnelId_.c_str(), ipAddressCallback_, dnsCallback_, sessionJavaVM_);
+        LOGI("Updated callback info: tunnelId=%s, ipCallback=%p, dnsCallback=%p, routeCallback=%p, javaVM=%p",
+             tunnelId_.c_str(), ipAddressCallback_, dnsCallback_, routeCallback_, sessionJavaVM_);
     }
 }
 #endif
@@ -1002,7 +1097,8 @@ void openvpn_wrapper_set_tunnel_id_and_callback(OpenVpnSession* session,
                                                  JNIEnv* env,
                                                  const char* tunnelId,
                                                  jobject ipCallback,
-                                                 jobject dnsCallback) {
+                                                 jobject dnsCallback,
+                                                 jobject routeCallback) {
 #ifdef OPENVPN3_AVAILABLE
     if (!session) {
         LOGE("Invalid session for set_tunnel_id_and_callback");
@@ -1058,6 +1154,21 @@ void openvpn_wrapper_set_tunnel_id_and_callback(OpenVpnSession* session,
         LOGI("DNS callback set for tunnel: %s", tunnelId ? tunnelId : "unknown");
     } else {
         LOGW("DNS callback is null");
+    }
+    
+    // Set route callback (global reference so it persists)
+    if (routeCallback) {
+        if (session->routeCallback) {
+            // Delete old callback if exists
+            JNIEnv* currentEnv = nullptr;
+            if (session->javaVM->GetEnv((void**)&currentEnv, JNI_VERSION_1_6) == JNI_OK) {
+                currentEnv->DeleteGlobalRef(session->routeCallback);
+            }
+        }
+        session->routeCallback = env->NewGlobalRef(routeCallback);
+        LOGI("Route callback set for tunnel: %s", tunnelId ? tunnelId : "unknown");
+    } else {
+        LOGW("Route callback is null");
     }
     
     // Update AndroidOpenVPNClient with callback info so tun_builder_add_address and tun_builder_set_dns_options can use it
@@ -1310,6 +1421,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         // autologinSessions is in ConfigCommon (which Config inherits from)
         session->config.autologinSessions = false;
         LOGI("Set autologinSessions = false to allow credential updates via provide_creds()");
+        LOGI("Final processed OpenVPN config:\n%s", config_content.c_str());
         
         LOGI("Evaluating OpenVPN 3 config using ClientAPI...");
         LOGI("Config content length: %zu bytes", session->config.content.length());
@@ -1804,7 +1916,7 @@ int openvpn_wrapper_get_app_fd(OpenVpnSession* session) {
         return -1;
     }
     
-#ifdef OPENVPN_EXTERNAL_TUN_FACTORY
+#if defined(OPENVPN_EXTERNAL_TUN_FACTORY) && defined(OPENVPN3_AVAILABLE)
     if (!session->androidClient) {
         LOGE("openvpn_wrapper_get_app_fd: androidClient not initialized");
         return -1;
@@ -1819,7 +1931,7 @@ int openvpn_wrapper_get_app_fd(OpenVpnSession* session) {
     LOGI("openvpn_wrapper_get_app_fd: Retrieved app FD: %d", appFd);
     return appFd;
 #else
-    LOGW("openvpn_wrapper_get_app_fd: OPENVPN_EXTERNAL_TUN_FACTORY not enabled");
+    LOGW("openvpn_wrapper_get_app_fd: OPENVPN_EXTERNAL_TUN_FACTORY or OPENVPN3_AVAILABLE not enabled");
     return -1;
 #endif
 }

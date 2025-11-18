@@ -1,0 +1,39 @@
+# Gemini Ignore File
+# For the multi-region-vpn project
+
+# Build outputs
+**/build/
+/Build/
+/app/.cxx/
+
+# Gradle
+.gradle/
+gradlew
+gradlew.bat
+*.jar
+
+# Local configuration
+.env
+local.properties
+
+# IDE files
+.idea/
+.cursor/
+
+# Test reports and logs
+/captures/
+/capture_tmp/
+*.pcap
+*REPORT.md
+TEST_RESULTS*.md
+UI_E2E_TESTS.md
+*.log
+
+# Dependencies
+/vcpkg_installed/
+
+# Temporary files
+/tmp/
+
+# OS files
+.DS_Store

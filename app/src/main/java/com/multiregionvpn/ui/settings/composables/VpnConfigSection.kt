@@ -30,6 +30,7 @@ import com.multiregionvpn.ui.components.TunnelListItem
 @Composable
 fun VpnConfigSection(
     configs: List<VpnConfig>,
+    tunnelStatus: Map<String, com.multiregionvpn.ui.settings.TunnelStatus> = emptyMap(),
     onSaveConfig: (VpnConfig) -> Unit,
     onDeleteConfig: (String) -> Unit,
     onFetchNordVpnServer: ((String, (String?) -> Unit) -> Unit)? = null
@@ -63,10 +64,11 @@ fun VpnConfigSection(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 configs.forEach { config ->
+                    val status = tunnelStatus[config.id] ?: com.multiregionvpn.ui.settings.TunnelStatus()
                     TunnelListItem(
                         config = config,
-                        isConnected = false, // TODO: Get actual connection status
-                        latencyMs = null, // TODO: Get actual latency
+                        isConnected = status.isConnected,
+                        latencyMs = status.latencyMs,
                         onEdit = {
                             editingConfig = config
                             showDialog = true

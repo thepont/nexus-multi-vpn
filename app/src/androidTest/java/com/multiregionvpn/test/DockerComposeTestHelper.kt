@@ -70,7 +70,7 @@ object DockerComposeTestHelper {
      */
     fun validateOpenVpnConfig(configName: String): Boolean {
         val projectRoot = getProjectRoot()
-        val configDir = File(projectRoot, "openvpn-$configName")
+        val configDir = File(projectRoot, "app/src/androidTest/resources/openvpn/$configName")
         if (!configDir.exists()) {
             Log.w(TAG, "OpenVPN config directory not found: ${configDir.absolutePath}")
             Log.w(TAG, "   Run: bash app/src/androidTest/resources/openvpn-configs/generate-server-configs.sh")
@@ -89,7 +89,7 @@ object DockerComposeTestHelper {
      */
     fun validateHttpContent(contentName: String): Boolean {
         val projectRoot = getProjectRoot()
-        val httpDir = File(projectRoot, "http-$contentName")
+        val httpDir = File(projectRoot, "app/src/androidTest/resources/http-$contentName")
         if (!httpDir.exists()) {
             Log.w(TAG, "HTTP content directory not found: ${httpDir.absolutePath}")
             return false

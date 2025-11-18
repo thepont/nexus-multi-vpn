@@ -44,6 +44,14 @@ object AppModule {
     @Singleton
     fun providePresetRuleDao(db: AppDatabase): com.multiregionvpn.data.database.PresetRuleDao = db.presetRuleDao()
     
+    @Provides
+    @Singleton
+    fun provideProviderAccountDao(db: AppDatabase): com.multiregionvpn.data.database.ProviderAccountDao = db.providerAccountDao()
+    
+    @Provides
+    @Singleton
+    fun provideProviderServerCacheDao(db: AppDatabase): com.multiregionvpn.data.database.ProviderServerCacheDao = db.providerServerCacheDao()
+    
     // --- Provide our Repository ---
     @Provides
     @Singleton
@@ -51,9 +59,11 @@ object AppModule {
         vpnConfigDao: VpnConfigDao,
         appRuleDao: AppRuleDao,
         credsDao: ProviderCredentialsDao,
-        presetRuleDao: com.multiregionvpn.data.database.PresetRuleDao
+        presetRuleDao: com.multiregionvpn.data.database.PresetRuleDao,
+        providerAccountDao: com.multiregionvpn.data.database.ProviderAccountDao,
+        providerServerCacheDao: com.multiregionvpn.data.database.ProviderServerCacheDao
     ): SettingsRepository {
-        return SettingsRepository(vpnConfigDao, appRuleDao, credsDao, presetRuleDao)
+        return SettingsRepository(vpnConfigDao, appRuleDao, credsDao, presetRuleDao, providerAccountDao, providerServerCacheDao)
     }
     
     // --- Provide Retrofit for NordVPN API ---

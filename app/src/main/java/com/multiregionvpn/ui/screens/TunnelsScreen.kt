@@ -30,6 +30,7 @@ fun TunnelsScreen(
     ) {
         VpnConfigSection(
             configs = uiState.vpnConfigs,
+            tunnelStatus = uiState.tunnelStatus,
             onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
             onDeleteConfig = { configId -> viewModel.deleteVpnConfig(configId) },
             onFetchNordVpnServer = { regionId, callback -> 

@@ -22,6 +22,8 @@ import java.util.UUID
  *   -e class com.multiregionvpn.BootstrapCredentialsTest \
  *   -e NORDVPN_USERNAME "your_username" \
  *   -e NORDVPN_PASSWORD "your_password" \
+ *   -e UK_SERVER "uk1827.nordvpn.com" \
+ *   -e FR_SERVER "fr985.nordvpn.com" \
  *   com.multiregionvpn.test/androidx.test.runner.AndroidJUnitRunner
  */
 @RunWith(AndroidJUnit4::class)
@@ -37,6 +39,10 @@ class BootstrapCredentialsTest {
             ?: throw IllegalArgumentException("NORDVPN_USERNAME must be passed via test arguments")
         val password = testArgs.getString("NORDVPN_PASSWORD")
             ?: throw IllegalArgumentException("NORDVPN_PASSWORD must be passed via test arguments")
+        
+        // Get optional server hostnames (defaults to empty string if not provided)
+        val ukServer = testArgs.getString("UK_SERVER") ?: ""
+        val frServer = testArgs.getString("FR_SERVER") ?: ""
         
         val context: Context = ApplicationProvider.getApplicationContext()
         val database = AppDatabase.getDatabase(context)
@@ -62,10 +68,14 @@ class BootstrapCredentialsTest {
             name = "UK - BBC",
             regionId = "UK",
             templateId = "nordvpn",
-            serverHostname = "" // Will be fetched from NordVPN API
+            serverHostname = ukServer // Use provided server or empty (will be fetched from API)
         )
         settingsRepo.saveVpnConfig(ukConfig)
-        println("✅ Created UK tunnel: ${ukConfig.name}")
+        if (ukServer.isNotEmpty()) {
+            println("✅ Created UK tunnel: ${ukConfig.name} (${ukServer})")
+        } else {
+            println("✅ Created UK tunnel: ${ukConfig.name} (will fetch from API)")
+        }
         
         // Create sample FR tunnel
         val frConfig = VpnConfig(
@@ -73,10 +83,14 @@ class BootstrapCredentialsTest {
             name = "France - Streaming",
             regionId = "FR",
             templateId = "nordvpn",
-            serverHostname = "" // Will be fetched from NordVPN API
+            serverHostname = frServer // Use provided server or empty (will be fetched from API)
         )
         settingsRepo.saveVpnConfig(frConfig)
-        println("✅ Created FR tunnel: ${frConfig.name}")
+        if (frServer.isNotEmpty()) {
+            println("✅ Created FR tunnel: ${frConfig.name} (${frServer})")
+        } else {
+            println("✅ Created FR tunnel: ${frConfig.name} (will fetch from API)")
+        }
         
         println("")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

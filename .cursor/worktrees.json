@@ -1,0 +1,33 @@
+{
+  "setup-worktree": [
+    "echo '🔧 Setting up multi-region-vpn worktree...'",
+    "chmod +x gradlew || true",
+    "echo ''",
+    "echo '📁 Creating necessary directories...'",
+    "mkdir -p captures capture_tmp tmp || true",
+    "echo '✓ Directories created'",
+    "echo ''",
+    "echo '📦 Step 1: Resolving Android dependencies (skipping native builds)...'",
+    "./gradlew androidDependencies || echo '⚠️  Gradle dependency resolution failed - this is OK if Android SDK is not set up yet'",
+    "echo ''",
+    "if [ -f \"$ROOT_WORKTREE_PATH/.env\" ]; then cp \"$ROOT_WORKTREE_PATH/.env\" .env && echo '✓ Copied .env file from root worktree'; else echo 'ℹ️  No .env file found in root worktree'; fi",
+    "echo ''",
+    "if [ -f local.properties ]; then echo '✓ local.properties found (Android SDK configured)'; else echo 'ℹ️  local.properties not found - Android Studio will create this automatically'; fi",
+    "echo ''",
+    "if [ -n \"$VCPKG_ROOT\" ] && [ -f \"$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake\" ]; then echo '✓ vcpkg detected at $VCPKG_ROOT'; else echo 'ℹ️  vcpkg not configured (set VCPKG_ROOT to enable native dependencies)'; fi",
+    "echo ''",
+    "if [ \"$SKIP_NATIVE_BUILD\" = \"true\" ]; then echo '⏭️  SKIP_NATIVE_BUILD=true - skipping native build'; else echo '🔨 Step 2: Building native dependencies (this may take 15-30 minutes)...'; echo '   Note: Set SKIP_NATIVE_BUILD=true to skip this step'; fi",
+    "if [ \"$SKIP_NATIVE_BUILD\" != \"true\" ]; then ./gradlew :app:externalNativeBuildDebug || echo '⚠️  Native build failed - this is OK if Android NDK is not set up yet'; fi",
+    "echo ''",
+    "echo '🔨 Step 3: Building diagnostic clients (for E2E tests)...'",
+    "./gradlew :diagnostic-client-uk:assembleDebug :diagnostic-client-fr:assembleDebug :diagnostic-client-direct:assembleDebug || echo '⚠️  Diagnostic client build failed - this is OK if Android SDK is not set up yet'",
+    "echo ''",
+    "echo '✅ Worktree setup complete!'",
+    "echo ''",
+    "echo '📋 Next steps:'",
+    "echo '   - Ensure Android SDK and NDK are installed'",
+    "echo '   - Set VCPKG_ROOT if using vcpkg for native dependencies'",
+    "echo '   - Run ./gradlew build to build the full project'",
+    "echo '   - Run ./gradlew :app:installDebug to install on device/emulator'"
+  ]
+}

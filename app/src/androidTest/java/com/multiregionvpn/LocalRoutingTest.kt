@@ -9,8 +9,9 @@ import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.core.VpnConnectionManager
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
-import com.multiregionvpn.test.BaseLocalTest
 import com.multiregionvpn.test.DockerComposeManager
+import com.multiregionvpn.test.BaseLocalTest
+import dagger.hilt.android.testing.HiltAndroidTest
 import com.multiregionvpn.test.TestAppManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -30,6 +31,7 @@ import java.util.UUID
  * - http-server-uk: Web server at 10.1.0.2 returning "SERVER_UK"
  * - http-server-fr: Web server at 10.2.0.2 returning "SERVER_FR"
  */
+@HiltAndroidTest
 class LocalRoutingTest : BaseLocalTest() {
     
     override fun getComposeFile(): DockerComposeManager.ComposeFile {

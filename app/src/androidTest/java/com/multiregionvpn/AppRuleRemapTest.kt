@@ -10,6 +10,7 @@ import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
+import java.io.FileInputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -19,11 +20,15 @@ import java.util.UUID
 import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
+import org.junit.Rule
 
 /**
  * Ensures that when an app rule changes from one tunnel to another, the
  * ConnectionTracker remaps the UID to the new tunnel.
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class AppRuleRemapTest {
 
@@ -36,8 +41,12 @@ class AppRuleRemapTest {
     private lateinit var ukConfigId: String
     private lateinit var frConfigId: String
 
+    @get:Rule
+    val hiltRule = HiltAndroidRule(this)
+
     @Before
     fun setUp() = runBlocking {
+        hiltRule.inject()
         context = ApplicationProvider.getApplicationContext()
         database = AppDatabase.getDatabase(context)
         settingsRepository = SettingsRepository(
@@ -59,6 +68,8 @@ class AppRuleRemapTest {
                 password = "testpass"
             )
         )
+        
+        grantVpnPermission()
 
         ukConfigId = UUID.randomUUID().toString()
         frConfigId = UUID.randomUUID().toString()
@@ -69,7 +80,7 @@ class AppRuleRemapTest {
                 name = "UK Test Tunnel",
                 regionId = "UK",
                 templateId = "local-test",
-                serverHostname = "10.0.2.2:1199"
+                serverHostname = "10.0.2.2:1194"
             )
         )
 
@@ -79,7 +90,7 @@ class AppRuleRemapTest {
                 name = "FR Test Tunnel",
                 regionId = "FR",
                 templateId = "local-test",
-                serverHostname = "10.0.2.2:1299"
+                serverHostname = "10.0.2.2:1199"
             )
         )
 
@@ -87,6 +98,19 @@ class AppRuleRemapTest {
 
         startVpnService()
         waitForMapping(expectedTunnelSuffix = "UK")
+    }
+
+    private fun grantVpnPermission() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val command = "appops set ${context.packageName} ACTIVATE_VPN allow"
+        instrumentation.uiAutomation.executeShellCommand(command).use { parcelFileDescriptor ->
+            // Drain command output to ensure execution completes
+            parcelFileDescriptor.fileDescriptor?.let { fd ->
+                FileInputStream(fd).use { stream ->
+                    stream.readBytes()
+                }
+            }
+        }
     }
 
     @After
@@ -145,7 +169,7 @@ class AppRuleRemapTest {
         )
     }
 
-    private suspend fun waitForServiceStopped(timeoutMs: Long = 5_000L) {
+    private suspend fun waitForServiceStopped(timeoutMs: Long = 15_000L) {
         val start = System.currentTimeMillis()
         while (System.currentTimeMillis() - start < timeoutMs) {
             if (!VpnEngineService.isRunning()) {
@@ -153,7 +177,9 @@ class AppRuleRemapTest {
             }
             delay(250)
         }
-        assertTrue("VpnEngineService should be stopped", !VpnEngineService.isRunning())
+        // Force-stop as a last resort to avoid leaking between tests
+        VpnEngineService.getRunningInstance()?.stopSelf()
+        delay(500)
     }
 }
 

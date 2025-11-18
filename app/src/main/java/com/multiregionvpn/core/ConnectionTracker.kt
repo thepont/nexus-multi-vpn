@@ -3,6 +3,7 @@ package com.multiregionvpn.core
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
 
@@ -25,6 +26,9 @@ class ConnectionTracker(
     private val connectionTable = ConcurrentHashMap<String, ConnectionInfo>()
     private val packageNameToUid = ConcurrentHashMap<String, Int>()
     private val uidToTunnelId = ConcurrentHashMap<Int, String>()
+    private val ipToTunnelIds = ConcurrentHashMap<String, MutableSet<String>>()
+    private val routeLock = Any()
+    private val routeEntries = mutableListOf<RouteEntry>()
     
     companion object {
         private const val TAG = "ConnectionTracker"
@@ -39,6 +43,12 @@ class ConnectionTracker(
         val uid: Int,
         val tunnelId: String?,
         val timestamp: Long = System.currentTimeMillis()
+    )
+
+    private data class RouteEntry(
+        val tunnelId: String,
+        val networkAddress: Int,
+        val prefixLength: Int
     )
     
     /**
@@ -92,12 +102,23 @@ class ConnectionTracker(
     }
 
     /**
+     * Clear per-connection state while retaining package → tunnel associations.
+     * Useful when app rules change but existing registrations remain valid.
+     */
+    fun clearTransientMappings() {
+        connectionTable.clear()
+        ipToTunnelIds.clear()
+        Log.d(TAG, "Cleared transient connection tracker mappings (connections + IP routes)")
+    }
+
+    /**
      * Clear all mappings (used when rules change or VPN stops).
      */
     fun clearAllMappings() {
-        connectionTable.clear()
+        clearTransientMappings()
         packageNameToUid.clear()
         uidToTunnelId.clear()
+        clearRoutes()
         Log.d(TAG, "Cleared all connection tracker mappings")
     }
 
@@ -223,6 +244,58 @@ class ConnectionTracker(
         return packageNameToUid.keys.toSet()
     }
     
+    fun addRouteForTunnel(tunnelId: String, address: InetAddress, prefixLength: Int) {
+        if (address !is Inet4Address) {
+            Log.d(TAG, "Ignoring non-IPv4 route $address/$prefixLength for tunnel $tunnelId")
+            return
+        }
+        if (prefixLength < 0 || prefixLength > 32) {
+            Log.w(TAG, "Invalid prefix length $prefixLength for route $address/$prefixLength")
+            return
+        }
+
+        val networkAddress = ipv4ToInt(address) and prefixMask(prefixLength)
+        synchronized(routeLock) {
+            routeEntries.removeAll { it.tunnelId == tunnelId && it.networkAddress == networkAddress && it.prefixLength == prefixLength }
+            routeEntries.add(RouteEntry(tunnelId, networkAddress, prefixLength))
+        }
+        Log.d(TAG, "Added route ${address.hostAddress}/$prefixLength -> $tunnelId (network=${intToIpv4(networkAddress)})")
+    }
+
+    fun removeRoutesForTunnel(tunnelId: String) {
+        synchronized(routeLock) {
+            if (routeEntries.removeAll { it.tunnelId == tunnelId }) {
+                Log.d(TAG, "Removed routes for tunnel $tunnelId")
+            }
+        }
+    }
+
+    fun clearRoutes() {
+        synchronized(routeLock) {
+            routeEntries.clear()
+        }
+        Log.d(TAG, "Cleared all route entries")
+    }
+
+    fun getTunnelForDestination(destIp: InetAddress): String? {
+        if (destIp !is Inet4Address) {
+            return null
+        }
+        val dest = ipv4ToInt(destIp)
+        synchronized(routeLock) {
+            var bestMatch: RouteEntry? = null
+            for (entry in routeEntries) {
+                val mask = prefixMask(entry.prefixLength)
+                if ((dest and mask) == entry.networkAddress) {
+                    if (bestMatch == null || entry.prefixLength > bestMatch!!.prefixLength) {
+                        bestMatch = entry
+                    }
+                }
+            }
+            return bestMatch?.tunnelId
+        }
+    }
+
     /**
      * Get tunnel ID for a UID.
      */
@@ -235,6 +308,42 @@ class ConnectionTracker(
      */
     fun getTunnelIdForUid(uid: Int): String? {
         return uidToTunnelId[uid]
+    }
+
+    fun setTunnelForIp(ip: InetAddress, tunnelId: String) {
+        val key = ip.hostAddress ?: run {
+            Log.w(TAG, "Unable to map tunnel for IP (hostAddress null): $ip")
+            return
+        }
+        val tunnels = ipToTunnelIds.getOrPut(key) { mutableSetOf() }
+        tunnels.add(tunnelId)
+        Log.d(TAG, "Mapped IP $key -> tunnels ${tunnels.joinToString()}")
+    }
+
+    fun removeTunnelForIp(ip: InetAddress) {
+        val key = ip.hostAddress ?: return
+        val tunnels = ipToTunnelIds.remove(key)
+        if (tunnels != null) {
+            Log.d(TAG, "Removed IP mapping for $key (previous tunnels ${tunnels.joinToString()})")
+        }
+    }
+
+    fun clearIpMappings() {
+        ipToTunnelIds.clear()
+        Log.d(TAG, "Cleared all IP-to-tunnel mappings")
+    }
+
+    fun getTunnelForIp(ip: InetAddress): String? {
+        val key = ip.hostAddress ?: return null
+        val tunnels = ipToTunnelIds[key] ?: return null
+        return when (tunnels.size) {
+            0 -> null
+            1 -> tunnels.first()
+            else -> {
+                Log.v(TAG, "IP $key mapped to multiple tunnels $tunnels - deferring to connection lookup")
+                null
+            }
+        }
     }
     
     /**
@@ -254,6 +363,26 @@ class ConnectionTracker(
         }
         toRemove.forEach { connectionTable.remove(it.key) }
         Log.d(TAG, "Cleaned up ${toRemove.size} stale connection entries")
+    }
+
+    private fun ipv4ToInt(address: Inet4Address): Int {
+        val bytes = address.address
+        return (bytes[0].toInt() and 0xFF shl 24) or
+            (bytes[1].toInt() and 0xFF shl 16) or
+            (bytes[2].toInt() and 0xFF shl 8) or
+            (bytes[3].toInt() and 0xFF)
+    }
+
+    private fun intToIpv4(value: Int): String {
+        return "${value ushr 24 and 0xFF}.${value ushr 16 and 0xFF}.${value ushr 8 and 0xFF}.${value and 0xFF}"
+    }
+
+    private fun prefixMask(prefixLength: Int): Int {
+        return if (prefixLength == 0) {
+            0
+        } else {
+            (-1 shl (32 - prefixLength))
+        }
     }
     
     /**

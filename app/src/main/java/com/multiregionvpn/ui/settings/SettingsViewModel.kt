@@ -7,9 +7,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.ProviderCredentials
+import com.multiregionvpn.data.database.ProviderAccountEntity
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
+import com.multiregionvpn.core.provider.ProviderRegistry
+import com.multiregionvpn.data.security.CredentialEncryption
+import com.multiregionvpn.ui.settings.AddProviderAccountHelper
 import com.multiregionvpn.network.NordVpnApiService
+import com.google.gson.Gson
+import java.util.UUID
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +37,9 @@ import com.multiregionvpn.ui.components.VpnStatus
 class SettingsViewModel @Inject constructor(
     private val settingsRepo: SettingsRepository,
     private val nordVpnApiService: NordVpnApiService,
+    private val providerRegistry: ProviderRegistry,
+    private val credentialEncryption: CredentialEncryption,
+    private val addProviderAccountHelper: AddProviderAccountHelper,
     private val app: Application // AndroidViewModel provides Application context
 ) : AndroidViewModel(app) {
 
@@ -76,6 +85,15 @@ class SettingsViewModel @Inject constructor(
             errorReceiver,
             IntentFilter(VpnEngineService.ACTION_VPN_ERROR)
         )
+        
+        // Auto-migrate existing NordVPN credentials to provider account
+        viewModelScope.launch {
+            try {
+                addProviderAccountHelper.migrateNordVpnCredentialsToAccount()
+            } catch (e: Exception) {
+                android.util.Log.w("SettingsViewModel", "Failed to migrate credentials: ${e.message}")
+            }
+        }
     }
     
     override fun onCleared() {
@@ -97,15 +115,17 @@ class SettingsViewModel @Inject constructor(
             // 2. Load all installed apps
             val installedApps = loadInstalledApps()
             
-            // 3. Combine flows for configs and rules
+            // 3. Combine flows for configs, rules, and provider accounts
             combine(
                 settingsRepo.getAllVpnConfigs(),
-                settingsRepo.getAllAppRules()
-            ) { configs, rules ->
+                settingsRepo.getAllAppRules(),
+                settingsRepo.getAllProviderAccounts()
+            ) { configs, rules, accounts ->
                 SettingsUiState(
                     vpnConfigs = configs,
-                    appRules = rules.associate { it.packageName to it.vpnConfigId },
-                    nordCredentials = nordCreds, // UPDATED
+                    appRules = rules.associate { it.packageName to it },
+                    providerAccounts = accounts,
+                    nordCredentials = nordCreds,
                     installedApps = installedApps,
                     isLoading = false
                 )
@@ -301,12 +321,61 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+    
+    fun getAllProviders() = providerRegistry.getAllProviders()
+    
+    fun saveProviderAccount(
+        providerId: String,
+        displayLabel: String,
+        credentials: Map<String, String>
+    ) = viewModelScope.launch {
+        val credentialsJson = Gson().toJson(credentials)
+        val encrypted = credentialEncryption.encrypt(credentialsJson.toByteArray())
+
+        val account = ProviderAccountEntity(
+            id = UUID.randomUUID().toString(),
+            providerId = providerId,
+            displayLabel = displayLabel,
+            encryptedCredentials = encrypted,
+            lastAuthState = null,
+            updatedAt = System.currentTimeMillis()
+        )
+        settingsRepo.saveProviderAccount(account)
+    }
+
+    fun updateProviderAccount(account: ProviderAccountEntity) = viewModelScope.launch {
+        settingsRepo.updateProviderAccount(account)
+    }
+
+    fun deleteProviderAccount(id: String) = viewModelScope.launch {
+        settingsRepo.deleteProviderAccount(id)
+    }
+    
+    fun saveAppRuleWithJit(
+        packageName: String,
+        vpnConfigId: String?,
+        providerAccountId: String?,
+        regionCode: String?,
+        preferredProtocol: String?,
+        fallbackDirect: Boolean
+    ) = viewModelScope.launch {
+        val rule = AppRule(
+            packageName = packageName,
+            vpnConfigId = vpnConfigId,
+            providerAccountId = providerAccountId,
+            regionCode = regionCode,
+            preferredProtocol = preferredProtocol,
+            fallbackDirect = fallbackDirect
+        )
+        settingsRepo.saveAppRule(rule)
+    }
 
 }
 
 data class SettingsUiState(
     val vpnConfigs: List<VpnConfig> = emptyList(),
-    val appRules: Map<String, String?> = emptyMap(), // <packageName, vpnConfigId>
+    val appRules: Map<String, AppRule> = emptyMap(), // <packageName, AppRule>
+    val providerAccounts: List<ProviderAccountEntity> = emptyList(),
     val nordCredentials: ProviderCredentials? = null,
     val installedApps: List<InstalledApp> = emptyList(),
     val isLoading: Boolean = true,

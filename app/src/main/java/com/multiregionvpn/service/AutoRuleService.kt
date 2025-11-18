@@ -30,7 +30,8 @@ class AutoRuleService(private val context: Context) {
     private val appRuleDao = database.appRuleDao()
     private val credsDao = database.providerCredentialsDao()
     private val presetRuleDao = database.presetRuleDao()
-    private val settingsRepository = SettingsRepository(vpnConfigDao, appRuleDao, credsDao, presetRuleDao)
+    private val providerAccountDao = database.providerAccountDao()
+    private val settingsRepository = SettingsRepository(vpnConfigDao, appRuleDao, credsDao, presetRuleDao, providerAccountDao)
     private val geoIpService = GeoIpService()
     private val packageManager = context.packageManager
     

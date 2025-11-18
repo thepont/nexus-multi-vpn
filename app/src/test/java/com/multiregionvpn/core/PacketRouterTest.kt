@@ -28,9 +28,8 @@ class PacketRouterTest {
     private lateinit var mockVpnConnectionManager: VpnConnectionManager
     private lateinit var mockVpnOutput: FileOutputStream
     private lateinit var writtenPackets: MutableList<ByteArray>
-    
     private lateinit var packetRouter: PacketRouter
-
+    
     @Before
     fun setup() {
         mockContext = mockk()
@@ -55,14 +54,20 @@ class PacketRouterTest {
         // Mock ConnectivityManager (required by PacketRouter)
         val mockConnectivityManager = mockk<android.net.ConnectivityManager>()
         every { mockContext.getSystemService(Context.CONNECTIVITY_SERVICE) } returns mockConnectivityManager
-        
-        // Create PacketRouter
-        packetRouter = PacketRouter(
+        // Default PacketRouter instance (tests can replace with custom tracker)
+        packetRouter = createPacketRouter()
+    }
+
+    private fun createPacketRouter(
+        connectionTracker: ConnectionTracker? = null
+    ): PacketRouter {
+        return PacketRouter(
             mockContext,
             mockSettingsRepo,
             mockVpnService,
             mockVpnConnectionManager,
-            mockVpnOutput
+            mockVpnOutput,
+            connectionTracker
         )
     }
 
@@ -136,6 +141,89 @@ class PacketRouterTest {
         // Real VPN routing is tested via E2E tests.
         // For now, just verify no exceptions occurred
         verify(exactly = 0) { mockVpnConnectionManager.sendPacketToTunnel(any(), any()) }
+    }
+
+    @Test
+    fun `given source IP mapped to tunnel when packet routed then uses mapped tunnel`() {
+        val tracker = mockk<ConnectionTracker>()
+        every { tracker.getTunnelForIp(any()) } answers {
+            val ip = firstArg<InetAddress>().hostAddress
+            if (ip == "10.31.0.2") "local-test_UK" else null
+        }
+        every { tracker.getTunnelForDestination(any()) } returns null
+        every { tracker.lookupConnection(any(), any()) } returns null
+
+        val router = createPacketRouter(tracker)
+        every { mockVpnConnectionManager.sendPacketToTunnel(any(), any()) } returns Unit
+
+        val packet = createTestTcpPacket(
+            srcIp = "10.31.0.2",
+            destIp = "10.1.0.100",
+            srcPort = 44374,
+            destPort = 80
+        )
+
+        router.routePacket(packet)
+
+        verify(exactly = 1) {
+            mockVpnConnectionManager.sendPacketToTunnel("local-test_UK", any())
+        }
+    }
+
+    @Test
+    fun `given connection tracker maps UID to tunnel when packet routed then uses tunnel`() {
+        val tracker = mockk<ConnectionTracker>()
+        every { tracker.getTunnelForIp(any()) } returns null
+        every { tracker.getTunnelForDestination(any()) } returns null
+        every { tracker.lookupConnection(any(), any()) } returns ConnectionTracker.ConnectionInfo(
+            uid = 10235,
+            tunnelId = "local-test_UK"
+        )
+        every { tracker.getRegisteredPackages() } returns setOf("com.example.diagnostic.uk")
+        every { tracker.getUidForPackage("com.example.diagnostic.uk") } returns 10235
+
+        val router = createPacketRouter(tracker)
+        every { mockVpnConnectionManager.sendPacketToTunnel(any(), any()) } returns Unit
+
+        val packet = createTestTcpPacket(
+            srcIp = "10.0.2.15",
+            destIp = "10.1.0.100",
+            srcPort = 50000,
+            destPort = 80
+        )
+
+        router.routePacket(packet)
+
+        verify {
+            mockVpnConnectionManager.sendPacketToTunnel("local-test_UK", any())
+        }
+    }
+
+    @Test
+    fun `given destination route mapping when packet routed then uses mapped tunnel`() {
+        val tracker = mockk<ConnectionTracker>()
+        every { tracker.getTunnelForIp(any()) } returns null
+        every { tracker.getTunnelForDestination(any()) } answers {
+            val dest = firstArg<InetAddress>().hostAddress
+            if (dest == "10.1.0.100") "local-test_UK" else null
+        }
+        every { tracker.lookupConnection(any(), any()) } returns null
+
+        val router = createPacketRouter(tracker)
+        every { mockVpnConnectionManager.sendPacketToTunnel(any(), any()) } returns Unit
+
+        val packet = createTestTcpPacket(
+            srcIp = "10.0.2.15",
+            destIp = "10.1.0.100",
+            srcPort = 40000,
+            destPort = 80
+        )
+
+        router.routePacket(packet)
+
+        verify(exactly = 1) {
+            mockVpnConnectionManager.sendPacketToTunnel("local-test_UK", any())
+        }
     }
 
     /**

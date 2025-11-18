@@ -1,5 +1,7 @@
 package com.multiregionvpn.test
 
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -10,6 +12,8 @@ import androidx.test.uiautomator.UiDevice
 import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.repository.SettingsRepository
+import com.multiregionvpn.deviceowner.TestDeviceOwnerReceiver
+import dagger.hilt.android.testing.HiltAndroidRule
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -29,6 +33,9 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 abstract class BaseLocalTest {
     
+    @get:Rule(order = 0)
+    val hiltRule = HiltAndroidRule(this)
+    
     @get:Rule
     val grantPermissionRule: GrantPermissionRule = GrantPermissionRule.grant(
         android.Manifest.permission.INTERNET,
@@ -47,9 +54,14 @@ abstract class BaseLocalTest {
     
     @Before
     open fun setup() = runBlocking {
+        hiltRule.inject()
+
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         device = UiDevice.getInstance(instrumentation)
         appContext = instrumentation.targetContext
+
+        ensureDeviceOwnerProvisioned()
+        installTestCaCertificate()
         
         // Pre-approve VPN permission
         try {
@@ -139,6 +151,60 @@ abstract class BaseLocalTest {
         appContext.stopService(intent)
         runBlocking {
             delay(2000) // Wait for service to stop
+        }
+    }
+
+    private fun ensureDeviceOwnerProvisioned() {
+        val devicePolicyManager = appContext.getSystemService(DevicePolicyManager::class.java)
+            ?: return
+
+        if (devicePolicyManager.isDeviceOwnerApp(appContext.packageName)) {
+            println("✅ Test app already device owner")
+            return
+        }
+
+        val adminComponent = ComponentName(appContext, TestDeviceOwnerReceiver::class.java)
+        val command =
+            "dpm set-device-owner ${appContext.packageName}/" +
+                "com.multiregionvpn.deviceowner.TestDeviceOwnerReceiver"
+
+        println("⚙️  Requesting device-owner role via shell: $command")
+        val response = try {
+            device.executeShellCommand(command)
+        } catch (t: Throwable) {
+            Log.e("BaseLocalTest", "Failed to execute dpm command", t)
+            throw IllegalStateException("Could not promote app to device owner", t)
+        }
+
+        println("📋 dpm response: $response")
+
+        if (!devicePolicyManager.isDeviceOwnerApp(appContext.packageName) ||
+            !devicePolicyManager.isAdminActive(adminComponent)
+        ) {
+            throw IllegalStateException(
+                "Device owner provisioning failed. " +
+                    "Wipe the emulator data ( -wipe-data ) or create a fresh AVD before running tests."
+            )
+        }
+
+        println("✅ Device owner provisioning complete")
+    }
+
+    private fun installTestCaCertificate() {
+        val resourceStream = javaClass.classLoader
+            ?.getResourceAsStream("certs/local_test_ca.pem")
+            ?: run {
+                println("⚠️  Test CA resource missing; skip installation")
+                return
+            }
+
+        val certificatePem = resourceStream.bufferedReader().use { it.readText() }
+
+        val installed = TestDeviceOwnerReceiver.installCaCertificate(appContext, certificatePem)
+        if (installed) {
+            println("🔐 Test CA installed via DevicePolicyManager")
+        } else {
+            println("⚠️  Test CA installation skipped or failed; check logs")
         }
     }
 }

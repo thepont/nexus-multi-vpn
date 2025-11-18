@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
@@ -15,9 +16,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         VpnConfig::class,
         AppRule::class,
         ProviderCredentials::class,
-        PresetRule::class
+        PresetRule::class,
+        ProviderAccountEntity::class,
+        ProviderServerCacheEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +30,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun appRuleDao(): AppRuleDao
     abstract fun providerCredentialsDao(): ProviderCredentialsDao
     abstract fun presetRuleDao(): PresetRuleDao
+    abstract fun providerAccountDao(): ProviderAccountDao
+    abstract fun providerServerCacheDao(): ProviderServerCacheDao
 
     companion object {
         @Volatile
@@ -39,11 +44,86 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "region_router_db"
                 )
+                // Add migrations
+                .addMigrations(MIGRATION_1_2)
                 // Add the pre-seeding callback
                 .addCallback(PresetRuleCallback(context))
                 .build()
                 INSTANCE = instance
                 instance
+            }
+        }
+
+        /**
+         * Migration from version 1 to 2:
+         * - Add provider_accounts table
+         * - Add provider_server_cache table
+         * - Add new columns to app_rules (providerAccountId, regionCode, preferredProtocol, fallbackDirect)
+         * - Add new columns to vpn_configs (sourceProviderId, generatedAt)
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create provider_accounts table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS provider_accounts (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        providerId TEXT NOT NULL,
+                        displayLabel TEXT NOT NULL,
+                        encryptedCredentials BLOB NOT NULL,
+                        lastAuthState TEXT,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
+
+                // Create provider_server_cache table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS provider_server_cache (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        providerId TEXT NOT NULL,
+                        regionCode TEXT NOT NULL,
+                        payloadJson TEXT NOT NULL,
+                        fetchedAt INTEGER NOT NULL,
+                        ttlSeconds INTEGER NOT NULL,
+                        latencyMs INTEGER
+                    )
+                """.trimIndent())
+
+                // Create indices for provider_server_cache
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_provider_server_cache_providerId_regionCode ON provider_server_cache(providerId, regionCode)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_provider_server_cache_fetchedAt ON provider_server_cache(fetchedAt)")
+
+                // Recreate app_rules table with new columns and foreign keys
+                // SQLite doesn't support adding foreign keys via ALTER TABLE, so we must recreate
+                database.execSQL("""
+                    CREATE TABLE app_rules_new (
+                        packageName TEXT NOT NULL PRIMARY KEY,
+                        vpnConfigId TEXT,
+                        providerAccountId TEXT,
+                        regionCode TEXT,
+                        preferredProtocol TEXT,
+                        fallbackDirect INTEGER NOT NULL,
+                        FOREIGN KEY(vpnConfigId) REFERENCES vpn_configs(id) ON DELETE SET NULL,
+                        FOREIGN KEY(providerAccountId) REFERENCES provider_accounts(id) ON DELETE SET NULL
+                    )
+                """.trimIndent())
+
+                // Copy existing data
+                database.execSQL("""
+                    INSERT INTO app_rules_new (packageName, vpnConfigId, providerAccountId, regionCode, preferredProtocol, fallbackDirect)
+                    SELECT packageName, vpnConfigId, NULL, NULL, NULL, 0 FROM app_rules
+                """.trimIndent())
+
+                // Drop old table and rename new one
+                database.execSQL("DROP TABLE app_rules")
+                database.execSQL("ALTER TABLE app_rules_new RENAME TO app_rules")
+
+                // Create indices
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_app_rules_vpnConfigId ON app_rules(vpnConfigId)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_app_rules_providerAccountId ON app_rules(providerAccountId)")
+
+                // Add new columns to vpn_configs
+                database.execSQL("ALTER TABLE vpn_configs ADD COLUMN sourceProviderId TEXT")
+                database.execSQL("ALTER TABLE vpn_configs ADD COLUMN generatedAt INTEGER")
             }
         }
     }

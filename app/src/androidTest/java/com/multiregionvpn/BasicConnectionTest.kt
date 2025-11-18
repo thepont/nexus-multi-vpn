@@ -4,73 +4,82 @@ import android.content.Context
 import android.net.VpnService
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
 import com.multiregionvpn.core.VpnTemplateService
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.data.database.AppDatabase
+import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.network.NordVpnApiService
+import com.multiregionvpn.network.NordServer
 import com.google.common.truth.Truth.assertThat
-import org.mockito.Mock
-import org.mockito.MockitoAnnotations
-import org.mockito.kotlin.mock
-import retrofit2.Retrofit
-import retrofit2.converter.scalars.ScalarsConverterFactory
-import retrofit2.converter.moshi.MoshiConverterFactory
-import com.squareup.moshi.Moshi
+import java.net.InetSocketAddress
+import java.net.Socket
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import okhttp3.ResponseBody
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
+import org.junit.Rule
 
 /**
  * Basic connection test to verify OpenVPN 3 native client can connect to a VPN server.
  * This test focuses solely on the connection itself, not routing.
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class BasicConnectionTest {
 
     private lateinit var appContext: Context
-    
-    @Mock
-    private lateinit var mockVpnService: VpnService
-    
+
+    private val testVpnService = object : VpnService() {
+        override fun protect(socket: Int): Boolean = true
+    }
+
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var vpnTemplateService: VpnTemplateService
-    private val TEST_SERVER = "uk1234.nordvpn.com" // Use a real NordVPN server
+    private val TEST_SERVER = "10.0.2.2:1194" // Local OpenVPN test server (Docker)
+
+    @get:Rule
+    val hiltRule = HiltAndroidRule(this)
 
     @Before
     fun setup() {
+        hiltRule.inject()
         appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        MockitoAnnotations.openMocks(this)
         
-        // Initialize dependencies manually (like VpnRoutingTest does)
-        val database = AppDatabase.getDatabase(appContext)
-        settingsRepository = SettingsRepository(
-            vpnConfigDao = database.vpnConfigDao(),
-            appRuleDao = database.appRuleDao(),
-            providerCredentialsDao = database.providerCredentialsDao(),
-            presetRuleDao = database.presetRuleDao()
-        )
+        runBlocking {
+            // Initialize dependencies manually (like VpnRoutingTest does)
+            val database = AppDatabase.getDatabase(appContext)
+            settingsRepository = SettingsRepository(
+                vpnConfigDao = database.vpnConfigDao(),
+                appRuleDao = database.appRuleDao(),
+                providerCredentialsDao = database.providerCredentialsDao(),
+                presetRuleDao = database.presetRuleDao()
+            )
+            
+            // Provide credentials for local test template
+            settingsRepository.saveProviderCredentials(
+                ProviderCredentials(
+                    templateId = "local-test",
+                    username = "testuser",
+                    password = "testpass"
+                )
+            )
+        }
         
-        // Create VpnTemplateService - needs NordVpnApiService
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://api.nordvpn.com/")
-            .addConverterFactory(ScalarsConverterFactory.create())
-            .addConverterFactory(MoshiConverterFactory.create(
-                Moshi.Builder().build()
-            ))
-            .build()
-        
-        // NordVpnApiService is an interface - create instance via Retrofit
-        val nordVpnApiService: NordVpnApiService = retrofit.create(NordVpnApiService::class.java)
+        val dummyNordApi = object : NordVpnApiService {
+            override suspend fun getServers(token: String) = emptyList<NordServer>()
+            override suspend fun getOvpnConfig(hostname: String): ResponseBody {
+                throw UnsupportedOperationException("Nord API not required for local-test template")
+            }
+        }
         
         vpnTemplateService = VpnTemplateService(
-            nordVpnApi = nordVpnApiService,
+            nordVpnApi = dummyNordApi,
             settingsRepo = settingsRepository,
             context = appContext
         )
@@ -83,27 +92,16 @@ class BasicConnectionTest {
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         // Get credentials from environment variables (passed via test arguments)
-        val username = getTestArgument("NORDVPN_USERNAME")
-        val password = getTestArgument("NORDVPN_PASSWORD")
-        
-        if (username == null || password == null) {
-            println("⚠️ Skipping test - credentials not provided")
-            println("   Set NORDVPN_USERNAME and NORDVPN_PASSWORD as test arguments")
-            return@runBlocking
-        }
-        
-        println("✓ Credentials loaded (username length: ${username.length})")
-        
         // Create a test VPN config
         val testConfig = VpnConfig(
             id = "test-basic-connection",
-            name = "Test UK Server",
-            regionId = "UK",
-            templateId = "nordvpn",
+            name = "Local Test Server",
+            regionId = "LOCAL",
+            templateId = "local-test",
             serverHostname = TEST_SERVER
         )
         
-        println("✓ Created test VPN config: $TEST_SERVER")
+        println("✓ Created test VPN config for local server: $TEST_SERVER")
         
         // Prepare the OpenVPN configuration
         println("   Preparing OpenVPN configuration...")
@@ -116,6 +114,7 @@ class BasicConnectionTest {
         println("✓ OpenVPN config prepared")
         println("   Config size: ${preparedConfig.ovpnFileContent.length} bytes")
         println("   Auth file: ${preparedConfig.authFile?.absolutePath}")
+        println("   Config contents:\n${preparedConfig.ovpnFileContent}")
         
         // Verify auth file contents
         val authLines = preparedConfig.authFile?.readLines()
@@ -125,7 +124,7 @@ class BasicConnectionTest {
         
         // Create NativeOpenVpnClient
         println("\n   Creating NativeOpenVpnClient...")
-        val client = NativeOpenVpnClient(appContext, mockVpnService)
+        val client = NativeOpenVpnClient(appContext, testVpnService)
         println("✓ Client created")
         
         assertThat(client.isConnected()).isFalse()
@@ -191,15 +190,6 @@ class BasicConnectionTest {
         // Cleanup
         preparedConfig.authFile?.delete()
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    }
-
-    private fun getTestArgument(key: String): String? {
-        return try {
-            val bundle = InstrumentationRegistry.getArguments()
-            bundle.getString(key)
-        } catch (e: Exception) {
-            null
-        }
     }
 }
 

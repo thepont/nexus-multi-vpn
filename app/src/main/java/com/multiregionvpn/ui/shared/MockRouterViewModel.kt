@@ -53,42 +53,54 @@ class MockRouterViewModel : RouterViewModel() {
                 name = "UK Streaming",
                 region = "uk",
                 serverCount = 42,
-                isActive = true
+                isActive = true,
+                isConnected = true,
+                latencyMs = 45
             ),
             ServerGroup(
                 id = "group_us",
                 name = "US General",
                 region = "us",
                 serverCount = 156,
-                isActive = true
+                isActive = true,
+                isConnected = true,
+                latencyMs = 120
             ),
             ServerGroup(
                 id = "group_fr",
                 name = "France",
                 region = "fr",
                 serverCount = 28,
-                isActive = false
+                isActive = false,
+                isConnected = false,
+                latencyMs = null
             ),
             ServerGroup(
                 id = "group_de",
                 name = "Germany",
                 region = "de",
                 serverCount = 64,
-                isActive = false
+                isActive = false,
+                isConnected = false,
+                latencyMs = null
             ),
             ServerGroup(
                 id = "group_jp",
                 name = "Japan",
                 region = "jp",
                 serverCount = 32,
-                isActive = false
+                isActive = false,
+                isConnected = false,
+                latencyMs = null
             ),
             ServerGroup(
                 id = "group_au",
                 name = "Australia",
                 region = "au",
                 serverCount = 18,
-                isActive = true
+                isActive = true,
+                isConnected = false,
+                latencyMs = null
             )
         )
         
@@ -203,7 +215,9 @@ class MockRouterViewModel : RouterViewModel() {
             name = "New Server Group",
             region = "xx",
             serverCount = 10,
-            isActive = false
+            isActive = false,
+            isConnected = false,
+            latencyMs = null
         )
         
         val currentGroups = _allServerGroups.value.toMutableList()

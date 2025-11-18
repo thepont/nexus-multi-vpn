@@ -5,6 +5,8 @@ import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
@@ -23,6 +25,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Assume.assumeTrue
 import java.util.UUID
 
 /**
@@ -38,6 +41,7 @@ import java.util.UUID
  * 
  * Status: Retained as-is - provides production environment validation.
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class NordVpnE2ETest {
 
@@ -54,11 +58,23 @@ class NordVpnE2ETest {
     )
 
     private lateinit var settingsRepo: SettingsRepository
+    
+    @get:Rule
+    val hiltRule = HiltAndroidRule(this)
 
     private lateinit var device: UiDevice
     private lateinit var appContext: Context
     private lateinit var testContext: Context
-    private lateinit var defaultCountry: String
+    private lateinit var targetPackageName: String
+    private var defaultCountry: String = "US"
+    private var defaultIpAddress: String = ""
+    private var nordUsername: String? = null
+    private var nordPassword: String? = null
+
+    private fun shouldRunNordTests(): Boolean {
+        val args = InstrumentationRegistry.getArguments()
+        return args.getString("RUN_NORD_E2E")?.equals("true", ignoreCase = true) == true
+    }
 
     // --- Test Configuration ---
     // CRITICAL: Use test instrumentation package name (com.multiregionvpn.test), NOT target app package
@@ -77,10 +93,25 @@ class NordVpnE2ETest {
 
     @Before
     fun setup() = runBlocking {
+        hiltRule.inject()
+        
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         device = UiDevice.getInstance(instrumentation)
         appContext = instrumentation.targetContext
         testContext = instrumentation.context
+        targetPackageName = appContext.packageName
+        assumeTrue("Skipping NordVpnE2ETest because RUN_NORD_E2E flag not enabled", shouldRunNordTests())
+
+        val args = InstrumentationRegistry.getArguments()
+        nordUsername = args.getString("NORDVPN_USERNAME")
+        nordPassword = args.getString("NORDVPN_PASSWORD")
+        require(!nordUsername.isNullOrBlank() && !nordPassword.isNullOrBlank()) {
+            """
+                NordVPN credentials missing.
+                Ensure NORDVPN_USERNAME and NORDVPN_PASSWORD are defined in environment or .env 
+                before invoking connected tests (they are read automatically into instrumentation arguments).
+            """.trimIndent()
+        }
 
         // Note: App data should be cleared before running tests via:
         // adb shell pm clear com.multiregionvpn
@@ -128,12 +159,30 @@ class NordVpnE2ETest {
         settingsRepo.clearAllVpnConfigs()
 
         // 3. Get our baseline IP (Direct Internet) - make call BEFORE VPN starts
-        val defaultIpInfo = IpCheckService.api.getIpInfo()
-        defaultCountry = defaultIpInfo.normalizedCountryCode ?: "US"
-        println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        println("📍 Baseline Country (Direct IP): $defaultCountry")
-        println("📍 Baseline IP: ${defaultIpInfo.normalizedIpAddress}")
-        println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        val baselineIpOverride = args.getString("BASELINE_IP_OVERRIDE")?.takeIf { it.isNotBlank() }
+        val baselineCountryOverride = args.getString("BASELINE_COUNTRY_OVERRIDE")?.takeIf { it.isNotBlank() }
+
+        if (baselineIpOverride != null) {
+            require(!baselineCountryOverride.isNullOrBlank()) {
+                "BASELINE_COUNTRY_OVERRIDE must be provided when BASELINE_IP_OVERRIDE is set."
+            }
+            defaultIpAddress = baselineIpOverride
+            defaultCountry = baselineCountryOverride
+            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            println("📍 Baseline Country (override): $defaultCountry")
+            println("📍 Baseline IP (override): $defaultIpAddress")
+            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        } else {
+            val defaultIpInfo = runCatching { IpCheckService.getIpInfoWithFallback() }.getOrElse {
+                throw AssertionError("Baseline IP fetch failed: ${it.message}", it)
+            }
+            defaultCountry = defaultIpInfo.normalizedCountryCode ?: "US"
+            defaultIpAddress = defaultIpInfo.normalizedIpAddress ?: ""
+            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            println("📍 Baseline Country (Direct IP): $defaultCountry")
+            println("📍 Baseline IP: ${defaultIpInfo.normalizedIpAddress}")
+            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        }
 
         // 3. Bootstrap the app with credentials and VPN configs
         bootstrapVpnCredentials()
@@ -145,33 +194,16 @@ class NordVpnE2ETest {
      * Credentials are passed via test instrumentation arguments.
      */
     private suspend fun bootstrapVpnCredentials() {
-        try {
-            // Read credentials from instrumentation arguments passed via adb -e flags
-            // androidx.test.platform.app.InstrumentationRegistry provides getArguments()
-            val bundle = InstrumentationRegistry.getArguments()
-            
-            val username = bundle.getString("NORDVPN_USERNAME")
-            val password = bundle.getString("NORDVPN_PASSWORD")
-            
-            if (username.isNullOrBlank() || password.isNullOrBlank()) {
-                throw Exception(
-                    "NORDVPN_USERNAME and NORDVPN_PASSWORD must be passed via test arguments.\n" +
-                    "Use: scripts/run-e2e-tests.sh"
-                )
-            }
-            
-            val providerCreds = ProviderCredentials(
-                templateId = "nordvpn",
-                username = username,
-                password = password
-            )
-            settingsRepo.saveProviderCredentials(providerCreds)
-            println("✓ NordVPN credentials loaded from environment variables and saved")
-        } catch (e: Exception) {
-            println("⚠️  Warning: Could not load credentials: ${e.message}")
-            println("   Test will continue but VPN connections may fail")
-            throw e // Re-throw to fail fast if credentials are missing
-        }
+        val username = nordUsername ?: return
+        val password = nordPassword ?: return
+
+        val providerCreds = ProviderCredentials(
+            templateId = "nordvpn",
+            username = username,
+            password = password
+        )
+        settingsRepo.saveProviderCredentials(providerCreds)
+        println("✓ NordVPN credentials loaded from instrumentation arguments and saved")
     }
 
     /**
@@ -204,6 +236,20 @@ class NordVpnE2ETest {
         println("✓ Saved FR Config: $FR_SERVER_HOSTNAME")
     }
 
+    private suspend fun assignTestPackagesToVpn(vpnConfigId: String) {
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, vpnConfigId)
+        if (targetPackageName != TEST_PACKAGE_NAME) {
+            settingsRepo.createAppRule(targetPackageName, vpnConfigId)
+        }
+    }
+
+    private suspend fun updateTestPackageRule(vpnConfigId: String) {
+        settingsRepo.updateAppRule(TEST_PACKAGE_NAME, vpnConfigId)
+        if (targetPackageName != TEST_PACKAGE_NAME) {
+            settingsRepo.updateAppRule(targetPackageName, vpnConfigId)
+        }
+    }
+
     // --- THE THREE MAIN TESTS ---
 
     @Test
@@ -212,9 +258,9 @@ class NordVpnE2ETest {
         println("🧪 TEST: Routing to UK VPN")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        // GIVEN: A rule routing our test package to the UK VPN
-        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
-        println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
+        // GIVEN: A rule routing both the instrumentation package and the target app to the UK VPN
+        assignTestPackagesToVpn(UK_VPN_ID)
+        println("✓ Created app rules for instrumentation + target app -> UK VPN")
         
         // CRITICAL: Wait for Room Flow to emit the change
         // Without this delay, VPN starts before Flow emits updated rules
@@ -222,9 +268,11 @@ class NordVpnE2ETest {
         
         // Verify rule was actually saved
         val savedRule = settingsRepo.getAppRuleByPackageName(TEST_PACKAGE_NAME)
-        println("✓ Verified app rule saved: ${savedRule?.packageName} -> ${savedRule?.vpnConfigId}")
-        assert(savedRule != null) { "App rule was not saved!" }
-        assert(savedRule?.vpnConfigId == UK_VPN_ID) { "App rule has wrong VPN config!" }
+        val savedTargetRule = settingsRepo.getAppRuleByPackageName(targetPackageName)
+        println("✓ Verified instrumentation rule: ${savedRule?.packageName} -> ${savedRule?.vpnConfigId}")
+        println("✓ Verified target app rule: ${savedTargetRule?.packageName} -> ${savedTargetRule?.vpnConfigId}")
+        assert(savedRule?.vpnConfigId == UK_VPN_ID) { "Instrumentation app rule has wrong VPN config!" }
+        assert(savedTargetRule?.vpnConfigId == UK_VPN_ID) { "Target app rule has wrong VPN config!" }
 
         // WHEN: The VPN service is started
         startVpnEngine()
@@ -238,11 +286,33 @@ class NordVpnE2ETest {
         // Android's routing tables need time to stabilize
         println("⏳ Waiting 5 seconds for routing to stabilize after interface re-establishments...")
         delay(5000)
+        val connectionMappings = VpnEngineService.getConnectionTrackerSnapshot()
+        println("🔎 ConnectionTracker mappings: $connectionMappings")
+        assertEquals(
+            "Instrumentation package not mapped to UK tunnel",
+            "nordvpn_UK",
+            connectionMappings[TEST_PACKAGE_NAME]
+        )
+        assertEquals(
+            "Target app not mapped to UK tunnel",
+            "nordvpn_UK",
+            connectionMappings[targetPackageName]
+        )
+        assertEquals(
+            "Instrumentation package not mapped to UK tunnel",
+            "nordvpn_UK",
+            connectionMappings[TEST_PACKAGE_NAME]
+        )
+        assertEquals(
+            "Target app not mapped to UK tunnel",
+            "nordvpn_UK",
+            connectionMappings[targetPackageName]
+        )
         
         // THEN: Our IP should be in the UK
         println("⏳ Making HTTP request to verify routing...")
         println("   Tunnel is fully ready and routing has stabilized")
-        val vpnIpInfo = IpCheckService.api.getIpInfo()
+        val vpnIpInfo = IpCheckService.getIpInfoWithFallback()
         println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
         println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
         println("📍 Resulting City: ${vpnIpInfo.city}")
@@ -261,9 +331,9 @@ class NordVpnE2ETest {
         println("🧪 TEST: Routing to France VPN")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        // GIVEN: A rule routing our test package to France VPN
-        settingsRepo.createAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
-        println("✓ Created app rule: $TEST_PACKAGE_NAME -> FR VPN")
+        // GIVEN: A rule routing both instrumentation and target app packages to France VPN
+        assignTestPackagesToVpn(FR_VPN_ID)
+        println("✓ Created app rules for instrumentation + target app -> FR VPN")
         delay(500)  // Wait for Room to commit
 
         // WHEN: The VPN service is started
@@ -277,7 +347,7 @@ class NordVpnE2ETest {
         // No additional delays needed - verifyTunnelReadyForRouting ensures everything is ready
         println("⏳ Making HTTP request to verify routing...")
         println("   Tunnel is fully ready - connection, IP, and DNS are all configured")
-        val vpnIpInfo = IpCheckService.api.getIpInfo()
+        val vpnIpInfo = IpCheckService.getIpInfoWithFallback()
         println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
         println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
         println("📍 Resulting City: ${vpnIpInfo.city}")
@@ -304,7 +374,7 @@ class NordVpnE2ETest {
 
         // THEN: Our IP should be the default, non-VPN IP
         delay(5000) // Wait a bit for any routing to stabilize
-        val vpnIpInfo = IpCheckService.api.getIpInfo()
+        val vpnIpInfo = IpCheckService.getIpInfoWithFallback()
         println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
         println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
         println("📍 Baseline Country: $defaultCountry")
@@ -335,27 +405,28 @@ class NordVpnE2ETest {
         
         // PHASE 1: Route to UK
         println("\n📍 PHASE 1: Initial routing to UK")
-        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
-        println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
+        assignTestPackagesToVpn(UK_VPN_ID)
+        println("✓ Created app rules for instrumentation + target app -> UK VPN")
+        delay(500)
 
         startVpnEngine()
         verifyTunnelReadyForRouting("nordvpn_UK", timeoutMs = 120000)
         
-        val ukIpInfo = IpCheckService.api.getIpInfo()
+        val ukIpInfo = IpCheckService.getIpInfoWithFallback()
         println("📍 UK IP: ${ukIpInfo.normalizedIpAddress}, Country: ${ukIpInfo.normalizedCountryCode}")
         assertEquals("GB", ukIpInfo.normalizedCountryCode)
         println("✅ Phase 1 complete: Confirmed UK routing")
         
         // PHASE 2: Switch to FR
         println("\n📍 PHASE 2: Switching to France")
-        settingsRepo.updateAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
-        println("✓ Updated app rule: $TEST_PACKAGE_NAME -> FR VPN")
+        updateTestPackageRule(FR_VPN_ID)
+        println("✓ Updated app rules: instrumentation + target app -> FR VPN")
         
         // Wait for routing to update
         delay(5000)
         verifyTunnelReadyForRouting("nordvpn_FR", timeoutMs = 120000)
         
-        val frIpInfo = IpCheckService.api.getIpInfo()
+        val frIpInfo = IpCheckService.getIpInfoWithFallback()
         println("📍 FR IP: ${frIpInfo.normalizedIpAddress}, Country: ${frIpInfo.normalizedCountryCode}")
         assertEquals(
             "❌ Failed to switch to France! Expected FR, got ${frIpInfo.normalizedCountryCode}",
@@ -374,8 +445,9 @@ class NordVpnE2ETest {
         
         // GIVEN: Create app rules for BOTH regions to force both tunnels to establish
         // This is necessary because VpnEngineService only creates tunnels for VPN configs with app rules
-        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
-        println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
+        assignTestPackagesToVpn(UK_VPN_ID)
+        println("✓ Created app rules for instrumentation + target app -> UK VPN")
+        delay(500)
         
         // Create a dummy app rule for FR to force FR tunnel creation
         // (In a real scenario, a different app would have the FR rule)
@@ -395,9 +467,12 @@ class NordVpnE2ETest {
         println("\n📍 Verifying FR tunnel (standby)...")
         verifyTunnelReadyForRouting("nordvpn_FR", timeoutMs = 120000)
         println("✅ FR tunnel ready")
+
+        val connectionMappings = VpnEngineService.getConnectionTrackerSnapshot()
+        println("🔎 ConnectionTracker mappings: $connectionMappings")
         
         // THEN: Our traffic should route to UK (the configured tunnel)
-        val vpnIpInfo = IpCheckService.api.getIpInfo()
+        val vpnIpInfo = IpCheckService.getIpInfoWithFallback()
         println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
         println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
         
@@ -427,31 +502,32 @@ class NordVpnE2ETest {
         
         // Start with UK
         println("\n📍 Switch 1: UK")
-        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        assignTestPackagesToVpn(UK_VPN_ID)
+        delay(500)
         startVpnEngine()
         verifyTunnelReadyForRouting("nordvpn_UK", timeoutMs = 120000)
         
-        val uk1IpInfo = IpCheckService.api.getIpInfo()
+        val uk1IpInfo = IpCheckService.getIpInfoWithFallback()
         assertEquals("GB", uk1IpInfo.normalizedCountryCode)
         println("✅ Confirmed UK (switch 1)")
         
         // Switch to FR
         println("\n📍 Switch 2: FR")
-        settingsRepo.updateAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
+        updateTestPackageRule(FR_VPN_ID)
         delay(3000) // Brief delay for routing update
         verifyTunnelReadyForRouting("nordvpn_FR", timeoutMs = 120000)
         
-        val frIpInfo = IpCheckService.api.getIpInfo()
+        val frIpInfo = IpCheckService.getIpInfoWithFallback()
         assertEquals("FR", frIpInfo.normalizedCountryCode)
         println("✅ Confirmed FR (switch 2)")
         
         // Switch back to UK
         println("\n📍 Switch 3: UK (again)")
-        settingsRepo.updateAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        updateTestPackageRule(UK_VPN_ID)
         delay(3000) // Brief delay for routing update
         // UK tunnel should still be connected from before
         
-        val uk2IpInfo = IpCheckService.api.getIpInfo()
+        val uk2IpInfo = IpCheckService.getIpInfoWithFallback()
         assertEquals(
             "❌ Failed to switch back to UK! Expected GB, got ${uk2IpInfo.normalizedCountryCode}",
             "GB",
@@ -866,6 +942,10 @@ class NordVpnE2ETest {
      */
     @After
     fun teardown() = runBlocking {
+        if (!::settingsRepo.isInitialized) {
+            println("NordVpnE2ETest teardown skipped (setup did not complete)")
+            return@runBlocking
+        }
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("🧹 Cleaning up...")
         

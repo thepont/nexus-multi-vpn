@@ -1,15 +1,21 @@
 package com.multiregionvpn.core
 
+import android.os.ParcelFileDescriptor
 import com.multiregionvpn.core.vpnclient.MockOpenVpnClient
 import com.multiregionvpn.core.vpnclient.OpenVpnClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
+import org.junit.Ignore
+import org.junit.runner.RunWith
 import kotlin.test.*
+import java.io.FileOutputStream
+import org.robolectric.RobolectricTestRunner
 
 /**
  * Unit tests for VpnConnectionManager
  */
+@RunWith(RobolectricTestRunner::class)
 class VpnConnectionManagerTest {
 
     private lateinit var manager: VpnConnectionManager
@@ -154,6 +160,193 @@ class VpnConnectionManagerTest {
         // THEN: Callback is invoked
         assertEquals(tunnelId, receivedTunnelId)
         assertEquals(testPacket, receivedPacket)
+    }
+
+    @Test
+    fun `readiness listener emits when tunnel becomes ready`() = runTest {
+        val events = mutableListOf<Set<String>>()
+        manager.setTunnelReadinessListener { current -> events.add(current) }
+
+        val tunnelId = "ready_tunnel"
+        val client = MockOpenVpnClient()
+        client.connect("client\nremote test.com 1194\nproto udp", null)
+
+        manager.registerTestClient(tunnelId, client)
+        manager.simulateTunnelState(tunnelId, ipAssigned = true, dnsConfigured = true)
+
+        assertTrue(manager.isTunnelReadyForRouting(tunnelId))
+        assertEquals(listOf(emptySet(), setOf(tunnelId)), events)
+    }
+
+    @Test
+    fun `readiness listener clears when tunnel loses readiness`() = runTest {
+        val events = mutableListOf<Set<String>>()
+        manager.setTunnelReadinessListener { current -> events.add(current) }
+
+        val tunnelId = "ready_tunnel"
+        val client = MockOpenVpnClient()
+        client.connect("client\nremote test.com 1194\nproto udp", null)
+
+        manager.registerTestClient(tunnelId, client)
+        manager.simulateTunnelState(tunnelId, ipAssigned = true, dnsConfigured = true)
+        manager.simulateTunnelState(tunnelId, ipAssigned = false, dnsConfigured = true)
+
+        assertFalse(manager.isTunnelReadyForRouting(tunnelId))
+        assertEquals(listOf(emptySet(), setOf(tunnelId), emptySet()), events)
+    }
+
+    @Test
+    @Ignore("Requires ParcelFileDescriptor pipe support; covered by instrumentation diagnostics")
+    fun `replacing socket pair closes previous writer`() = runTest {
+        val tunnelId = "socket_tunnel"
+        val pipeWritePfds = manager.getPrivateMap<ParcelFileDescriptor>("pipeWritePfds")
+        val pipeWriteFds = manager.getPrivateMap<Int>("pipeWriteFds")
+        val pipeWriters = manager.getPrivateMap<FileOutputStream>("pipeWriters")
+ 
+        val initialPipe = createPipeHandle()
+        var closedFlag = false
+        val trackingWriter = object : FileOutputStream(initialPipe.write.fileDescriptor) {
+            override fun close() {
+                closedFlag = true
+                super.close()
+            }
+        }
+ 
+        pipeWritePfds[tunnelId] = initialPipe.write
+        pipeWriteFds[tunnelId] = initialPipe.write.fd
+        pipeWriters[tunnelId] = trackingWriter
+ 
+        val newPipe = createPipeHandle()
+        val dup = ParcelFileDescriptor.dup(newPipe.write.fileDescriptor)
+        val newFd = dup.detachFd()
+        dup.close()
+ 
+        manager.replaceSocketPairForTest(tunnelId, newFd)
+ 
+        assertTrue(closedFlag, "Previous writer should be closed when socket pair is replaced")
+        assertFalse(pipeWriters.containsKey(tunnelId), "Writer map should not retain stale writer")
+ 
+        runCatching { initialPipe.read.close() }
+        runCatching { initialPipe.write.close() }
+        runCatching { newPipe.read.close() }
+        runCatching { newPipe.write.close() }
+        pipeWritePfds.remove(tunnelId)
+        pipeWriteFds.remove(tunnelId)
+        manager.getPrivateMap<FileOutputStream>("pipeWriters").remove(tunnelId)
+        manager.closeAll()
+    }
+
+    @Test
+    @Ignore("Requires ParcelFileDescriptor pipe support; covered by instrumentation diagnostics")
+    fun `sendPacketToTunnel recreates writer after socket pair replacement`() = runTest {
+        val tunnelId = "socket_tunnel"
+        val client = MockOpenVpnClient()
+        client.connect("client\nremote test.com 1194\nproto udp", null)
+        manager.registerTestClient(tunnelId, client)
+
+        val pipeWritePfds = manager.getPrivateMap<ParcelFileDescriptor>("pipeWritePfds")
+        val pipeWriteFds = manager.getPrivateMap<Int>("pipeWriteFds")
+        val pipeWriters = manager.getPrivateMap<FileOutputStream>("pipeWriters")
+ 
+        val initialPipe = createPipeHandle()
+        val staleWriter = FileOutputStream(initialPipe.write.fileDescriptor)
+        pipeWritePfds[tunnelId] = initialPipe.write
+        pipeWriteFds[tunnelId] = initialPipe.write.fd
+        pipeWriters[tunnelId] = staleWriter
+ 
+        val newPipe = createPipeHandle()
+        val dup = ParcelFileDescriptor.dup(newPipe.write.fileDescriptor)
+        val newFd = dup.detachFd()
+        dup.close()
+        manager.replaceSocketPairForTest(tunnelId, newFd)
+ 
+        val payload = byteArrayOf(1, 2, 3, 4)
+ 
+        manager.sendPacketToTunnel(tunnelId, payload)
+ 
+        ParcelFileDescriptor.AutoCloseInputStream(newPipe.read).use { input ->
+            val received = ByteArray(payload.size)
+            val bytesRead = input.read(received)
+            assertEquals(payload.size, bytesRead)
+            assertContentEquals(payload, received)
+        }
+ 
+        runCatching { initialPipe.read.close() }
+        runCatching { initialPipe.write.close() }
+        runCatching { newPipe.write.close() }
+        pipeWritePfds.remove(tunnelId)
+        pipeWriteFds.remove(tunnelId)
+        manager.closeAll()
+    }
+ 
+    @Test
+    @Ignore("Requires ParcelFileDescriptor pipe support; covered by instrumentation diagnostics")
+    fun `createPipeHandle returns valid descriptors`() {
+        val pipe = createPipeHandle()
+        assertNotNull(pipe.read, "Pipe read descriptor should not be null")
+        assertNotNull(pipe.write, "Pipe write descriptor should not be null")
+        assertTrue(pipe.read.fd >= 0, "Pipe read descriptor should have valid fd")
+        assertTrue(pipe.write.fd >= 0, "Pipe write descriptor should have valid fd")
+        pipe.read.close()
+        pipe.write.close()
+    }
+
+    @Test
+    @Ignore("Requires ParcelFileDescriptor pipe support; covered by instrumentation diagnostics")
+    fun `replaceSocketPair installs descriptors when none exist`() {
+        val tunnelId = "socket_install_test"
+        val pipe = createPipeHandle()
+        val fd = ParcelFileDescriptor.dup(pipe.write.fileDescriptor).detachFd()
+
+        manager.replaceSocketPairForTest(tunnelId, fd)
+
+        val pipeWriteFds = manager.getPrivateMap<Int>("pipeWriteFds")
+        val pipeWritePfds = manager.getPrivateMap<ParcelFileDescriptor>("pipeWritePfds")
+
+        assertEquals(fd, pipeWriteFds[tunnelId])
+        assertNotNull(pipeWritePfds[tunnelId], "Pipe descriptor should be stored after replacement")
+
+        pipe.read.close()
+        pipe.write.close()
+        pipeWritePfds.remove(tunnelId)?.close()
+        pipeWriteFds.remove(tunnelId)
+    }
+
+    @Test
+    @Ignore("Requires ParcelFileDescriptor pipe support; covered by instrumentation diagnostics")
+    fun `sendPacketToTunnel throws when pipe descriptor missing`() = runTest {
+        val tunnelId = "missing_pipe_descriptor"
+        val client = MockOpenVpnClient()
+        client.connect("client\nremote test.com 1194\nproto udp", null)
+        manager.registerTestClient(tunnelId, client)
+
+        val pipe = createPipeHandle()
+        manager.getPrivateMap<Int>("pipeWriteFds")[tunnelId] = pipe.write.fd
+        manager.getPrivateMap<ParcelFileDescriptor>("pipeWritePfds").remove(tunnelId)
+
+        assertFailsWith<IllegalStateException> {
+            manager.sendPacketToTunnel(tunnelId, byteArrayOf(1, 2, 3))
+        }
+
+        pipe.read.close()
+        pipe.write.close()
+    }
+
+    private data class PipeHandle(
+        val read: ParcelFileDescriptor,
+        val write: ParcelFileDescriptor
+    )
+
+    private fun createPipeHandle(): PipeHandle {
+        val pipe = ParcelFileDescriptor.createPipe()
+        return PipeHandle(pipe[0], pipe[1])
+    }
+
+    private fun <T> VpnConnectionManager.getPrivateMap(fieldName: String): MutableMap<String, T> {
+        val field = VpnConnectionManager::class.java.getDeclaredField(fieldName)
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return field.get(this) as MutableMap<String, T>
     }
 }
 

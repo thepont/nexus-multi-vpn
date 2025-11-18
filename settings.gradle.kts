@@ -17,6 +17,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "MultiRegionVPN"
 include(":app")
+include(":diagnostic-client-uk")
+include(":diagnostic-client-fr")
+include(":diagnostic-client-direct")
 
 // VPN Protocol Support:
 // - WireGuard: Primary protocol (via wireguard-android library)
