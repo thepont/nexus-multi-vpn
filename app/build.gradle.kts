@@ -253,17 +253,9 @@ android {
         }
     }
     
-    // Configure connectedDebugAndroidTest dependencies early in the build lifecycle
-    // This ensures Gradle recognizes the dependency before validation
-    afterEvaluate {
-        tasks.matching { it.name.contains("connectedDebugAndroidTest") }.configureEach {
-            dependsOn(
-                project(":diagnostic-client-uk").tasks.named("packageDebug"),
-                project(":diagnostic-client-fr").tasks.named("packageDebug"),
-                project(":diagnostic-client-direct").tasks.named("packageDebug")
-            )
-        }
-    }
+    // Note: Diagnostic client APKs are built separately in CI scripts (run-instrumentation-tests.sh)
+    // The androidTestUtil declarations below reference the APK files directly
+    // No need for explicit task dependencies since we build them before running tests
     
     packaging {
         resources {
