@@ -253,6 +253,18 @@ android {
         }
     }
     
+    // Configure connectedDebugAndroidTest dependencies early in the build lifecycle
+    // This ensures Gradle recognizes the dependency before validation
+    afterEvaluate {
+        tasks.matching { it.name.contains("connectedDebugAndroidTest") }.configureEach {
+            dependsOn(
+                project(":diagnostic-client-uk").tasks.named("packageDebug"),
+                project(":diagnostic-client-fr").tasks.named("packageDebug"),
+                project(":diagnostic-client-direct").tasks.named("packageDebug")
+            )
+        }
+    }
+    
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -331,6 +343,7 @@ dependencies {
     // UI Automator for E2E Testing
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    // Note: Dependencies on packageDebug tasks are declared in afterEvaluate block below
     androidTestUtil(files("${rootDir}/diagnostic-client-uk/build/outputs/apk/debug/diagnostic-client-uk-debug.apk"))
     androidTestUtil(files("${rootDir}/diagnostic-client-fr/build/outputs/apk/debug/diagnostic-client-fr-debug.apk"))
     androidTestUtil(files("${rootDir}/diagnostic-client-direct/build/outputs/apk/debug/diagnostic-client-direct-debug.apk"))
@@ -372,14 +385,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-gradle.projectsEvaluated {
-    tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
-        // Explicitly depend on packageDebug tasks to satisfy Gradle's dependency validation
-        // The androidTestUtil() declarations above use these APK files, so we must declare the dependency
-        dependsOn(
-            ":diagnostic-client-uk:packageDebug",
-            ":diagnostic-client-fr:packageDebug",
-            ":diagnostic-client-direct:packageDebug"
-        )
-    }
-}
