@@ -127,7 +127,7 @@ jobs:
           echo "Building main app APK..."
           ./gradlew assembleDebug --stacktrace
           echo "Building diagnostic client APKs (required for instrumentation tests)..."
-          ./gradlew :diagnostic-client-uk:assembleDebug :diagnostic-client-fr:assembleDebug :diagnostic-client-direct:assembleDebug --stacktrace
+          ./gradlew :diagnostic-client-uk:assemble :diagnostic-client-fr:assemble :diagnostic-client-direct:assemble --stacktrace
 
       - name: Generate cache key
         id: cache-key
