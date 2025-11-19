@@ -2,6 +2,7 @@ package com.multiregionvpn
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -75,6 +76,12 @@ class NordVpnE2ETest {
     private val APP_PACKAGE_NAME = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.packageName
     private val UK_VPN_ID = "test-uk-${UUID.randomUUID().toString().take(8)}"
     private val FR_VPN_ID = "test-fr-${UUID.randomUUID().toString().take(8)}"
+    private val directRoutingDummyPackages = listOf(
+        "com.android.settings",
+        "com.android.chrome",
+        "com.google.android.youtube",
+        "com.android.systemui"
+    )
     
     // Real NordVPN server hostnames - these are actual servers that exist
     // Format: {country_code}{number}.nordvpn.com
@@ -307,65 +314,61 @@ class NordVpnE2ETest {
         println("🧪 TEST: Routing to Direct Internet (no rule)")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        // GIVEN: No rule exists for our test package (cleared in @Before)
-        // No app rule is created - should route to direct internet
+        // GIVEN: Our test packages have ZERO rules (direct), but we add a dummy app rule
+        //        to force VPN start while keeping the test app outside the allowed list.
+        val allowedPackage = ensureDirectTestAllowedPackage()
+        println("✓ Using $allowedPackage to force VPN start while test package remains direct")
+        settingsRepo.createAppRule(allowedPackage, UK_VPN_ID)
+        val disallowedPackages = setOf(TEST_PACKAGE_NAME, APP_PACKAGE_NAME)
         
-        // CRITICAL: In Global VPN mode (which is required for E2E tests because test packages
-        // can't be added via addAllowedApplication()), we can't have traffic bypass VPN.
-        // So this test verifies that when VPN is NOT started, traffic goes direct (baseline).
-        // This is still a valid test of the "direct internet" routing behavior.
+        VpnEngineService.setTestGlobalModeOverride(
+            VpnEngineService.TestGlobalModeOverride(
+                useGlobalMode = true,
+                disallowedPackages = disallowedPackages
+            )
+        )
         
-        // WHEN: The VPN service is NOT started (testing direct internet baseline)
-        // startVpnEngine()  // COMMENTED OUT - test verifies direct internet = no VPN
-        println("⏩ Skipping VPN startup - testing direct internet (VPN OFF)")
-
-        // DIAGNOSTICS: Check if service is running (it shouldn't be)
         try {
-            val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            val runningServices = am.getRunningServices(Int.MAX_VALUE)
-            val isVpnRunning = runningServices.any { it.service.className == VpnEngineService::class.java.name }
-            if (isVpnRunning) {
-                println("⚠️  WARNING: VpnEngineService IS running! This might interfere with direct internet test.")
-            } else {
-                println("✅ VpnEngineService is NOT running (as expected)")
+            // WHEN: VPN service starts (global mode) but test package is disallowed
+            startVpnEngine()
+            waitForInterfaceConfig(
+                expectedGlobalMode = true,
+                expectedDisallowed = disallowedPackages
+            )
+            println("⏳ Waiting 3 seconds for routing to stabilize with global mode disallow list...")
+            delay(3000)
+            
+            // THEN: Our IP should remain the baseline (direct internet) even though VPN is active
+            var vpnIpInfo = IpCheckService.api.getIpInfo()
+            if (vpnIpInfo.normalizedCountryCode != defaultCountry) {
+                println("⚠️  First IP check mismatch (${vpnIpInfo.normalizedCountryCode} != $defaultCountry). Retrying in 2s...")
+                delay(2000)
+                vpnIpInfo = IpCheckService.api.getIpInfo()
             }
-        } catch (e: Exception) {
-            println("⚠️  Could not check running services: ${e.message}")
+    
+            println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
+            println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
+            println("📍 Baseline Country: $defaultCountry")
+            
+            assertEquals(
+                "❌ Traffic was not routed directly! Expected $defaultCountry, got ${vpnIpInfo.normalizedCountryCode}",
+                defaultCountry,
+                vpnIpInfo.normalizedCountryCode
+            )
+            assertNotEquals(
+                "❌ Traffic was mistakenly routed to UK!",
+                "GB",
+                vpnIpInfo.normalizedCountryCode
+            )
+            assertNotEquals(
+                "❌ Traffic was mistakenly routed to FR!",
+                "FR",
+                vpnIpInfo.normalizedCountryCode
+            )
+            println("✅ TEST PASSED: Traffic successfully routed to Direct Internet while VPN active")
+        } finally {
+            VpnEngineService.setTestGlobalModeOverride(null)
         }
-
-        // THEN: Our IP should be the default, non-VPN IP
-        println("⏳ Waiting 5 seconds for network to stabilize...")
-        delay(5000) // Increased delay for stability
-        
-        var vpnIpInfo = IpCheckService.api.getIpInfo()
-        
-        // Retry logic for IP check
-        if (vpnIpInfo.normalizedCountryCode != defaultCountry) {
-            println("⚠️  IP check mismatch (${vpnIpInfo.normalizedCountryCode} != $defaultCountry). Retrying in 2s...")
-            delay(2000)
-            vpnIpInfo = IpCheckService.api.getIpInfo()
-        }
-
-        println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
-        println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
-        println("📍 Baseline Country: $defaultCountry")
-        
-        assertEquals(
-            "❌ Traffic was not routed directly! Expected $defaultCountry, got ${vpnIpInfo.normalizedCountryCode}",
-            defaultCountry,
-            vpnIpInfo.normalizedCountryCode
-        )
-        assertNotEquals(
-            "❌ Traffic was mistakenly routed to UK!",
-            "GB",
-            vpnIpInfo.normalizedCountryCode
-        )
-        assertNotEquals(
-            "❌ Traffic was mistakenly routed to FR!",
-            "FR",
-            vpnIpInfo.normalizedCountryCode
-        )
-        println("✅ TEST PASSED: Traffic successfully routed to Direct Internet")
     }
 
     @Test
@@ -527,6 +530,53 @@ class NordVpnE2ETest {
     }
     
     /**
+     * Finds an installed package we can safely add to the allowed list to force VPN start.
+     * This lets us keep the test package outside the VPN while still exercising split tunneling.
+     */
+    private fun ensureDirectTestAllowedPackage(): String {
+        val pm = appContext.packageManager
+        directRoutingDummyPackages.forEach { candidate ->
+            try {
+                pm.getApplicationInfo(candidate, 0)
+                return candidate
+            } catch (_: PackageManager.NameNotFoundException) {
+                println("⚠️  Candidate package not installed: $candidate")
+            } catch (e: Exception) {
+                println("⚠️  Error checking $candidate: ${e.message}")
+            }
+        }
+        throw AssertionError(
+            "❌ No suitable package installed for direct routing test. " +
+            "Tried: ${directRoutingDummyPackages.joinToString()}"
+        )
+    }
+
+    private suspend fun waitForInterfaceConfig(
+        expectedGlobalMode: Boolean,
+        expectedDisallowed: Set<String>,
+        timeoutMs: Long = 15_000L
+    ) {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            val config = VpnEngineService.getLastInterfaceConfig()
+            if (config != null) {
+                val matchesGlobal = config.useGlobalMode == expectedGlobalMode
+                val matchesDisallowed = expectedDisallowed.all { config.disallowedPackages.contains(it) }
+                if (matchesGlobal && matchesDisallowed) {
+                    println("   ✅ Verified VPN interface config: global=$matchesGlobal, disallowed=${config.disallowedPackages}")
+                    return
+                }
+            }
+            delay(250)
+        }
+        val lastConfig = VpnEngineService.getLastInterfaceConfig()
+        throw AssertionError(
+            "❌ VPN interface config did not match expected values within ${timeoutMs / 1000} seconds.\n" +
+            "Expected global=$expectedGlobalMode, disallowed=${expectedDisallowed.joinToString()}.\n" +
+            "Last config: $lastConfig"
+        )
+    }
+    
     /**
      * Starts the VPN engine by clicking the toggle in the UI and handling system dialogs.
      * Uses improved permission handling logic from VpnToggleTest.
@@ -822,6 +872,7 @@ class NordVpnE2ETest {
     fun teardown() = runBlocking {
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("🧹 Cleaning up...")
+        VpnEngineService.setTestGlobalModeOverride(null)
         
         // CRITICAL: Close VPN connections FIRST before stopping service
         // This prevents race conditions and multiple disconnects

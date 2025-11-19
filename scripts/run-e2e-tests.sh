@@ -217,9 +217,7 @@ run_tests() {
     log_info "Credentials: NORDVPN_USERNAME=${NORDVPN_USERNAME:0:3}***"
     
     if timeout 120 ./gradlew :app:connectedDebugAndroidTest \
-        "$TEST_ARG" \
-        -Pandroid.testInstrumentationRunnerArguments.NORDVPN_USERNAME="$NORDVPN_USERNAME" \
-        -Pandroid.testInstrumentationRunnerArguments.NORDVPN_PASSWORD="$NORDVPN_PASSWORD"; then
+        "$TEST_ARG"; then
         log_success "All tests passed!"
         return 0
     else
