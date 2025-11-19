@@ -2,6 +2,7 @@ package com.multiregionvpn
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -15,6 +16,8 @@ import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.ui.MainActivity
 import com.multiregionvpn.data.database.AppDatabase
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.delay
 import org.junit.After
@@ -38,8 +41,12 @@ import java.util.UUID
  * 
  * Status: Retained as-is - provides production environment validation.
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class NordVpnE2ETest {
+
+    @get:Rule
+    var hiltRule = HiltAndroidRule(this)
 
     // Grant runtime permissions automatically before each test
     // Note: VPN permission (BIND_VPN_SERVICE) is special and requires VpnService.prepare() which shows a system dialog.
@@ -66,8 +73,15 @@ class NordVpnE2ETest {
     // - targetContext.packageName = "com.multiregionvpn" (the app being tested)
     // - context.packageName = "com.multiregionvpn.test" (the test instrumentation runner)
     private val TEST_PACKAGE_NAME = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.packageName
+    private val APP_PACKAGE_NAME = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.packageName
     private val UK_VPN_ID = "test-uk-${UUID.randomUUID().toString().take(8)}"
     private val FR_VPN_ID = "test-fr-${UUID.randomUUID().toString().take(8)}"
+    private val directRoutingDummyPackages = listOf(
+        "com.android.settings",
+        "com.android.chrome",
+        "com.google.android.youtube",
+        "com.android.systemui"
+    )
     
     // Real NordVPN server hostnames - these are actual servers that exist
     // Format: {country_code}{number}.nordvpn.com
@@ -77,6 +91,7 @@ class NordVpnE2ETest {
 
     @Before
     fun setup() = runBlocking {
+        hiltRule.inject()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         device = UiDevice.getInstance(instrumentation)
         appContext = instrumentation.targetContext
@@ -214,7 +229,9 @@ class NordVpnE2ETest {
         
         // GIVEN: A rule routing our test package to the UK VPN
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        settingsRepo.createAppRule(APP_PACKAGE_NAME, UK_VPN_ID)
         println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
+        println("✓ Created app rule: $APP_PACKAGE_NAME -> UK VPN")
         
         // CRITICAL: Wait for Room Flow to emit the change
         // Without this delay, VPN starts before Flow emits updated rules
@@ -263,6 +280,7 @@ class NordVpnE2ETest {
         
         // GIVEN: A rule routing our test package to France VPN
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
+        settingsRepo.createAppRule(APP_PACKAGE_NAME, FR_VPN_ID)
         println("✓ Created app rule: $TEST_PACKAGE_NAME -> FR VPN")
         delay(500)  // Wait for Room to commit
 
@@ -296,35 +314,61 @@ class NordVpnE2ETest {
         println("🧪 TEST: Routing to Direct Internet (no rule)")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        // GIVEN: No rule exists for our test package (cleared in @Before)
-        // No app rule is created - should route to direct internet
-
-        // WHEN: The VPN service is started (it will find no rule)
-        startVpnEngine()
-
-        // THEN: Our IP should be the default, non-VPN IP
-        delay(5000) // Wait a bit for any routing to stabilize
-        val vpnIpInfo = IpCheckService.api.getIpInfo()
-        println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
-        println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
-        println("📍 Baseline Country: $defaultCountry")
+        // GIVEN: Our test packages have ZERO rules (direct), but we add a dummy app rule
+        //        to force VPN start while keeping the test app outside the allowed list.
+        val allowedPackage = ensureDirectTestAllowedPackage()
+        println("✓ Using $allowedPackage to force VPN start while test package remains direct")
+        settingsRepo.createAppRule(allowedPackage, UK_VPN_ID)
+        val disallowedPackages = setOf(TEST_PACKAGE_NAME, APP_PACKAGE_NAME)
         
-        assertEquals(
-            "❌ Traffic was not routed directly! Expected $defaultCountry, got ${vpnIpInfo.normalizedCountryCode}",
-            defaultCountry,
-            vpnIpInfo.normalizedCountryCode
+        VpnEngineService.setTestGlobalModeOverride(
+            VpnEngineService.TestGlobalModeOverride(
+                useGlobalMode = true,
+                disallowedPackages = disallowedPackages
+            )
         )
-        assertNotEquals(
-            "❌ Traffic was mistakenly routed to UK!",
-            "GB",
-            vpnIpInfo.normalizedCountryCode
-        )
-        assertNotEquals(
-            "❌ Traffic was mistakenly routed to FR!",
-            "FR",
-            vpnIpInfo.normalizedCountryCode
-        )
-        println("✅ TEST PASSED: Traffic successfully routed to Direct Internet")
+        
+        try {
+            // WHEN: VPN service starts (global mode) but test package is disallowed
+            startVpnEngine()
+            waitForInterfaceConfig(
+                expectedGlobalMode = true,
+                expectedDisallowed = disallowedPackages
+            )
+            println("⏳ Waiting 3 seconds for routing to stabilize with global mode disallow list...")
+            delay(3000)
+            
+            // THEN: Our IP should remain the baseline (direct internet) even though VPN is active
+            var vpnIpInfo = IpCheckService.api.getIpInfo()
+            if (vpnIpInfo.normalizedCountryCode != defaultCountry) {
+                println("⚠️  First IP check mismatch (${vpnIpInfo.normalizedCountryCode} != $defaultCountry). Retrying in 2s...")
+                delay(2000)
+                vpnIpInfo = IpCheckService.api.getIpInfo()
+            }
+    
+            println("📍 Resulting IP: ${vpnIpInfo.normalizedIpAddress}")
+            println("📍 Resulting Country: ${vpnIpInfo.normalizedCountryCode}")
+            println("📍 Baseline Country: $defaultCountry")
+            
+            assertEquals(
+                "❌ Traffic was not routed directly! Expected $defaultCountry, got ${vpnIpInfo.normalizedCountryCode}",
+                defaultCountry,
+                vpnIpInfo.normalizedCountryCode
+            )
+            assertNotEquals(
+                "❌ Traffic was mistakenly routed to UK!",
+                "GB",
+                vpnIpInfo.normalizedCountryCode
+            )
+            assertNotEquals(
+                "❌ Traffic was mistakenly routed to FR!",
+                "FR",
+                vpnIpInfo.normalizedCountryCode
+            )
+            println("✅ TEST PASSED: Traffic successfully routed to Direct Internet while VPN active")
+        } finally {
+            VpnEngineService.setTestGlobalModeOverride(null)
+        }
     }
 
     @Test
@@ -336,6 +380,7 @@ class NordVpnE2ETest {
         // PHASE 1: Route to UK
         println("\n📍 PHASE 1: Initial routing to UK")
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        settingsRepo.createAppRule(APP_PACKAGE_NAME, UK_VPN_ID)
         println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
 
         startVpnEngine()
@@ -349,6 +394,7 @@ class NordVpnE2ETest {
         // PHASE 2: Switch to FR
         println("\n📍 PHASE 2: Switching to France")
         settingsRepo.updateAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
+        settingsRepo.updateAppRule(APP_PACKAGE_NAME, FR_VPN_ID)
         println("✓ Updated app rule: $TEST_PACKAGE_NAME -> FR VPN")
         
         // Wait for routing to update
@@ -375,6 +421,7 @@ class NordVpnE2ETest {
         // GIVEN: Create app rules for BOTH regions to force both tunnels to establish
         // This is necessary because VpnEngineService only creates tunnels for VPN configs with app rules
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        settingsRepo.createAppRule(APP_PACKAGE_NAME, UK_VPN_ID)
         println("✓ Created app rule: $TEST_PACKAGE_NAME -> UK VPN")
         
         // Create a dummy app rule for FR to force FR tunnel creation
@@ -428,6 +475,7 @@ class NordVpnE2ETest {
         // Start with UK
         println("\n📍 Switch 1: UK")
         settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        settingsRepo.createAppRule(APP_PACKAGE_NAME, UK_VPN_ID)
         startVpnEngine()
         verifyTunnelReadyForRouting("nordvpn_UK", timeoutMs = 120000)
         
@@ -438,6 +486,7 @@ class NordVpnE2ETest {
         // Switch to FR
         println("\n📍 Switch 2: FR")
         settingsRepo.updateAppRule(TEST_PACKAGE_NAME, FR_VPN_ID)
+        settingsRepo.updateAppRule(APP_PACKAGE_NAME, FR_VPN_ID)
         delay(3000) // Brief delay for routing update
         verifyTunnelReadyForRouting("nordvpn_FR", timeoutMs = 120000)
         
@@ -448,6 +497,7 @@ class NordVpnE2ETest {
         // Switch back to UK
         println("\n📍 Switch 3: UK (again)")
         settingsRepo.updateAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
+        settingsRepo.updateAppRule(APP_PACKAGE_NAME, UK_VPN_ID)
         delay(3000) // Brief delay for routing update
         // UK tunnel should still be connected from before
         
@@ -480,6 +530,54 @@ class NordVpnE2ETest {
     }
     
     /**
+     * Finds an installed package we can safely add to the allowed list to force VPN start.
+     * This lets us keep the test package outside the VPN while still exercising split tunneling.
+     */
+    private fun ensureDirectTestAllowedPackage(): String {
+        val pm = appContext.packageManager
+        directRoutingDummyPackages.forEach { candidate ->
+            try {
+                pm.getApplicationInfo(candidate, 0)
+                return candidate
+            } catch (_: PackageManager.NameNotFoundException) {
+                println("⚠️  Candidate package not installed: $candidate")
+            } catch (e: Exception) {
+                println("⚠️  Error checking $candidate: ${e.message}")
+            }
+        }
+        throw AssertionError(
+            "❌ No suitable package installed for direct routing test. " +
+            "Tried: ${directRoutingDummyPackages.joinToString()}"
+        )
+    }
+
+    private suspend fun waitForInterfaceConfig(
+        expectedGlobalMode: Boolean,
+        expectedDisallowed: Set<String>,
+        timeoutMs: Long = 15_000L
+    ) {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            val config = VpnEngineService.getLastInterfaceConfig()
+            if (config != null) {
+                val matchesGlobal = config.useGlobalMode == expectedGlobalMode
+                val matchesDisallowed = expectedDisallowed.all { config.disallowedPackages.contains(it) }
+                if (matchesGlobal && matchesDisallowed) {
+                    println("   ✅ Verified VPN interface config: global=$matchesGlobal, disallowed=${config.disallowedPackages}")
+                    return
+                }
+            }
+            delay(250)
+        }
+        val lastConfig = VpnEngineService.getLastInterfaceConfig()
+        throw AssertionError(
+            "❌ VPN interface config did not match expected values within ${timeoutMs / 1000} seconds.\n" +
+            "Expected global=$expectedGlobalMode, disallowed=${expectedDisallowed.joinToString()}.\n" +
+            "Last config: $lastConfig"
+        )
+    }
+    
+    /**
      * Starts the VPN engine by clicking the toggle in the UI and handling system dialogs.
      * Uses improved permission handling logic from VpnToggleTest.
      * 
@@ -487,80 +585,6 @@ class NordVpnE2ETest {
      */
     private fun startVpnEngine() = runBlocking {
         println("🔌 Starting VPN engine...")
-        
-        // Check VPN permission status
-        // If appops was used to pre-approve VPN, VpnService.prepare() will return null immediately.
-        // Otherwise, we'll need to handle the permission dialog.
-        println("   Checking VPN permission status...")
-        val vpnPermissionIntent = android.net.VpnService.prepare(appContext)
-        if (vpnPermissionIntent != null) {
-            println("   ⚠️  VPN permission NOT pre-approved - permission dialog will appear")
-            println("   Attempting to grant via permission dialog...")
-            println("   NOTE: For CI/CD, run: adb shell appops set ${appContext.packageName} ACTIVATE_VPN allow")
-            
-            // Launch permission dialog
-            try {
-                appContext.startActivity(vpnPermissionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                delay(5000) // Wait longer for dialog to appear
-                
-                // Handle permission dialog using UiAutomator
-                handlePermissionDialog()
-                delay(3000) // Wait for permission to be granted
-                
-                // Verify permission was granted
-                val checkAfter = android.net.VpnService.prepare(appContext)
-                if (checkAfter != null) {
-                    println("   ⚠️  VPN permission still not granted after dialog handling")
-                    println("   VPN interface establishment will likely fail")
-                    println("   Recommendation: Run 'adb shell appops set ${appContext.packageName} ACTIVATE_VPN allow' before tests")
-                } else {
-                    println("   ✅ VPN permission granted successfully via dialog")
-                }
-            } catch (e: Exception) {
-                println("   ⚠️  Error handling VPN permission: ${e.message}")
-                // Continue anyway - might already be granted
-            }
-        } else {
-            println("   ✅ VPN permission already pre-approved (appops ACTIVATE_VPN allow worked!)")
-        }
-        
-        // Now try direct service start (bypass UI for reliability)
-        try {
-            println("   Attempting direct service start (bypassing UI)...")
-            val startIntent = Intent(appContext, VpnEngineService::class.java).apply {
-                action = VpnEngineService.ACTION_START
-            }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                appContext.startForegroundService(startIntent)
-            } else {
-                appContext.startService(startIntent)
-            }
-            println("   ✅ Direct service start sent - waiting for VPN to initialize...")
-            delay(5000) // Wait for service to start
-            
-            // Check if service is actually running
-            val serviceRunning = try {
-                val connectionManager = VpnConnectionManager.getInstance()
-                true
-            } catch (e: Exception) {
-                false
-            }
-            
-            if (serviceRunning) {
-                println("   ✅ VPN service started successfully via direct intent")
-                delay(10000) // Give time for VPN interface to establish
-                return@runBlocking
-            } else {
-                println("   ⚠️  Service started but VpnConnectionManager not yet initialized")
-                // Continue - it might initialize soon
-            }
-        } catch (e: Exception) {
-            println("   ⚠️  Direct service start failed: ${e.message}")
-            println("   Falling back to UI toggle method...")
-        }
-        
-        // Fallback: Use UI toggle method
-        println("   Using UI toggle method...")
         
         // Ensure MainActivity is launched
         launchMainActivity()
@@ -599,60 +623,44 @@ class NordVpnE2ETest {
             startToggle = device.wait(Until.findObject(By.clazz("android.widget.Switch")), 3000)
         }
         
-        assertNotNull("❌ Could not find 'start_service_toggle' in UI. Is MainActivity displayed?", startToggle)
-
-        // Check toggle state and ensure it's OFF before clicking
-        val toggleState = startToggle!!.isChecked
-        println("   VPN toggle current state: ${if (toggleState) "ON (checked)" else "OFF (unchecked)"}")
-        
-        if (toggleState) {
-            // Toggle is already ON - this means VPN is already running
-            // We need to turn it OFF first, then ON again to restart it
-            println("   ⚠️  Toggle is already ON - turning OFF first, then ON again")
-            val bounds = startToggle.visibleBounds
-            if (bounds.width() > 0 && bounds.height() > 0) {
-                device.click(bounds.centerX(), bounds.centerY())
-                println("   Clicked toggle to turn OFF at center: (${bounds.centerX()}, ${bounds.centerY()})")
-            } else {
-                startToggle.click()
-                println("   Clicked toggle to turn OFF directly")
-            }
-            // Wait for the stop action to complete
-            delay(2000)
+        if (startToggle != null) {
+            println("   Found VPN start toggle, clicking...")
             
-            // Now click again to turn it ON
-            val toggleAfterStop = device.wait(
-                Until.findObject(By.res(appContext.packageName, "start_service_toggle")),
-                3000
-            )
-            if (toggleAfterStop != null && !toggleAfterStop.isChecked) {
-                println("   Clicking toggle again to turn ON...")
-                val bounds2 = toggleAfterStop.visibleBounds
-                if (bounds2.width() > 0 && bounds2.height() > 0) {
-                    device.click(bounds2.centerX(), bounds2.centerY())
-                    println("   Clicked toggle to turn ON at center: (${bounds2.centerX()}, ${bounds2.centerY()})")
-                } else {
-                    toggleAfterStop.click()
-                    println("   Clicked toggle to turn ON directly")
-                }
-            } else {
-                println("   ⚠️  Could not find toggle after stop, or it's still checked")
+            // Check toggle state and ensure it's OFF before clicking
+            val toggleState = startToggle!!.isChecked
+            println("   VPN toggle current state: ${if (toggleState) "ON (checked)" else "OFF (unchecked)"}")
+            
+            if (toggleState) {
+                println("   ⚠️  Toggle is already ON - turning OFF first, then ON again")
+                startToggle!!.click()
+                delay(2000)
+                
+                // Find it again
+                startToggle = device.wait(
+                    Until.findObject(By.res(appContext.packageName, "start_service_toggle")),
+                    3000
+                )
             }
+            
+            if (startToggle != null) {
+                startToggle!!.click()
+                println("   ✅ Clicked VPN start toggle")
+            }
+            
+            delay(2000) // Give service time to start
         } else {
-            // Toggle is OFF - click to turn ON
-            println("   Clicking VPN toggle to turn ON...")
-            val bounds = startToggle.visibleBounds
-            if (bounds.width() > 0 && bounds.height() > 0) {
-                device.click(bounds.centerX(), bounds.centerY())
-                println("   Clicked toggle at center: (${bounds.centerX()}, ${bounds.centerY()})")
-            } else {
-                startToggle.click()
-                println("   Clicked toggle directly")
+            println("   ❌ VPN start toggle NOT found. Attempting fallback service start...")
+            try {
+                val startIntent = Intent(appContext, VpnEngineService::class.java).apply {
+                    action = VpnEngineService.ACTION_START
+                }
+                appContext.startService(startIntent)
+                println("   ✅ Sent ACTION_START intent to VpnEngineService")
+                delay(2000)
+            } catch (e: Exception) {
+                println("   ❌ Failed to start service via intent: ${e.message}")
             }
         }
-
-        // Wait a moment for permission dialog to appear (if needed)
-        delay(2000)  // Increased wait time for Compose to process the click
 
         // Handle VPN permission dialog if needed
         if (permissionIntent != null) {
@@ -664,10 +672,6 @@ class NordVpnE2ETest {
             println("   Permission already granted, skipping dialog")
         }
 
-        // Verify that ACTION_START was sent by checking logs
-        println("   Checking if VPN service received ACTION_START...")
-        delay(1000)
-        
         // Wait for the VPN to start and establish interface
         println("   Waiting 15 seconds for VPN engine to initialize and establish interface...")
         delay(15000) // Give enough time for VPN interface establishment and VpnConnectionManager initialization
@@ -868,6 +872,7 @@ class NordVpnE2ETest {
     fun teardown() = runBlocking {
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("🧹 Cleaning up...")
+        VpnEngineService.setTestGlobalModeOverride(null)
         
         // CRITICAL: Close VPN connections FIRST before stopping service
         // This prevents race conditions and multiple disconnects

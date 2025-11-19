@@ -41,6 +41,9 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 // Add the pre-seeding callback
                 .addCallback(PresetRuleCallback(context))
+                // Allow destructive migration for tests (drops and recreates DB on version mismatch)
+                // This is safe for tests and handles cases where DB version changed
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

@@ -234,6 +234,40 @@ android {
                 "--add-opens=java.base/java.util=ALL-UNNAMED",
                 "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
             )
+            
+            // Prevent tests from running in parallel to reduce resource contention
+            // This helps avoid deadlocks and race conditions in CI
+            it.maxParallelForks = 1
+            
+            // Enable fail-fast: stop on first test failure to provide quicker feedback
+            it.failFast = true
+            
+            // Configure test logging for better visibility
+            it.testLogging {
+                events("passed", "skipped", "failed", "standardOut", "standardError")
+                showExceptions = true
+                showCauses = true
+                showStackTraces = true
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+        }
+    }
+    
+    // Configure connectedDebugAndroidTest dependencies
+    // Diagnostic client APKs are built separately in CI scripts, but Gradle needs explicit dependencies
+    // to satisfy validation. We use evaluationDependsOn to ensure projects are evaluated, then declare dependencies.
+    afterEvaluate {
+        // Ensure diagnostic client projects are evaluated
+        evaluationDependsOn(":diagnostic-client-uk")
+        evaluationDependsOn(":diagnostic-client-fr")
+        evaluationDependsOn(":diagnostic-client-direct")
+        
+        tasks.matching { it.name.contains("connectedDebugAndroidTest") }.configureEach {
+            dependsOn(
+                project(":diagnostic-client-uk").tasks.named("packageDebug"),
+                project(":diagnostic-client-fr").tasks.named("packageDebug"),
+                project(":diagnostic-client-direct").tasks.named("packageDebug")
+            )
         }
     }
     
@@ -315,6 +349,7 @@ dependencies {
     // UI Automator for E2E Testing
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    // Note: Dependencies on packageDebug tasks are declared in afterEvaluate block below
     androidTestUtil(files("${rootDir}/diagnostic-client-uk/build/outputs/apk/debug/diagnostic-client-uk-debug.apk"))
     androidTestUtil(files("${rootDir}/diagnostic-client-fr/build/outputs/apk/debug/diagnostic-client-fr-debug.apk"))
     androidTestUtil(files("${rootDir}/diagnostic-client-direct/build/outputs/apk/debug/diagnostic-client-direct-debug.apk"))
@@ -356,12 +391,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-gradle.projectsEvaluated {
-    tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
-        dependsOn(
-            ":diagnostic-client-uk:assembleDebug",
-            ":diagnostic-client-fr:assembleDebug",
-            ":diagnostic-client-direct:assembleDebug"
-        )
-    }
-}

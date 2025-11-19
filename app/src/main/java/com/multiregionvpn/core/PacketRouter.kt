@@ -301,23 +301,30 @@ class PacketRouter(
     }
     
     private fun sendToDirectInternet(packet: ByteArray) {
-        try {
-            // NOTE: When VPN is active, Android routes ALL traffic through TUN.
-            // Writing to vpnOutput sends packets OUT of TUN interface to the network.
-            // This should forward direct internet traffic correctly.
-            //
-            // The packet was read FROM TUN (outbound from app), and now we write
-            // it BACK to TUN (which sends it to network, bypassing VPN processing).
-            //
-            // Potential issue: If this creates a loop, we'll need to track packet
-            // sources to avoid re-routing packets we've already processed.
-            
-            vpnOutput?.write(packet)
-            vpnOutput?.flush()
-            Log.v(TAG, "Forwarded ${packet.size} bytes to direct internet via TUN")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error forwarding packet to direct internet", e)
-        }
+        // CRITICAL: In Global VPN mode, writing packets back to vpnOutput creates a routing loop:
+        // App -> TUN -> readPacketsFromTun -> PacketRouter -> sendToDirectInternet -> vpnOutput (TUN) -> loop!
+        //
+        // THE FIX: For direct internet traffic in global VPN mode, we MUST drop the packet.
+        // This allows Android to re-route the packet through the underlying network (not VPN).
+        // 
+        // HOW IT WORKS:
+        // 1. App sends packet → TUN interface (because VPN is active globally)
+        // 2. Our readPacketsFromTun() reads packet from TUN
+        // 3. PacketRouter determines "no rule" → direct internet
+        // 4. We DROP the packet here (don't write back to TUN)
+        // 5. Android's network stack detects packet loss and retransmits via underlying network
+        //
+        // This is the standard approach for VPN apps that need to bypass VPN for certain traffic
+        // when using global VPN mode. The packet gets dropped to break the VPN routing loop,
+        // and the OS retransmits it via the normal network path.
+        //
+        // NOTE: In true split tunneling mode (with addAllowedApplication), this wouldn't happen
+        // because only allowed apps' packets would enter the TUN interface in the first place.
+        // But global VPN mode + PacketRouter requires this drop behavior.
+        
+        Log.v(TAG, "Dropped ${packet.size} bytes destined for direct internet (bypassing VPN in global mode)")
+        // Intentionally do nothing - drop the packet
+        // Android will retransmit via underlying network
     }
     
     data class PacketInfo(

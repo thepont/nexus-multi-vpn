@@ -65,6 +65,17 @@ class VpnEngineService : VpnService() {
         val tunnelId: String,
         val dnsServers: List<String>  // DNS server IP addresses from OpenVPN DHCP
     )
+
+    data class TestGlobalModeOverride(
+        val useGlobalMode: Boolean,
+        val disallowedPackages: Set<String>
+    )
+
+    data class InterfaceConfig(
+        val useGlobalMode: Boolean,
+        val allowedPackages: Set<String>,
+        val disallowedPackages: Set<String>
+    )
     
     private val tunnelIps = mutableMapOf<String, TunnelIpAddress>()  // tunnelId -> IP address
     private val tunnelDnsServers = mutableMapOf<String, TunnelDnsServers>()  // tunnelId -> DNS servers
@@ -428,10 +439,9 @@ class VpnEngineService : VpnService() {
      * If packagesWithRules is empty, the interface is NOT established (proper split tunneling).
      */
     private fun establishVpnInterface(packagesWithRules: List<String>) {
-        // TEMPORARY: Use global VPN mode to fix test failures
-        // Test packages bypass split tunneling due to Android framework limitation
-        // All traffic enters VPN, PacketRouter handles per-app routing
-        val useGlobalMode = true  // TODO: Set to false once we can test with production apps
+        val testOverride = testGlobalModeOverride
+        val useGlobalMode = testOverride?.useGlobalMode ?: false
+        val disallowedPackages = testOverride?.disallowedPackages ?: emptySet()
         
         if (packagesWithRules.isEmpty() && !useGlobalMode) {
             Log.w(TAG, "⚠️  No app rules found - NOT establishing VPN interface")
@@ -445,8 +455,8 @@ class VpnEngineService : VpnService() {
         }
         
         if (useGlobalMode) {
-            Log.i(TAG, "🌐 USING GLOBAL VPN MODE (for E2E test compatibility)")
-            Log.i(TAG, "   All traffic enters VPN interface")
+            Log.i(TAG, "🌐 USING GLOBAL VPN MODE (test override enabled)")
+            Log.i(TAG, "   All traffic enters VPN interface except explicitly disallowed packages")
             Log.i(TAG, "   PacketRouter handles per-app routing to correct tunnels")
         }
         
@@ -500,19 +510,28 @@ class VpnEngineService : VpnService() {
             packagesWithRules.forEach { packageName ->
                 try {
                     builder.addAllowedApplication(packageName)
-                    Log.i(TAG, "   ✅ ALLOWED: $packageName")
+                    Log.i(TAG, "   + Allowed: $packageName")
                 } catch (e: Exception) {
-                    Log.e(TAG, "   ❌ FAILED to allow $packageName: ${e.message}")
+                    Log.e(TAG, "   ❌ Failed to allow package: $packageName", e)
                 }
             }
             Log.i(TAG, "✅ Split tunneling configured: ${packagesWithRules.size} app(s) use VPN")
             Log.i(TAG, "   Apps WITHOUT rules bypass VPN entirely (normal internet)")
         } else {
-            // GLOBAL VPN MODE: All traffic enters VPN
-            // PacketRouter will handle routing to correct tunnels
-            Log.i(TAG, "🌐 Global VPN mode: ALL traffic will enter VPN interface")
-            Log.i(TAG, "   No split tunneling at OS level")
-            Log.i(TAG, "   PacketRouter handles all routing decisions")
+            // GLOBAL VPN MODE with optional disallowed packages (test-only override)
+            if (disallowedPackages.isNotEmpty()) {
+                Log.i(TAG, "🚫 Disallowing ${disallowedPackages.size} package(s) from VPN:")
+                disallowedPackages.forEach { packageName ->
+                    try {
+                        builder.addDisallowedApplication(packageName)
+                        Log.i(TAG, "   - Disallowed: $packageName")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "   ❌ Failed to disallow package: $packageName", e)
+                    }
+                }
+            } else {
+                Log.w(TAG, "⚠️  No disallowed packages supplied - ALL apps will be routed through VPN")
+            }
         }
         
         // CRITICAL: We need routes for traffic to go through VPN, but adding them
@@ -617,7 +636,12 @@ class VpnEngineService : VpnService() {
             return
         }
         
-        Log.i(TAG, "✅ VPN interface established with split tunneling")
+        lastInterfaceConfig = InterfaceConfig(
+            useGlobalMode = useGlobalMode,
+            allowedPackages = if (!useGlobalMode) packagesWithRules.toSet() else emptySet(),
+            disallowedPackages = if (useGlobalMode) disallowedPackages else emptySet()
+        )
+        Log.i(TAG, "✅ VPN interface established with ${if (useGlobalMode) "global mode" else "split tunneling"}")
     }
     
     /**
@@ -1503,6 +1527,12 @@ class VpnEngineService : VpnService() {
         const val EXTRA_ERROR_TIMESTAMP = "error_timestamp"
 
         @Volatile
+        private var testGlobalModeOverride: TestGlobalModeOverride? = null
+
+        @Volatile
+        private var lastInterfaceConfig: InterfaceConfig? = null
+
+        @Volatile
         private var runningInstance: VpnEngineService? = null
 
         /** Used by HTTP clients to call protect() on sockets. */
@@ -1514,5 +1544,15 @@ class VpnEngineService : VpnService() {
         fun getConnectionTrackerSnapshot(): Map<String, String> {
             return runningInstance?.connectionTracker?.getCurrentPackageMappings() ?: emptyMap()
         }
+
+        @JvmStatic
+        fun setTestGlobalModeOverride(config: TestGlobalModeOverride?) {
+            testGlobalModeOverride = config
+            Log.i(TAG, "Test global mode override set to $config")
+        }
+
+        @JvmStatic
+        fun getLastInterfaceConfig(): InterfaceConfig? = lastInterfaceConfig
+
     }
 }

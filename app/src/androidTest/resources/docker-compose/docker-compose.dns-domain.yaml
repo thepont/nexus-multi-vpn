@@ -26,7 +26,7 @@ services:
     ports:
       - "1199:1194/udp"  # Different port for DNS domain test
     volumes:
-      - ../../../../openvpn-dns-domain:/etc/openvpn
+      - ../../../../../openvpn-dns-domain:/etc/openvpn
     networks:
       vpn-dns-domain:
     command: >
@@ -53,7 +53,7 @@ services:
       vpn-dns-domain:
         ipv4_address: 10.5.0.10  # Accessible via DNS as test.example.com
     volumes:
-      - ../../../../http-dns-domain:/usr/share/nginx/html:ro
+      - ../../../../../http-dns-domain:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
     depends_on:
       - dns-server

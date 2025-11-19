@@ -26,7 +26,7 @@ services:
     ports:
       - "1196:1194/udp"
     volumes:
-      - ../../../../openvpn-dns:/etc/openvpn
+      - ../../../../../openvpn-dns:/etc/openvpn
     networks:
       vpn-dns:
         ipv4_address: 10.3.0.1
@@ -54,7 +54,7 @@ services:
       vpn-dns:
         ipv4_address: 10.3.0.10
     volumes:
-      - ../../../../http-dns:/usr/share/nginx/html:ro
+      - ../../../../../http-dns:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
 
 networks:

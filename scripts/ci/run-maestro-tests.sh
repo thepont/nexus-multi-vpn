@@ -31,15 +31,119 @@ fi
 echo "Settling emulator for 20s..."
 sleep 20
 
+# Additional wait and ADB connection verification
+echo "Verifying ADB connection stability..."
+for i in $(seq 1 10); do
+  if adb -s emulator-5554 shell echo "test" >/dev/null 2>&1; then
+    echo "ADB connection verified (attempt $i/10)"
+    break
+  fi
+  if [ $i -eq 10 ]; then
+    echo "⚠️  ADB connection verification failed after 10 attempts"
+  fi
+  sleep 1
+done
+
+# Wait additional time for emulator to fully stabilize
+echo "Waiting additional 10s for emulator to fully stabilize..."
+sleep 10
+
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
+
+# Verify app is installed and ready
+echo "Verifying app installation..."
+if ! adb -s emulator-5554 shell pm list packages | grep -q "com.multiregionvpn"; then
+  echo "⚠️  App not found in package list, but continuing..."
+fi
+
+# Additional wait before starting Maestro
+echo "Final wait before Maestro tests (5s)..."
+sleep 5
+
+# Start the app to ensure it's ready for Maestro
+echo "Starting the app to ensure it's ready..."
+adb -s emulator-5554 shell am start -n com.multiregionvpn/.ui.MainActivity || echo "⚠️  Could not start app (may already be running)"
+sleep 3
+
+# Ensure ADB is in a good state - restart if needed
+echo "Ensuring ADB is ready..."
+adb -s emulator-5554 root || echo "⚠️  Could not restart ADB as root"
+sleep 2
+adb -s emulator-5554 wait-for-device || true
+
+# Verify ADB connection one more time
+if ! adb -s emulator-5554 shell echo "ready" >/dev/null 2>&1; then
+  echo "⚠️  ADB connection not stable, restarting ADB server..."
+  adb kill-server || true
+  sleep 2
+  adb start-server || true
+  adb wait-for-device || true
+fi
+
+# Try to enable ADB over TCP for better reliability
+echo "Checking ADB connection method..."
+adb -s emulator-5554 tcpip 5555 || echo "⚠️  Could not enable TCP/IP mode"
+
+# Additional wait to ensure everything is stable
+echo "Final stabilization wait (10s)..."
+sleep 10
+
+# Verify app is still running
+if ! adb -s emulator-5554 shell pidof com.multiregionvpn >/dev/null 2>&1; then
+  echo "App not running, restarting..."
+  adb -s emulator-5554 shell am start -n com.multiregionvpn/.ui.MainActivity || true
+  sleep 3
+fi
 
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
-maestro test .maestro/*.yaml
-EXIT_CODE=$?
+
+# Try to start dadb service manually to help Maestro connect
+echo "Attempting to start dadb service for Maestro..."
+adb -s emulator-5554 shell "setprop persist.vendor.dadb.enable 1" 2>/dev/null || true
+adb -s emulator-5554 shell "setprop ro.adb.secure 0" 2>/dev/null || true
+
+# Wait a bit for dadb to potentially initialize
+sleep 5
+
+# Verify ADB is still working after property changes
+if ! adb -s emulator-5554 shell echo "dadb-check" >/dev/null 2>&1; then
+  echo "⚠️  ADB connection lost after property changes, restarting..."
+  adb kill-server || true
+  sleep 2
+  adb start-server || true
+  adb wait-for-device || true
+fi
+
+# Set Maestro environment variables for better timeout handling
+export MAESTRO_DRIVER="adb"
+export MAESTRO_ANDROID_DRIVER="adb"
+# Increase timeout significantly for dadb connection
+export MAESTRO_ANDROID_DRIVER_TIMEOUT=300
+export MAESTRO_DRIVER_TIMEOUT=300
+
+# Try using explicit device flag first, fallback to default if not supported
+if maestro test --help 2>&1 | grep -q "\-\-device"; then
+  echo "Using --device flag..."
+  maestro test --device emulator-5554 .maestro/*.yaml
+  EXIT_CODE=$?
+else
+  echo "Using default Maestro test command..."
+  maestro test .maestro/*.yaml
+  EXIT_CODE=$?
+fi
+
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
-  sleep 5
+  sleep 10
+  # On retry, ensure ADB is still working
+  adb -s emulator-5554 shell echo "retry-check" >/dev/null 2>&1 || {
+    echo "⚠️  ADB connection lost, restarting..."
+    adb kill-server || true
+    sleep 2
+    adb start-server || true
+    adb wait-for-device || true
+  }
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
 fi

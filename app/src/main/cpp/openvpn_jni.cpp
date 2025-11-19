@@ -7,6 +7,7 @@
 #include <errno.h>     // For errno
 #include <cstring>     // For strerror()
 #include <map>         // For std::map
+#include <set>         // For std::set
 #include <mutex>       // For std::mutex
 #include "openvpn_wrapper.h"
 
@@ -21,6 +22,11 @@ static JavaVM* g_javaVM = nullptr;
 // Used to retrieve session objects for app FD access
 static std::map<std::string, OpenVpnSession*> sessions;
 static std::mutex sessions_mutex;
+
+// Global set of valid session pointers
+// Used to validate session handles passed from Java to prevent use-after-free
+static std::set<OpenVpnSession*> valid_sessions;
+static std::mutex valid_sessions_mutex;
 
 #define LOG_TAG "OpenVPN-JNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -141,6 +147,12 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
         return 0;
     }
     
+    // Register session as valid
+    {
+        std::lock_guard<std::mutex> lock(valid_sessions_mutex);
+        valid_sessions.insert(session);
+    }
+    
     // Set Android-specific parameters (VpnService.Builder, TUN FD, and VpnService instance)
     openvpn_wrapper_set_android_params(session, env, vpnBuilder, tunFd, vpnService);
     
@@ -164,6 +176,13 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
     if (result != 0) {
         const char* errorMsg = openvpn_wrapper_get_last_error(session);
         LOGE("Failed to connect, error code: %d, error: %s", result, errorMsg ? errorMsg : "Unknown error");
+        
+        // Remove from valid sessions
+        {
+            std::lock_guard<std::mutex> lock(valid_sessions_mutex);
+            valid_sessions.erase(session);
+        }
+        
         openvpn_wrapper_destroy_session(session);
         return 0;
     }
@@ -184,6 +203,31 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeDisconnect(
     }
     
     OpenVpnSession* session = reinterpret_cast<OpenVpnSession*>(sessionHandle);
+    
+    // 1. Validate session and remove from valid_sessions
+    {
+        std::lock_guard<std::mutex> lock(valid_sessions_mutex);
+        if (valid_sessions.find(session) == valid_sessions.end()) {
+            LOGE("nativeDisconnect: Invalid or already destroyed session handle");
+            return;
+        }
+        valid_sessions.erase(session);
+    }
+    
+    // 2. Remove from global sessions map (to prevent nativeOnNetworkChanged from using it)
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        for (auto it = sessions.begin(); it != sessions.end(); ) {
+            if (it->second == session) {
+                LOGI("Removing session for tunnel %s from global map", it->first.c_str());
+                it = sessions.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    
+    // 3. Proceed with destruction
     openvpn_wrapper_disconnect(session);
     openvpn_wrapper_destroy_session(session);
 }
@@ -214,7 +258,17 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeSendPacket(
     }
     
     OpenVpnSession* session = reinterpret_cast<OpenVpnSession*>(sessionHandle);
-    int result = openvpn_wrapper_send_packet(session, (const uint8_t*)bytes, len);
+    int result = -1;
+    
+    // Validate session and call wrapper while holding lock
+    {
+        std::lock_guard<std::mutex> lock(valid_sessions_mutex);
+        if (valid_sessions.find(session) != valid_sessions.end()) {
+            result = openvpn_wrapper_send_packet(session, (const uint8_t*)bytes, len);
+        } else {
+            LOGE("nativeSendPacket: Invalid session handle");
+        }
+    }
     
     env->ReleaseByteArrayElements(packet, bytes, JNI_ABORT);
     
@@ -232,8 +286,18 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeReceivePacket(
     OpenVpnSession* session = reinterpret_cast<OpenVpnSession*>(sessionHandle);
     uint8_t* packet = nullptr;
     size_t len = 0;
+    int result = 0;
     
-    int result = openvpn_wrapper_receive_packet(session, &packet, &len);
+    // Validate session and call wrapper while holding lock
+    {
+        std::lock_guard<std::mutex> lock(valid_sessions_mutex);
+        if (valid_sessions.find(session) != valid_sessions.end()) {
+            result = openvpn_wrapper_receive_packet(session, &packet, &len);
+        } else {
+            // Session invalid - return 0 (no packet)
+            return nullptr;
+        }
+    }
     
     if (result != 0 || packet == nullptr || len == 0) {
         return nullptr; // No packet available
@@ -258,7 +322,16 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeIsConnected(
     }
     
     OpenVpnSession* session = reinterpret_cast<OpenVpnSession*>(sessionHandle);
-    return openvpn_wrapper_is_connected(session) ? JNI_TRUE : JNI_FALSE;
+    
+    // Validate session and call wrapper while holding lock
+    {
+        std::lock_guard<std::mutex> lock(valid_sessions_mutex);
+        if (valid_sessions.find(session) != valid_sessions.end()) {
+            return openvpn_wrapper_is_connected(session) ? JNI_TRUE : JNI_FALSE;
+        }
+    }
+    
+    return JNI_FALSE;
 }
 
 JNIEXPORT jstring JNICALL
@@ -270,8 +343,17 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeGetLastError(
     }
     
     OpenVpnSession* session = reinterpret_cast<OpenVpnSession*>(sessionHandle);
-    const char* errorMsg = openvpn_wrapper_get_last_error(session);
-    return env->NewStringUTF(errorMsg ? errorMsg : "No error");
+    
+    // Validate session and call wrapper while holding lock
+    {
+        std::lock_guard<std::mutex> lock(valid_sessions_mutex);
+        if (valid_sessions.find(session) != valid_sessions.end()) {
+            const char* errorMsg = openvpn_wrapper_get_last_error(session);
+            return env->NewStringUTF(errorMsg ? errorMsg : "No error");
+        }
+    }
+    
+    return env->NewStringUTF("Invalid session handle");
 }
 
 JNIEXPORT void JNICALL
@@ -293,7 +375,18 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeSetTunnelIdAndC
     }
     
     // Set tunnel ID and callbacks
-    openvpn_wrapper_set_tunnel_id_and_callback(session, env, tunnelIdStr, ipCallback, dnsCallback);
+    {
+        std::lock_guard<std::mutex> lock(valid_sessions_mutex);
+        if (valid_sessions.find(session) != valid_sessions.end()) {
+            openvpn_wrapper_set_tunnel_id_and_callback(session, env, tunnelIdStr, ipCallback, dnsCallback);
+        } else {
+            LOGE("nativeSetTunnelIdAndCallback: Invalid session handle");
+            if (tunnelIdStr && tunnelId) {
+                env->ReleaseStringUTFChars(tunnelId, tunnelIdStr);
+            }
+            return;
+        }
+    }
     
     // Register session in global map for app FD retrieval
     if (tunnelIdStr) {
@@ -347,6 +440,15 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_getAppFd(
     }
     
     // Use wrapper function to get app FD (avoids incomplete type issues)
+    // Hold lock to prevent session destruction during use
+    // Note: We already hold sessions_mutex, which prevents nativeDisconnect from removing
+    // the session from the map, but nativeDisconnect could still be destroying it if
+    // it already removed it from the map.
+    // However, with our fix in nativeDisconnect, we remove from map BEFORE destroying.
+    // So if we found it in the map, it is not yet destroyed (or at least not yet removed).
+    // But nativeDisconnect acquires sessions_mutex to remove it.
+    // So if we hold sessions_mutex, nativeDisconnect cannot remove it, and thus cannot proceed to destroy it.
+    // So holding sessions_mutex here is sufficient!
     int appFd = openvpn_wrapper_get_app_fd(session);
     
     if (appFd < 0) {
