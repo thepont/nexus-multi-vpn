@@ -428,10 +428,10 @@ class VpnEngineService : VpnService() {
      * If packagesWithRules is empty, the interface is NOT established (proper split tunneling).
      */
     private fun establishVpnInterface(packagesWithRules: List<String>) {
-        // TEMPORARY: Use global VPN mode to fix test failures
-        // Test packages bypass split tunneling due to Android framework limitation
-        // All traffic enters VPN, PacketRouter handles per-app routing
-        val useGlobalMode = true  // TODO: Set to false once we can test with production apps
+        // Split tunneling mode: Only apps with rules use VPN, others bypass
+        // test_routesToDirectInternet PASSED in split tunneling mode, proving test packages work
+        // The issue is VPN routing fails when rules exist - investigating root cause
+        val useGlobalMode = false
         
         if (packagesWithRules.isEmpty() && !useGlobalMode) {
             Log.w(TAG, "⚠️  No app rules found - NOT establishing VPN interface")
@@ -500,9 +500,9 @@ class VpnEngineService : VpnService() {
             packagesWithRules.forEach { packageName ->
                 try {
                     builder.addAllowedApplication(packageName)
-                    Log.i(TAG, "   ✅ ALLOWED: $packageName")
+                    Log.i(TAG, "   + Allowed: $packageName")
                 } catch (e: Exception) {
-                    Log.e(TAG, "   ❌ FAILED to allow $packageName: ${e.message}")
+                    Log.e(TAG, "   ❌ Failed to allow package: $packageName", e)
                 }
             }
             Log.i(TAG, "✅ Split tunneling configured: ${packagesWithRules.size} app(s) use VPN")
