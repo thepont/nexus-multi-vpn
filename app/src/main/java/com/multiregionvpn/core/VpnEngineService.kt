@@ -257,11 +257,17 @@ class VpnEngineService : VpnService() {
         when (intent?.action) {
             ACTION_START -> {
                 Log.i(TAG, "Received ACTION_START - starting VPN...")
-                startVpn()
+                // Launch in coroutine scope to avoid blocking
+                serviceScope.launch {
+                    startVpnAsync()
+                }
             }
             ACTION_STOP -> {
                 Log.i(TAG, "Received ACTION_STOP - stopping VPN...")
-                stopVpn()
+                // Launch in coroutine scope to avoid blocking
+                serviceScope.launch {
+                    stopVpnAsync()
+                }
             }
             else -> {
                 Log.w(TAG, "Unknown action: ${intent?.action}")
@@ -272,7 +278,7 @@ class VpnEngineService : VpnService() {
     
     override fun onBind(intent: Intent?): IBinder? = null
     
-    private fun startVpn() {
+    private suspend fun startVpnAsync() {
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         Log.i(TAG, "🚀 startVpn() called")
         Log.i(TAG, "═══════════════════════════════════════════════════════")
@@ -300,13 +306,10 @@ class VpnEngineService : VpnService() {
         }
         
         try {
-            // Get all app rules to determine which apps should use VPN
-            // This implements proper split tunneling - only apps with rules use VPN
-            // CRITICAL: Use direct database query (not Flow.first()) to ensure we get
-            // committed data, not stale Flow emission
-            val appRules = kotlinx.coroutines.runBlocking {
-                settingsRepository.appRuleDao.getAllRulesList()
-            }
+            // Launch async work to get app rules (non-blocking)
+            // Use suspending coroutine instead of runBlocking
+            val appRules = settingsRepository.appRuleDao.getAllRulesList()
+            
             Log.i(TAG, "📋 App rules found: ${appRules.size}")
             appRules.forEach { rule ->
                 Log.i(TAG, "   📱 ${rule.packageName} → ${rule.vpnConfigId ?: "Direct Internet"}")
@@ -347,15 +350,11 @@ class VpnEngineService : VpnService() {
             val configsPrepared = mutableMapOf<String, PreparedVpnConfig>()
             for (vpnConfigId in activeVpnConfigIds) {
                 try {
-                    val vpnConfig = kotlinx.coroutines.runBlocking {
-                        settingsRepository.getVpnConfigById(vpnConfigId)
-                    }
+                    val vpnConfig = settingsRepository.getVpnConfigById(vpnConfigId)
                     if (vpnConfig != null) {
                         Log.d(TAG, "Pre-fetching config for ${vpnConfig.name}...")
                         val preparedConfig = try {
-                            kotlinx.coroutines.runBlocking {
-                                vpnTemplateService.prepareConfig(vpnConfig)
-                            }
+                            vpnTemplateService.prepareConfig(vpnConfig)
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to pre-fetch config for ${vpnConfig.name}: ${e.message}")
                             // Continue with other configs - we'll try again later
@@ -633,7 +632,7 @@ class VpnEngineService : VpnService() {
      * stays active as a "zombie" - the "key" icon remains and all traffic is
      * routed to a black hole, blocking all internet.
      */
-    private fun stopVpn() {
+    private suspend fun stopVpnAsync() {
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Log.i(TAG, "🛑 SHUTDOWN: Graceful VPN shutdown initiated...")
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -643,15 +642,13 @@ class VpnEngineService : VpnService() {
             // This stops it from reading/writing to the FD
             Log.i(TAG, "SHUTDOWN Step 1/4: Closing all tunnels...")
             try {
-                // Use runBlocking to ensure tunnels are closed BEFORE we close the interface
-                kotlinx.coroutines.runBlocking {
-                    try {
-                        VpnConnectionManager.getInstance().closeAll()
-                        Log.i(TAG, "   ✅ All tunnels closed")
-                    } catch (e: IllegalStateException) {
-                        // VpnConnectionManager not initialized yet - that's okay
-                        Log.i(TAG, "   ℹ️  VpnConnectionManager not initialized, skipping tunnel cleanup")
-                    }
+                // Fully async - no blocking
+                try {
+                    VpnConnectionManager.getInstance().closeAll()
+                    Log.i(TAG, "   ✅ All tunnels closed")
+                } catch (e: IllegalStateException) {
+                    // VpnConnectionManager not initialized yet - that's okay
+                    Log.i(TAG, "   ℹ️  VpnConnectionManager not initialized, skipping tunnel cleanup")
                 }
                 activeTunnels.clear()
                 connectionTracker?.clearAllMappings()

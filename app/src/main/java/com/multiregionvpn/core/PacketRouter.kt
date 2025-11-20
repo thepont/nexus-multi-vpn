@@ -13,6 +13,8 @@ import java.nio.ByteOrder
 /**
  * High-performance singleton that routes packets based on app rules.
  * Parses packets, gets UID, looks up rules, and routes accordingly.
+ * 
+ * Uses in-memory RuleCache for non-blocking rule lookups.
  */
 class PacketRouter(
     private val context: Context,
@@ -25,6 +27,7 @@ class PacketRouter(
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val packageManager = context.packageManager
     private val tracker = connectionTracker ?: ConnectionTracker(context, packageManager)
+    private val ruleCache = RuleCache(settingsRepository)
     
     fun routePacket(packet: ByteArray) {
         try {
@@ -126,20 +129,12 @@ class PacketRouter(
                             // Get the tunnel ID for this UID
                             var tunnelId = tracker.getTunnelIdForUid(uid)
                             
-                            // If no tunnel ID yet, look up the rule
+                            // If no tunnel ID yet, look up the rule from in-memory cache (non-blocking)
                             if (tunnelId == null) {
-                                val appRule = kotlinx.coroutines.runBlocking {
-                                    settingsRepository.getAppRuleByPackageName(packageName)
-                                }
-                                if (appRule != null && appRule.vpnConfigId != null) {
-                                    val vpnConfig = kotlinx.coroutines.runBlocking {
-                                        settingsRepository.getVpnConfigById(appRule.vpnConfigId!!)
-                                    }
-                                    if (vpnConfig != null) {
-                                        tunnelId = "${vpnConfig.templateId}_${vpnConfig.regionId}"
-                                        tracker.setUidToTunnel(uid, tunnelId)
-                                        Log.d(TAG, "Found tunnel for $packageName: $tunnelId (via rule lookup)")
-                                    }
+                                tunnelId = ruleCache.getTunnelIdForPackage(packageName)
+                                if (tunnelId != null) {
+                                    tracker.setUidToTunnel(uid, tunnelId)
+                                    Log.d(TAG, "Found tunnel for $packageName: $tunnelId (via rule cache)")
                                 }
                             }
                             
@@ -179,7 +174,7 @@ class PacketRouter(
                 return
             }
             
-            // Fallback: Get package name from UID and look up rule
+            // Fallback: Get package name from UID and look up rule from in-memory cache (non-blocking)
             val packageNames = packageManager.getPackagesForUid(uid) ?: return
             
             if (packageNames.isEmpty()) {
@@ -191,29 +186,17 @@ class PacketRouter(
             // Use first package name (in case of shared UID)
             val packageName = packageNames[0]
             
-            // Get rule from repository - use runBlocking for synchronous access
-            // Note: In production, this should be done asynchronously with proper coroutine handling
-            val appRule = kotlinx.coroutines.runBlocking {
-                settingsRepository.getAppRuleByPackageName(packageName)
-            }
+            // Get tunnel ID from in-memory cache (non-blocking)
+            val ruleTunnelId = ruleCache.getTunnelIdForPackage(packageName)
             
-            if (appRule != null && appRule.vpnConfigId != null) {
+            if (ruleTunnelId != null) {
                 // Rule found - route to VPN tunnel
-                val vpnConfig = kotlinx.coroutines.runBlocking {
-                    settingsRepository.getVpnConfigById(appRule.vpnConfigId!!)
-                }
-                if (vpnConfig != null) {
-                    val ruleTunnelId = "${vpnConfig.templateId}_${vpnConfig.regionId}"
-                    // Update connection tracker with tunnel ID for future packets
-                    tracker.setUidToTunnel(uid, ruleTunnelId)
-                    // Re-register connection with tunnel ID
-                    tracker.registerConnection(packetInfo.srcIp, packetInfo.srcPort, uid, ruleTunnelId)
-                    vpnConnectionManager.sendPacketToTunnel(ruleTunnelId, packet)
-                    Log.v(TAG, "Routed packet from $packageName (UID $uid) to tunnel $ruleTunnelId")
-                } else {
-                    Log.w(TAG, "VPN config ${appRule.vpnConfigId} not found for $packageName")
-                    sendToDirectInternet(packet)
-                }
+                // Update connection tracker with tunnel ID for future packets
+                tracker.setUidToTunnel(uid, ruleTunnelId)
+                // Re-register connection with tunnel ID
+                tracker.registerConnection(packetInfo.srcIp, packetInfo.srcPort, uid, ruleTunnelId)
+                vpnConnectionManager.sendPacketToTunnel(ruleTunnelId, packet)
+                Log.v(TAG, "Routed packet from $packageName (UID $uid) to tunnel $ruleTunnelId")
             } else {
                 // No rule found - send to direct internet
                 sendToDirectInternet(packet)
