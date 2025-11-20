@@ -49,7 +49,13 @@ class BasicConnectionTest {
         MockitoAnnotations.openMocks(this)
         
         // Initialize dependencies manually (like VpnRoutingTest does)
-        val database = AppDatabase.getDatabase(appContext)
+        val database = androidx.room.Room.databaseBuilder(
+            appContext.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         settingsRepository = SettingsRepository(
             vpnConfigDao = database.vpnConfigDao(),
             appRuleDao = database.appRuleDao(),

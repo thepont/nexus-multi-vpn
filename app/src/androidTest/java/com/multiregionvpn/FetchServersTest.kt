@@ -25,7 +25,13 @@ class FetchServersTest {
         println("🌍 Fetching NordVPN servers for configured tunnels...")
         
         val context: Context = ApplicationProvider.getApplicationContext()
-        val database = AppDatabase.getDatabase(context)
+        val database = androidx.room.Room.databaseBuilder(
+            context.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         val settingsRepo = SettingsRepository(
             vpnConfigDao = database.vpnConfigDao(),
             appRuleDao = database.appRuleDao(),

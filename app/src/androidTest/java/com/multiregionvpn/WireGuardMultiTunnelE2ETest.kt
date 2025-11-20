@@ -82,7 +82,13 @@ AllowedIPs = 0.0.0.0/0
         context = ApplicationProvider.getApplicationContext()
         
         // Manually initialize Room database (no Hilt)
-        val database = AppDatabase.getDatabase(context)
+        val database = androidx.room.Room.databaseBuilder(
+            context.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         settingsRepository = SettingsRepository(
             vpnConfigDao = database.vpnConfigDao(),
             appRuleDao = database.appRuleDao(),

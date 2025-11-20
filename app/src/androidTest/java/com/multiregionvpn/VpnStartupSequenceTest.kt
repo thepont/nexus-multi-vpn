@@ -44,7 +44,13 @@ class VpnStartupSequenceTest {
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
-        database = AppDatabase.getDatabase(context)
+        database = androidx.room.Room.databaseBuilder(
+            context.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         settingsRepo = SettingsRepository(
             vpnConfigDao = database.vpnConfigDao(),
             appRuleDao = database.appRuleDao(),

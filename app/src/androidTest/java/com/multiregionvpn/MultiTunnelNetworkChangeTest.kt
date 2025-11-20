@@ -41,7 +41,13 @@ class MultiTunnelNetworkChangeTest {
     @Before
     fun setup() = runBlocking {
         appContext = ApplicationProvider.getApplicationContext()
-        database = AppDatabase.getDatabase(appContext)
+        database = androidx.room.Room.databaseBuilder(
+            appContext.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         settingsRepo = SettingsRepository(
             database.vpnConfigDao(),
             database.appRuleDao(),

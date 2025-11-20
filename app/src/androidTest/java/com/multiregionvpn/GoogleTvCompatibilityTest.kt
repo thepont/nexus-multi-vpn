@@ -50,7 +50,13 @@ class GoogleTvCompatibilityTest {
         appContext = ApplicationProvider.getApplicationContext()
         device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         
-        val database = AppDatabase.getDatabase(appContext)
+        val database = androidx.room.Room.databaseBuilder(
+            appContext.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         settingsRepo = SettingsRepository(
             database.vpnConfigDao(),
             database.appRuleDao(),

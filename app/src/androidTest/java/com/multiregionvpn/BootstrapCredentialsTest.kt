@@ -39,7 +39,13 @@ class BootstrapCredentialsTest {
             ?: throw IllegalArgumentException("NORDVPN_PASSWORD must be passed via test arguments")
         
         val context: Context = ApplicationProvider.getApplicationContext()
-        val database = AppDatabase.getDatabase(context)
+        val database = androidx.room.Room.databaseBuilder(
+            context.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         val settingsRepo = SettingsRepository(
             vpnConfigDao = database.vpnConfigDao(),
             appRuleDao = database.appRuleDao(),

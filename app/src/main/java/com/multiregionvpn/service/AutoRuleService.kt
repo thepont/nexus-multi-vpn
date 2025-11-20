@@ -3,7 +3,6 @@ package com.multiregionvpn.service
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
-import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.network.GeoIpService
 import kotlinx.coroutines.CoroutineScope
@@ -23,14 +22,11 @@ import kotlinx.coroutines.launch
  * - If preset rule matches user's region:
  *   → Ensures no rule exists (defaults to Direct Internet)
  */
-class AutoRuleService(private val context: Context) {
+class AutoRuleService(
+    private val context: Context,
+    private val settingsRepository: SettingsRepository
+) {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val database = AppDatabase.getDatabase(context)
-    private val vpnConfigDao = database.vpnConfigDao()
-    private val appRuleDao = database.appRuleDao()
-    private val credsDao = database.providerCredentialsDao()
-    private val presetRuleDao = database.presetRuleDao()
-    private val settingsRepository = SettingsRepository(vpnConfigDao, appRuleDao, credsDao, presetRuleDao)
     private val geoIpService = GeoIpService()
     private val packageManager = context.packageManager
     

@@ -39,7 +39,13 @@ class AppRuleRemapTest {
     @Before
     fun setUp() = runBlocking {
         context = ApplicationProvider.getApplicationContext()
-        database = AppDatabase.getDatabase(context)
+        database = androidx.room.Room.databaseBuilder(
+            context.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         settingsRepository = SettingsRepository(
             database.vpnConfigDao(),
             database.appRuleDao(),
