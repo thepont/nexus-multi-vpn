@@ -20,7 +20,8 @@ class PacketRouter(
     private val vpnService: VpnService,
     private val vpnConnectionManager: VpnConnectionManager,
     private val vpnOutput: java.io.FileOutputStream? = null, // For writing packets back to TUN interface
-    private val connectionTracker: ConnectionTracker? = null // Optional connection tracker for UID detection
+    private val connectionTracker: ConnectionTracker? = null, // Optional connection tracker for UID detection
+    private val onNewConnection: ((packageName: String, destIp: String, destPort: Int, protocol: String, tunnelId: String?, tunnelAlias: String?) -> Unit)? = null
 ) {
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val packageManager = context.packageManager
@@ -125,6 +126,7 @@ class PacketRouter(
                         if (uid != null) {
                             // Get the tunnel ID for this UID
                             var tunnelId = tracker.getTunnelIdForUid(uid)
+                            var vpnConfig: com.multiregionvpn.data.database.VpnConfig? = null
                             
                             // If no tunnel ID yet, look up the rule
                             if (tunnelId == null) {
@@ -132,7 +134,7 @@ class PacketRouter(
                                     settingsRepository.getAppRuleByPackageName(packageName)
                                 }
                                 if (appRule != null && appRule.vpnConfigId != null) {
-                                    val vpnConfig = kotlinx.coroutines.runBlocking {
+                                    vpnConfig = kotlinx.coroutines.runBlocking {
                                         settingsRepository.getVpnConfigById(appRule.vpnConfigId!!)
                                     }
                                     if (vpnConfig != null) {
@@ -145,6 +147,18 @@ class PacketRouter(
                             
                             // Register this connection immediately so future packets are tracked
                             tracker.registerConnection(packetInfo.srcIp, packetInfo.srcPort, uid, tunnelId)
+                            
+                            // Log new connection event
+                            val protocolName = if (packetInfo.protocol == 6) "TCP" else if (packetInfo.protocol == 17) "UDP" else "Other"
+                            val tunnelAlias = vpnConfig?.name
+                            onNewConnection?.invoke(
+                                packageName,
+                                packetInfo.destIp.hostAddress ?: "unknown",
+                                packetInfo.destPort,
+                                protocolName,
+                                tunnelId,
+                                tunnelAlias
+                            )
                             
                             if (tunnelId != null) {
                                 // Route to tunnel

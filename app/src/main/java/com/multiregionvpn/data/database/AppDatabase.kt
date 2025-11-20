@@ -15,9 +15,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         VpnConfig::class,
         AppRule::class,
         ProviderCredentials::class,
-        PresetRule::class
+        PresetRule::class,
+        ConnectionEvent::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun appRuleDao(): AppRuleDao
     abstract fun providerCredentialsDao(): ProviderCredentialsDao
     abstract fun presetRuleDao(): PresetRuleDao
+    abstract fun connectionEventDao(): ConnectionEventDao
 
     companion object {
         @Volatile
@@ -41,6 +43,8 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 // Add the pre-seeding callback
                 .addCallback(PresetRuleCallback(context))
+                // Allow destructive migration for development
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

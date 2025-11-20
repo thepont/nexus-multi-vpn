@@ -48,6 +48,9 @@ class VpnEngineService : VpnService() {
     @Inject
     lateinit var vpnTemplateService: VpnTemplateService
     
+    @Inject
+    lateinit var connectionLogger: ConnectionLogger
+    
     private lateinit var packetRouter: PacketRouter
     private var connectionTracker: ConnectionTracker? = null
     private var vpnOutput: FileOutputStream? = null
@@ -238,7 +241,17 @@ class VpnEngineService : VpnService() {
             connectionManager,
             vpnOutput,
             connectionTracker
-        )
+        ) { packageName, destIp, destPort, protocol, tunnelId, tunnelAlias ->
+            // Log new connection event
+            connectionLogger.logConnection(
+                packageName,
+                destIp,
+                destPort,
+                protocol,
+                tunnelId,
+                tunnelAlias
+            )
+        }
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
