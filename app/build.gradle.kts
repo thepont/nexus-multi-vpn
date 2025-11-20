@@ -244,6 +244,12 @@ android {
     }
 }
 
+// Room database schema export configuration
+// This exports the schema for each database version, allowing for proper migration validation
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")
