@@ -273,4 +273,70 @@ class SettingsViewModelTest {
         assertThat(state.appRules).containsKey("com.itv.hub")
         assertThat(state.appRules["com.bbc.iplayer"]).isEqualTo("id1")
     }
+
+    @Test
+    fun `given VPN is stopped, when startVpn is called, then Start event is emitted and state is updated`() = runTest {
+        // GIVEN: A loaded ViewModel
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        createViewModel()
+        kotlinx.coroutines.delay(100)
+        
+        // Collect events in background
+        val events = mutableListOf<VpnServiceEvent>()
+        val job = kotlinx.coroutines.launch {
+            viewModel.vpnServiceEvents.collect { events.add(it) }
+        }
+        
+        // WHEN: startVpn is called
+        viewModel.startVpn()
+        kotlinx.coroutines.delay(100)
+        
+        // THEN: 
+        // 1. A Start event was emitted
+        assertThat(events).hasSize(1)
+        assertThat(events.first()).isInstanceOf(VpnServiceEvent.Start::class.java)
+        
+        // 2. The UI state reflects VPN is running
+        assertThat(viewModel.uiState.value.isVpnRunning).isTrue()
+        
+        job.cancel()
+    }
+
+    @Test
+    fun `given VPN is running, when stopVpn is called, then Stop event is emitted and state is updated`() = runTest {
+        // GIVEN: A loaded ViewModel with VPN running
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        createViewModel()
+        kotlinx.coroutines.delay(100)
+        
+        // Start VPN first
+        viewModel.startVpn()
+        kotlinx.coroutines.delay(100)
+        
+        // Collect events in background
+        val events = mutableListOf<VpnServiceEvent>()
+        val job = kotlinx.coroutines.launch {
+            viewModel.vpnServiceEvents.collect { events.add(it) }
+        }
+        
+        // WHEN: stopVpn is called
+        viewModel.stopVpn()
+        kotlinx.coroutines.delay(100)
+        
+        // THEN:
+        // 1. A Stop event was emitted
+        assertThat(events).hasSize(1)
+        assertThat(events.first()).isInstanceOf(VpnServiceEvent.Stop::class.java)
+        
+        // 2. The UI state reflects VPN is not running
+        assertThat(viewModel.uiState.value.isVpnRunning).isFalse()
+        
+        job.cancel()
+    }
 }

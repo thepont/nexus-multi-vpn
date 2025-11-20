@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import android.content.BroadcastReceiver
@@ -27,6 +30,15 @@ import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.ui.components.VpnStatus
 
+/**
+ * Events emitted by ViewModel for VPN service operations.
+ * The UI layer observes these events and performs Context-dependent actions.
+ */
+sealed class VpnServiceEvent {
+    object Start : VpnServiceEvent()
+    object Stop : VpnServiceEvent()
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepo: SettingsRepository,
@@ -36,6 +48,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+    
+    private val _vpnServiceEvents = MutableSharedFlow<VpnServiceEvent>()
+    val vpnServiceEvents: SharedFlow<VpnServiceEvent> = _vpnServiceEvents.asSharedFlow()
     
     private val errorReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -212,8 +227,8 @@ class SettingsViewModel @Inject constructor(
         // The flow will automatically update the UI
     }
     
-    fun startVpn(context: android.content.Context) {
-        android.util.Log.d("SettingsViewModel", "startVpn() called - sending ACTION_START")
+    fun startVpn() {
+        android.util.Log.d("SettingsViewModel", "startVpn() called - emitting Start event")
         
         // Set status to CONNECTING immediately
         _uiState.update { it.copy(
@@ -221,13 +236,9 @@ class SettingsViewModel @Inject constructor(
             vpnStatus = VpnStatus.CONNECTING
         ) }
         
-        val intent = android.content.Intent(context, com.multiregionvpn.core.VpnEngineService::class.java).apply {
-            action = com.multiregionvpn.core.VpnEngineService.ACTION_START
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        // Emit event for UI to handle service start
+        viewModelScope.launch {
+            _vpnServiceEvents.emit(VpnServiceEvent.Start)
         }
         
         // After a short delay, assume connected (will be updated by service callbacks)
@@ -241,12 +252,14 @@ class SettingsViewModel @Inject constructor(
         android.util.Log.d("SettingsViewModel", "startVpn() completed - status set to CONNECTING")
     }
     
-    fun stopVpn(context: android.content.Context) {
-        android.util.Log.d("SettingsViewModel", "stopVpn() called - sending ACTION_STOP")
-        val intent = android.content.Intent(context, com.multiregionvpn.core.VpnEngineService::class.java).apply {
-            action = com.multiregionvpn.core.VpnEngineService.ACTION_STOP
+    fun stopVpn() {
+        android.util.Log.d("SettingsViewModel", "stopVpn() called - emitting Stop event")
+        
+        // Emit event for UI to handle service stop
+        viewModelScope.launch {
+            _vpnServiceEvents.emit(VpnServiceEvent.Stop)
         }
-        context.startService(intent)
+        
         _uiState.update { it.copy(
             isVpnRunning = false,
             vpnStatus = VpnStatus.DISCONNECTED,
