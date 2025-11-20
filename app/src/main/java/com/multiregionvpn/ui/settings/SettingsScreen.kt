@@ -60,7 +60,31 @@ fun SettingsScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            viewModel.startVpn(context)
+            viewModel.startVpn()
+        }
+    }
+    
+    // Observe VPN service events from ViewModel and handle Context-dependent operations
+    LaunchedEffect(Unit) {
+        viewModel.vpnServiceEvents.collect { event ->
+            when (event) {
+                is VpnServiceEvent.Start -> {
+                    val intent = android.content.Intent(context, com.multiregionvpn.core.VpnEngineService::class.java).apply {
+                        action = com.multiregionvpn.core.VpnEngineService.ACTION_START
+                    }
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                }
+                is VpnServiceEvent.Stop -> {
+                    val intent = android.content.Intent(context, com.multiregionvpn.core.VpnEngineService::class.java).apply {
+                        action = com.multiregionvpn.core.VpnEngineService.ACTION_STOP
+                    }
+                    context.startService(intent)
+                }
+            }
         }
     }
     
@@ -110,10 +134,10 @@ fun SettingsScreen(
                         if (intent != null) {
                             vpnPermissionLauncher.launch(intent)
                         } else {
-                            viewModel.startVpn(context)
+                            viewModel.startVpn()
                         }
                     } else {
-                        viewModel.stopVpn(context)
+                        viewModel.stopVpn()
                     }
                 }
             )
