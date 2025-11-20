@@ -1,6 +1,9 @@
 package com.multiregionvpn.ui.shared
 
 import androidx.lifecycle.ViewModel
+import com.multiregionvpn.core.VpnError
+import com.multiregionvpn.data.database.ProviderCredentials
+import com.multiregionvpn.data.database.VpnConfig
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -49,6 +52,36 @@ abstract class RouterViewModel : ViewModel() {
      */
     abstract val liveStats: StateFlow<VpnStats>
     
+    /**
+     * All VPN configurations
+     */
+    abstract val allVpnConfigs: StateFlow<List<VpnConfig>>
+    
+    /**
+     * Provider credentials (e.g., NordVPN)
+     */
+    abstract val providerCredentials: StateFlow<ProviderCredentials?>
+    
+    /**
+     * Current error state (if any)
+     */
+    abstract val currentError: StateFlow<VpnError?>
+    
+    /**
+     * Loading state
+     */
+    abstract val isLoading: StateFlow<Boolean>
+    
+    /**
+     * VPN running state
+     */
+    abstract val isVpnRunning: StateFlow<Boolean>
+    
+    /**
+     * Data rate in MB/s
+     */
+    abstract val dataRateMbps: StateFlow<Double>
+    
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS (Triggered by UI)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -86,6 +119,31 @@ abstract class RouterViewModel : ViewModel() {
      * @param group The group to remove
      */
     abstract fun onRemoveServerGroup(group: ServerGroup)
+    
+    /**
+     * Save VPN configuration
+     */
+    abstract fun saveVpnConfig(config: VpnConfig)
+    
+    /**
+     * Delete VPN configuration
+     */
+    abstract fun deleteVpnConfig(configId: String)
+    
+    /**
+     * Save provider credentials (e.g., NordVPN)
+     */
+    abstract fun saveProviderCredentials(username: String, password: String)
+    
+    /**
+     * Fetch NordVPN server for a region
+     */
+    abstract fun fetchNordVpnServer(regionId: String, callback: (String?) -> Unit)
+    
+    /**
+     * Clear current error
+     */
+    abstract fun clearError()
 }
 
 /**

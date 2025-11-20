@@ -18,7 +18,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.multiregionvpn.ui.settings.SettingsViewModel
+import com.multiregionvpn.ui.shared.RouterViewModel
+import com.multiregionvpn.ui.shared.RouterViewModelImpl
 
 /**
  * TV Settings Screen - Configuration with D-pad navigation
@@ -30,13 +31,19 @@ import com.multiregionvpn.ui.settings.SettingsViewModel
  */
 @Composable
 fun TvSettingsScreen(
-    viewModel: SettingsViewModel = hiltViewModel()
+    viewModel: RouterViewModel = hiltViewModel<RouterViewModelImpl>()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val providerCredentials by viewModel.providerCredentials.collectAsState()
     
-    var usernameInput by remember { mutableStateOf(uiState.nordCredentials?.username ?: "") }
-    var passwordInput by remember { mutableStateOf(uiState.nordCredentials?.password ?: "") }
+    var usernameInput by remember { mutableStateOf(providerCredentials?.username ?: "") }
+    var passwordInput by remember { mutableStateOf(providerCredentials?.password ?: "") }
     var showSaveConfirmation by remember { mutableStateOf(false) }
+    
+    // Update inputs when credentials change
+    LaunchedEffect(providerCredentials) {
+        usernameInput = providerCredentials?.username ?: ""
+        passwordInput = providerCredentials?.password ?: ""
+    }
     
     Column(
         modifier = Modifier
@@ -93,7 +100,7 @@ fun TvSettingsScreen(
                 TvButton(
                     text = "Save Credentials",
                     onClick = {
-                        viewModel.saveNordCredentials(usernameInput, passwordInput)
+                        viewModel.saveProviderCredentials(usernameInput, passwordInput)
                         showSaveConfirmation = true
                     },
                     enabled = usernameInput.isNotBlank() && passwordInput.isNotBlank()
@@ -102,7 +109,7 @@ fun TvSettingsScreen(
             
             // Current Status
             item {
-                if (uiState.nordCredentials != null) {
+                if (providerCredentials != null) {
                     Text(
                         text = "✓ Credentials configured",
                         fontSize = 16.sp,
@@ -247,4 +254,3 @@ fun TvButton(
         )
     }
 }
-

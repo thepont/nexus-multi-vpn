@@ -8,7 +8,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.multiregionvpn.ui.settings.SettingsViewModel
+import com.multiregionvpn.ui.shared.RouterViewModel
 import com.multiregionvpn.ui.settings.composables.ProviderCredentialsSection
 
 /**
@@ -18,9 +18,9 @@ import com.multiregionvpn.ui.settings.composables.ProviderCredentialsSection
  */
 @Composable
 fun SettingsScreen(
-    viewModel: SettingsViewModel
+    viewModel: RouterViewModel
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val providerCredentials by viewModel.providerCredentials.collectAsState()
     
     Column(
         modifier = Modifier
@@ -30,9 +30,9 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         ProviderCredentialsSection(
-            credentials = uiState.nordCredentials,
+            credentials = providerCredentials,
             onSaveCredentials = { username, password ->
-                viewModel.saveNordCredentials(username, password)
+                viewModel.saveProviderCredentials(username, password)
             }
         )
         
@@ -41,4 +41,3 @@ fun SettingsScreen(
         // - Enable Full Debug Log toggle
     }
 }
-

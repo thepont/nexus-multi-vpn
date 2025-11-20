@@ -14,7 +14,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.multiregionvpn.ui.components.VpnHeaderBar
-import com.multiregionvpn.ui.settings.SettingsViewModel
+import com.multiregionvpn.ui.shared.RouterViewModel
+import com.multiregionvpn.ui.shared.RouterViewModelImpl
 import com.multiregionvpn.ui.screens.TunnelsScreen
 import com.multiregionvpn.ui.screens.AppRulesScreen
 import com.multiregionvpn.ui.screens.ConnectionsScreen
@@ -32,9 +33,11 @@ import com.multiregionvpn.ui.screens.SettingsScreen as ConfigScreen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    viewModel: SettingsViewModel = hiltViewModel()
+    viewModel: RouterViewModel = hiltViewModel<RouterViewModelImpl>()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val vpnStatus by viewModel.vpnStatus.collectAsState()
+    val isVpnRunning by viewModel.isVpnRunning.collectAsState()
+    val dataRateMbps by viewModel.dataRateMbps.collectAsState()
     var selectedTab by remember { mutableStateOf(NavTab.TUNNELS) }
     val context = LocalContext.current
     
@@ -42,26 +45,26 @@ fun MainScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            viewModel.startVpn(context)
+            viewModel.onToggleVpn(true)
         }
     }
     
     Scaffold(
         topBar = {
             VpnHeaderBar(
-                isVpnRunning = uiState.isVpnRunning,
-                status = uiState.vpnStatus,
-                dataRateMbps = uiState.dataRateMbps,
+                isVpnRunning = isVpnRunning,
+                status = vpnStatus,
+                dataRateMbps = dataRateMbps,
                 onToggleVpn = { enabled ->
                     if (enabled) {
                         val intent = VpnService.prepare(context)
                         if (intent != null) {
                             vpnPermissionLauncher.launch(intent)
                         } else {
-                            viewModel.startVpn(context)
+                            viewModel.onToggleVpn(true)
                         }
                     } else {
-                        viewModel.stopVpn(context)
+                        viewModel.onToggleVpn(false)
                     }
                 }
             )
