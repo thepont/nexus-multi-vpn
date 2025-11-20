@@ -138,6 +138,124 @@ class PacketRouterTest {
         verify(exactly = 0) { mockVpnConnectionManager.sendPacketToTunnel(any(), any()) }
     }
 
+    @Test
+    fun `given DNS query and default DNS tunnel configured, when packet is routed, then it is sent to default tunnel`() {
+        // GIVEN: Default DNS tunnel is configured
+        val defaultDnsTunnelId = "nordvpn_UK"
+        every { mockSettingsRepo.getDefaultDnsTunnelId() } returns defaultDnsTunnelId
+        every { mockVpnConnectionManager.getAllTunnelIds() } returns listOf("nordvpn_UK", "nordvpn_FR")
+        every { mockVpnConnectionManager.isTunnelConnected(defaultDnsTunnelId) } returns true
+        every { mockVpnConnectionManager.isTunnelConnected("nordvpn_FR") } returns true
+        every { mockVpnConnectionManager.sendPacketToTunnel(any(), any()) } returns Unit
+        
+        // Create a DNS query packet (UDP port 53)
+        val dnsPacket = createTestUdpPacket(
+            srcIp = "10.100.0.2",
+            destIp = "8.8.8.8",
+            srcPort = 54321,
+            destPort = 53
+        )
+        
+        // WHEN: DNS packet is routed
+        packetRouter.routePacket(dnsPacket)
+        
+        // THEN: Packet should be routed to the default DNS tunnel
+        verify(exactly = 1) { mockVpnConnectionManager.sendPacketToTunnel(defaultDnsTunnelId, dnsPacket) }
+    }
+
+    @Test
+    fun `given DNS query and no default DNS tunnel, when packet is routed, then it is sent to first connected tunnel`() {
+        // GIVEN: No default DNS tunnel configured
+        every { mockSettingsRepo.getDefaultDnsTunnelId() } returns null
+        every { mockVpnConnectionManager.getAllTunnelIds() } returns listOf("nordvpn_UK", "nordvpn_FR")
+        every { mockVpnConnectionManager.isTunnelConnected("nordvpn_UK") } returns true
+        every { mockVpnConnectionManager.isTunnelConnected("nordvpn_FR") } returns true
+        every { mockVpnConnectionManager.sendPacketToTunnel(any(), any()) } returns Unit
+        
+        // Create a DNS query packet (UDP port 53)
+        val dnsPacket = createTestUdpPacket(
+            srcIp = "10.100.0.2",
+            destIp = "8.8.8.8",
+            srcPort = 54321,
+            destPort = 53
+        )
+        
+        // WHEN: DNS packet is routed
+        packetRouter.routePacket(dnsPacket)
+        
+        // THEN: Packet should be routed to the first connected tunnel
+        verify(exactly = 1) { mockVpnConnectionManager.sendPacketToTunnel("nordvpn_UK", dnsPacket) }
+    }
+
+    @Test
+    fun `given DNS query and default DNS tunnel not connected, when packet is routed, then it falls back to first connected tunnel`() {
+        // GIVEN: Default DNS tunnel is configured but not connected
+        val defaultDnsTunnelId = "nordvpn_UK"
+        every { mockSettingsRepo.getDefaultDnsTunnelId() } returns defaultDnsTunnelId
+        every { mockVpnConnectionManager.getAllTunnelIds() } returns listOf("nordvpn_UK", "nordvpn_FR")
+        every { mockVpnConnectionManager.isTunnelConnected(defaultDnsTunnelId) } returns false
+        every { mockVpnConnectionManager.isTunnelConnected("nordvpn_FR") } returns true
+        every { mockVpnConnectionManager.sendPacketToTunnel(any(), any()) } returns Unit
+        
+        // Create a DNS query packet (UDP port 53)
+        val dnsPacket = createTestUdpPacket(
+            srcIp = "10.100.0.2",
+            destIp = "8.8.8.8",
+            srcPort = 54321,
+            destPort = 53
+        )
+        
+        // WHEN: DNS packet is routed
+        packetRouter.routePacket(dnsPacket)
+        
+        // THEN: Packet should fall back to first connected tunnel (FR)
+        verify(exactly = 1) { mockVpnConnectionManager.sendPacketToTunnel("nordvpn_FR", dnsPacket) }
+    }
+
+    /**
+     * Creates a minimal valid IPv4 UDP packet for testing
+     */
+    private fun createTestUdpPacket(
+        srcIp: String,
+        destIp: String,
+        srcPort: Int,
+        destPort: Int
+    ): ByteArray {
+        val buffer = java.nio.ByteBuffer.allocate(60) // IPv4 + UDP header + padding
+            .order(java.nio.ByteOrder.BIG_ENDIAN)
+        
+        // IPv4 Header (20 bytes)
+        buffer.put(0x45.toByte()) // Version (4) + IHL (5)
+        buffer.put(0x00.toByte()) // DSCP + ECN
+        buffer.putShort(60) // Total Length
+        buffer.putShort(0) // Identification
+        buffer.putShort(0x4000.toShort()) // Flags + Fragment Offset
+        buffer.put(64.toByte()) // TTL
+        buffer.put(17.toByte()) // Protocol (UDP)
+        buffer.putShort(0) // Header Checksum (0 for testing)
+        
+        // Source IP
+        val srcBytes = InetAddress.getByName(srcIp).address
+        buffer.put(srcBytes)
+        
+        // Destination IP
+        val destBytes = InetAddress.getByName(destIp).address
+        buffer.put(destBytes)
+        
+        // UDP Header (8 bytes minimum)
+        buffer.putShort(srcPort.toShort()) // Source Port
+        buffer.putShort(destPort.toShort()) // Destination Port
+        buffer.putShort(8) // UDP Length (header only)
+        buffer.putShort(0) // Checksum
+        
+        // Padding to minimum 60 bytes
+        while (buffer.position() < 60) {
+            buffer.put(0.toByte())
+        }
+        
+        return buffer.array()
+    }
+
     /**
      * Creates a minimal valid IPv4 TCP packet for testing
      */

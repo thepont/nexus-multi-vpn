@@ -97,7 +97,10 @@ class SettingsViewModel @Inject constructor(
             // 2. Load all installed apps
             val installedApps = loadInstalledApps()
             
-            // 3. Combine flows for configs and rules
+            // 3. Get default DNS tunnel
+            val defaultDnsTunnelId = settingsRepo.getDefaultDnsTunnelId()
+            
+            // 4. Combine flows for configs and rules
             combine(
                 settingsRepo.getAllVpnConfigs(),
                 settingsRepo.getAllAppRules()
@@ -107,6 +110,7 @@ class SettingsViewModel @Inject constructor(
                     appRules = rules.associate { it.packageName to it.vpnConfigId },
                     nordCredentials = nordCreds, // UPDATED
                     installedApps = installedApps,
+                    defaultDnsTunnelId = defaultDnsTunnelId,
                     isLoading = false
                 )
             }.collect { newState ->
@@ -212,6 +216,11 @@ class SettingsViewModel @Inject constructor(
         // The flow will automatically update the UI
     }
     
+    fun setDefaultDnsTunnel(tunnelId: String?) {
+        settingsRepo.setDefaultDnsTunnelId(tunnelId)
+        _uiState.update { it.copy(defaultDnsTunnelId = tunnelId) }
+    }
+    
     fun startVpn(context: android.content.Context) {
         android.util.Log.d("SettingsViewModel", "startVpn() called - sending ACTION_START")
         
@@ -313,5 +322,6 @@ data class SettingsUiState(
     val isVpnRunning: Boolean = false,
     val vpnStatus: VpnStatus = VpnStatus.DISCONNECTED,
     val dataRateMbps: Double = 0.0,
-    val currentError: VpnError? = null
+    val currentError: VpnError? = null,
+    val defaultDnsTunnelId: String? = null
 )

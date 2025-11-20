@@ -71,28 +71,79 @@ class PacketRouter(
                 // SPECIAL CASE: DNS queries (UDP port 53)
                 // DNS queries are special - they come from the system resolver on behalf of apps
                 // The source IP is the VPN interface IP (e.g., 10.100.0.2), not the app's IP
-                // We need to route DNS queries to any connected tunnel since DNS resolution is needed
-                // for all apps using the VPN, and the DNS servers are only reachable through the tunnel
+                // 
+                // INTELLIGENT DNS ROUTING STRATEGY:
+                // 1. Try to route to the same tunnel as the app that initiated the query
+                //    (using registered package tracking)
+                // 2. Fall back to user-configured default DNS tunnel
+                // 3. Final fallback to first connected tunnel
                 if (packetInfo.protocol == 17 && packetInfo.destPort == 53) {
-                    // This is a DNS query - route it to the first connected tunnel
-                    // DNS queries should go through the VPN to use VPN DNS servers
                     Log.d(TAG, "🔍 DNS query detected: ${packetInfo.srcIp}:${packetInfo.srcPort} → ${packetInfo.destIp}:53")
                     val allTunnels = vpnConnectionManager.getAllTunnelIds()
                     Log.d(TAG, "   Available tunnels: ${allTunnels.joinToString()}")
-                    val connectedTunnel = allTunnels.firstOrNull { tunnelId ->
-                        val isConnected = vpnConnectionManager.isTunnelConnected(tunnelId)
-                        Log.d(TAG, "   Tunnel $tunnelId: ${if (isConnected) "✅ connected" else "❌ not connected"}")
-                        isConnected
+                    
+                    var selectedTunnel: String? = null
+                    
+                    // Strategy 1: Try to match DNS query to an app's tunnel
+                    // Check if any registered package has a tunnel assigned
+                    val registeredPackages = try {
+                        tracker.getRegisteredPackages()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ ERROR getting registered packages: ${e.message}", e)
+                        emptySet()
                     }
                     
-                    if (connectedTunnel != null) {
-                        Log.i(TAG, "🌐 Routing DNS query from ${packetInfo.srcIp}:${packetInfo.srcPort} to tunnel $connectedTunnel (packet size: ${packet.size})")
-                        vpnConnectionManager.sendPacketToTunnel(connectedTunnel, packet)
-                        Log.d(TAG, "   ✅ DNS query sent to tunnel $connectedTunnel")
+                    if (registeredPackages.isNotEmpty()) {
+                        // Try to find a tunnel from registered packages
+                        // Prefer the most recently used or first available
+                        for (packageName in registeredPackages) {
+                            val uid = tracker.getUidForPackage(packageName)
+                            if (uid != null) {
+                                val tunnelId = tracker.getTunnelIdForUid(uid)
+                                if (tunnelId != null && vpnConnectionManager.isTunnelConnected(tunnelId)) {
+                                    selectedTunnel = tunnelId
+                                    Log.d(TAG, "   Strategy 1: Found tunnel from app $packageName: $tunnelId")
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Strategy 2: Use user-configured default DNS tunnel
+                    if (selectedTunnel == null) {
+                        val defaultDnsTunnel = try {
+                            settingsRepository.getDefaultDnsTunnelId()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ ERROR getting default DNS tunnel: ${e.message}", e)
+                            null
+                        }
+                        
+                        if (defaultDnsTunnel != null && vpnConnectionManager.isTunnelConnected(defaultDnsTunnel)) {
+                            selectedTunnel = defaultDnsTunnel
+                            Log.d(TAG, "   Strategy 2: Using default DNS tunnel: $defaultDnsTunnel")
+                        }
+                    }
+                    
+                    // Strategy 3: Fall back to first connected tunnel
+                    if (selectedTunnel == null) {
+                        selectedTunnel = allTunnels.firstOrNull { tunnelId ->
+                            val isConnected = vpnConnectionManager.isTunnelConnected(tunnelId)
+                            Log.d(TAG, "   Tunnel $tunnelId: ${if (isConnected) "✅ connected" else "❌ not connected"}")
+                            isConnected
+                        }
+                        if (selectedTunnel != null) {
+                            Log.d(TAG, "   Strategy 3: Falling back to first connected tunnel: $selectedTunnel")
+                        }
+                    }
+                    
+                    if (selectedTunnel != null) {
+                        Log.i(TAG, "🌐 Routing DNS query from ${packetInfo.srcIp}:${packetInfo.srcPort} to tunnel $selectedTunnel (packet size: ${packet.size})")
+                        vpnConnectionManager.sendPacketToTunnel(selectedTunnel, packet)
+                        Log.d(TAG, "   ✅ DNS query sent to tunnel $selectedTunnel")
                         
                         // Register this DNS connection so future packets are tracked
                         // Use a dummy UID (-1) since we don't know the actual app UID for DNS queries
-                        tracker.registerConnection(packetInfo.srcIp, packetInfo.srcPort, -1, connectedTunnel)
+                        tracker.registerConnection(packetInfo.srcIp, packetInfo.srcPort, -1, selectedTunnel)
                         return
                     } else {
                         Log.e(TAG, "⚠️  DNS query received but no connected tunnels available - sending to direct internet")
