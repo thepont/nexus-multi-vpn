@@ -1,16 +1,24 @@
 package com.multiregionvpn.ui.shared
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.core.ConnectionTracker
 import com.multiregionvpn.core.VpnEngineService
+import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.data.GeoBlockedApps
 import com.multiregionvpn.data.database.AppRule as DbAppRule
+import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
+import com.multiregionvpn.network.NordVpnApiService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,7 +41,8 @@ import javax.inject.Inject
 @HiltViewModel
 class RouterViewModelImpl @Inject constructor(
     private val application: Application,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val nordVpnApiService: NordVpnApiService
 ) : RouterViewModel() {
     
     companion object {
@@ -62,6 +71,55 @@ class RouterViewModelImpl @Inject constructor(
     private val _liveStats = MutableStateFlow(VpnStats())
     override val liveStats: StateFlow<VpnStats> = _liveStats.asStateFlow()
     
+    private val _allVpnConfigs = MutableStateFlow<List<VpnConfig>>(emptyList())
+    override val allVpnConfigs: StateFlow<List<VpnConfig>> = _allVpnConfigs.asStateFlow()
+    
+    private val _providerCredentials = MutableStateFlow<ProviderCredentials?>(null)
+    override val providerCredentials: StateFlow<ProviderCredentials?> = _providerCredentials.asStateFlow()
+    
+    private val _currentError = MutableStateFlow<VpnError?>(null)
+    override val currentError: StateFlow<VpnError?> = _currentError.asStateFlow()
+    
+    private val _isLoading = MutableStateFlow(true)
+    override val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    
+    private val _isVpnRunning = MutableStateFlow(false)
+    override val isVpnRunning: StateFlow<Boolean> = _isVpnRunning.asStateFlow()
+    
+    private val _dataRateMbps = MutableStateFlow(0.0)
+    override val dataRateMbps: StateFlow<Double> = _dataRateMbps.asStateFlow()
+    
+    // Error receiver for VPN errors
+    private val errorReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == VpnEngineService.ACTION_VPN_ERROR) {
+                val errorTypeStr = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_TYPE) ?: return
+                val errorMessage = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_MESSAGE) ?: "Unknown error"
+                val errorDetails = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_DETAILS)
+                val tunnelId = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_TUNNEL_ID)
+                val timestamp = intent.getLongExtra(VpnEngineService.EXTRA_ERROR_TIMESTAMP, System.currentTimeMillis())
+                
+                val errorType = try {
+                    VpnError.ErrorType.valueOf(errorTypeStr)
+                } catch (e: Exception) {
+                    VpnError.ErrorType.UNKNOWN
+                }
+                
+                val error = VpnError(
+                    type = errorType,
+                    message = errorMessage,
+                    details = errorDetails,
+                    tunnelId = tunnelId,
+                    timestamp = timestamp
+                )
+                
+                Log.e(TAG, "Received VPN error: ${error.type} - ${error.message}")
+                _currentError.value = error
+                _vpnStatus.value = VpnStatus.ERROR
+            }
+        }
+    }
+    
     // Error handler for all coroutines
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e(TAG, "Error in RouterViewModel", throwable)
@@ -73,19 +131,64 @@ class RouterViewModelImpl @Inject constructor(
         Log.i(TAG, "📱 RouterViewModelImpl initializing...")
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         
+        // Register error receiver
+        LocalBroadcastManager.getInstance(application).registerReceiver(
+            errorReceiver,
+            IntentFilter(VpnEngineService.ACTION_VPN_ERROR)
+        )
+        
         // Initialize state from backend
         viewModelScope.launch(exceptionHandler) {
+            loadProviderCredentials()
+            loadVpnConfigs()
             loadServerGroups()
             loadAppRules()
             loadInstalledApps()
             observeVpnStatus()
             observeLiveStats()
+            _isLoading.value = false
         }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        LocalBroadcastManager.getInstance(application).unregisterReceiver(errorReceiver)
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // BACKEND INTEGRATION (Private)
     // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Load provider credentials from repository
+     */
+    private suspend fun loadProviderCredentials() {
+        try {
+            Log.d(TAG, "🔑 Loading provider credentials...")
+            val creds = settingsRepository.getProviderCredentials("nordvpn")
+            _providerCredentials.value = creds
+            Log.d(TAG, "   Credentials loaded: ${if (creds != null) "✅" else "❌"}")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error loading provider credentials", e)
+            _providerCredentials.value = null
+        }
+    }
+    
+    /**
+     * Load all VPN configurations from repository
+     */
+    private suspend fun loadVpnConfigs() {
+        try {
+            Log.d(TAG, "🔧 Loading VPN configurations...")
+            settingsRepository.getAllVpnConfigs().collect { configs ->
+                _allVpnConfigs.value = configs
+                Log.d(TAG, "   Loaded ${configs.size} VPN configs")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error loading VPN configs", e)
+            _allVpnConfigs.value = emptyList()
+        }
+    }
     
     /**
      * Load VPN configs from repository and convert to ServerGroups.
@@ -316,6 +419,11 @@ class RouterViewModelImpl @Inject constructor(
                     else -> VpnStatus.DISCONNECTED
                 }
                 
+                // Update isVpnRunning state
+                if (_isVpnRunning.value != isRunning) {
+                    _isVpnRunning.value = isRunning
+                }
+                
                 // Only update if status changed (reduces UI churn)
                 if (_vpnStatus.value != newStatus) {
                     Log.d(TAG, "   Status changed: ${_vpnStatus.value} → $newStatus")
@@ -535,6 +643,95 @@ class RouterViewModelImpl @Inject constructor(
                 Log.e(TAG, "❌ Failed to remove server group", e)
             }
         }
+    }
+    
+    override fun saveVpnConfig(config: VpnConfig) {
+        viewModelScope.launch(exceptionHandler) {
+            Log.i(TAG, "💾 Saving VPN config: ${config.name}")
+            try {
+                settingsRepository.saveVpnConfig(config)
+                Log.i(TAG, "✅ VPN config saved")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to save VPN config", e)
+            }
+        }
+    }
+    
+    override fun deleteVpnConfig(configId: String) {
+        viewModelScope.launch(exceptionHandler) {
+            Log.i(TAG, "🗑️  Deleting VPN config: $configId")
+            try {
+                settingsRepository.deleteVpnConfig(configId)
+                Log.i(TAG, "✅ VPN config deleted")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to delete VPN config", e)
+            }
+        }
+    }
+    
+    override fun saveProviderCredentials(username: String, password: String) {
+        viewModelScope.launch(exceptionHandler) {
+            Log.i(TAG, "🔑 Saving provider credentials")
+            try {
+                val creds = ProviderCredentials(
+                    templateId = "nordvpn",
+                    username = username,
+                    password = password
+                )
+                settingsRepository.saveProviderCredentials(creds)
+                _providerCredentials.value = creds
+                Log.i(TAG, "✅ Provider credentials saved")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to save provider credentials", e)
+            }
+        }
+    }
+    
+    override fun fetchNordVpnServer(regionId: String, callback: (String?) -> Unit) {
+        viewModelScope.launch(exceptionHandler) {
+            try {
+                val creds = _providerCredentials.value
+                if (creds == null) {
+                    callback(null)
+                    return@launch
+                }
+                
+                // Map region IDs to country codes
+                val countryCodeMap = mapOf(
+                    "UK" to "GB",
+                    "FR" to "FR",
+                    "AU" to "AU",
+                    "US" to "US",
+                    "DE" to "DE",
+                    "CA" to "CA",
+                    "JP" to "JP",
+                    "IT" to "IT",
+                    "ES" to "ES",
+                    "NL" to "NL"
+                )
+                
+                val countryCode = countryCodeMap[regionId] ?: regionId
+                
+                val servers = try {
+                    nordVpnApiService.getServers("Bearer ${creds.username}")
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                
+                val bestServer = servers
+                    .filter { it.country == countryCode }
+                    .minByOrNull { it.load ?: Int.MAX_VALUE }
+                
+                callback(bestServer?.hostname)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to fetch NordVPN server", e)
+                callback(null)
+            }
+        }
+    }
+    
+    override fun clearError() {
+        _currentError.value = null
     }
 }
 

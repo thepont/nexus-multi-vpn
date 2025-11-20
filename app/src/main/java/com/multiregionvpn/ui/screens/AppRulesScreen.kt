@@ -17,8 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.multiregionvpn.data.GeoBlockedApps
-import com.multiregionvpn.ui.settings.SettingsViewModel
-import com.multiregionvpn.ui.settings.InstalledApp
+import com.multiregionvpn.ui.shared.RouterViewModel
+import com.multiregionvpn.ui.shared.AppRule
 
 /**
  * App Rules Screen - Smart Per-App Routing
@@ -32,9 +32,10 @@ import com.multiregionvpn.ui.settings.InstalledApp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRulesScreen(
-    viewModel: SettingsViewModel
+    viewModel: RouterViewModel
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val installedApps by viewModel.allInstalledApps.collectAsState()
+    val vpnConfigs by viewModel.allVpnConfigs.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     
     // Detect user's current region (for smart routing logic)
@@ -42,12 +43,12 @@ fun AppRulesScreen(
     val userRegion = "AU" // Change this to "UK", "US", "FR", etc. based on actual location
     
     // Smart ordering and filtering
-    val orderedApps = remember(uiState.installedApps, uiState.appRules, uiState.vpnConfigs, searchQuery, userRegion) {
+    val orderedApps = remember(installedApps, vpnConfigs, searchQuery, userRegion) {
         val filtered = if (searchQuery.isEmpty()) {
-            uiState.installedApps
+            installedApps
         } else {
-            uiState.installedApps.filter {
-                it.name.contains(searchQuery, ignoreCase = true) ||
+            installedApps.filter {
+                it.appName.contains(searchQuery, ignoreCase = true) ||
                 it.packageName.contains(searchQuery, ignoreCase = true)
             }
         }
@@ -55,7 +56,7 @@ fun AppRulesScreen(
         // Sort by priority (ASCENDING order)
         filtered.sortedWith(compareBy(
             // 1. Configured apps first (already working)
-            { uiState.appRules[it.packageName] == null },
+            { it.routedGroupId == null },
             
             // 2. Within unconfigured: Foreign geo-blocked apps first
             { app ->
@@ -73,7 +74,7 @@ fun AppRulesScreen(
             },
             
             // 3. Then alphabetically
-            { it.name.lowercase() }
+            { it.appName.lowercase() }
         ))
     }
     
@@ -87,7 +88,7 @@ fun AppRulesScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            placeholder = { Text("Search ${uiState.installedApps.size} apps...") },
+            placeholder = { Text("Search ${installedApps.size} apps...") },
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = "Search")
             },
@@ -113,13 +114,12 @@ fun AppRulesScreen(
             ) { app ->
                 SmartAppRuleItem(
                     app = app,
-                    currentRule = uiState.appRules[app.packageName],
-                    vpnConfigs = uiState.vpnConfigs,
+                    vpnConfigs = vpnConfigs,
                     isGeoBlocked = GeoBlockedApps.isGeoBlocked(app.packageName),
                     recommendedRegion = GeoBlockedApps.getRecommendedRegion(app.packageName),
                     userRegion = userRegion,
-                    onRuleChanged = { vpnConfigId ->
-                        viewModel.saveAppRule(app.packageName, vpnConfigId)
+                    onRuleChanged = { newGroupId ->
+                        viewModel.onAppRuleChange(app, newGroupId)
                     }
                 )
             }
@@ -129,8 +129,7 @@ fun AppRulesScreen(
 
 @Composable
 fun SmartAppRuleItem(
-    app: InstalledApp,
-    currentRule: String?,
+    app: AppRule,
     vpnConfigs: List<com.multiregionvpn.data.database.VpnConfig>,
     isGeoBlocked: Boolean,
     recommendedRegion: String?,
@@ -153,12 +152,11 @@ fun SmartAppRuleItem(
         recommendedRegion == "Multiple" -> true
         
         // App is for user's current region - Direct Internet (null) is valid!
-        recommendedRegion.equals(userRegion, ignoreCase = true) && currentRule == null -> true
+        recommendedRegion.equals(userRegion, ignoreCase = true) && app.routedGroupId == null -> true
         
-        // App routed through matching tunnel
-        currentRule != null -> {
-            val currentTunnel = vpnConfigs.find { it.id == currentRule }
-            currentTunnel?.regionId?.equals(recommendedRegion, ignoreCase = true) == true
+        // App routed through matching region group
+        app.routedGroupId != null -> {
+            app.routedGroupId.equals(recommendedRegion, ignoreCase = true)
         }
         
         // Otherwise not properly routed
@@ -177,7 +175,7 @@ fun SmartAppRuleItem(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(app.name)
+                Text(app.appName)
                 if (isGeoBlocked) {
                     Badge(
                         containerColor = badgeColor,
@@ -193,10 +191,10 @@ fun SmartAppRuleItem(
         },
         supportingContent = {
             Column {
-                if (currentRule != null) {
-                    val tunnel = vpnConfigs.find { it.id == currentRule }
+                if (app.routedGroupId != null) {
+                    val tunnel = vpnConfigs.find { it.regionId == app.routedGroupId }
                     Text(
-                        "→ ${tunnel?.name ?: "Unknown"}",
+                        "→ ${tunnel?.name ?: app.routedGroupId.uppercase()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -212,18 +210,23 @@ fun SmartAppRuleItem(
             }
         },
         leadingContent = {
-            Image(
-                painter = BitmapPainter(app.icon.toBitmap().asImageBitmap()),
-                contentDescription = app.name,
-                modifier = Modifier.size(40.dp)
-            )
+            app.icon?.let { icon ->
+                Image(
+                    painter = BitmapPainter(icon.toBitmap().asImageBitmap()),
+                    contentDescription = app.appName,
+                    modifier = Modifier.size(40.dp)
+                )
+            }
         },
         trailingContent = {
             Box {
                 TextButton(onClick = { expanded = true }) {
                     Text(
                         text = when {
-                            currentRule != null -> vpnConfigs.find { it.id == currentRule }?.name ?: "Set"
+                            app.routedGroupId != null -> {
+                                val tunnel = vpnConfigs.find { it.regionId == app.routedGroupId }
+                                tunnel?.name ?: app.routedGroupId.uppercase()
+                            }
                             suggestedTunnel != null -> "Set"
                             else -> "None"
                         }
@@ -235,7 +238,7 @@ fun SmartAppRuleItem(
                     onDismissRequest = { expanded = false }
                 ) {
                     // Suggestion first if available
-                    if (suggestedTunnel != null && currentRule == null) {
+                    if (suggestedTunnel != null && app.routedGroupId == null) {
                         DropdownMenuItem(
                             text = {
                                 Text(
@@ -244,7 +247,7 @@ fun SmartAppRuleItem(
                                 )
                             },
                             onClick = {
-                                onRuleChanged(suggestedTunnel.id)
+                                onRuleChanged(suggestedTunnel.regionId)
                                 expanded = false
                             }
                         )
@@ -264,12 +267,16 @@ fun SmartAppRuleItem(
                         HorizontalDivider()
                     }
                     
-                    // All tunnels
-                    vpnConfigs.forEach { config ->
+                    // Group tunnels by region
+                    val regions = vpnConfigs.map { it.regionId }.distinct()
+                    regions.forEach { regionId ->
+                        val regionConfigs = vpnConfigs.filter { it.regionId == regionId }
+                        val regionName = regionConfigs.firstOrNull()?.name ?: regionId.uppercase()
+                        
                         DropdownMenuItem(
-                            text = { Text(config.name) },
+                            text = { Text(regionName) },
                             onClick = {
-                                onRuleChanged(config.id)
+                                onRuleChanged(regionId)
                                 expanded = false
                             }
                         )
@@ -279,5 +286,3 @@ fun SmartAppRuleItem(
         }
     )
 }
-
-

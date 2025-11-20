@@ -8,7 +8,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.multiregionvpn.ui.settings.SettingsViewModel
+import com.multiregionvpn.ui.shared.RouterViewModel
 import com.multiregionvpn.ui.settings.composables.VpnConfigSection
 
 /**
@@ -18,9 +18,9 @@ import com.multiregionvpn.ui.settings.composables.VpnConfigSection
  */
 @Composable
 fun TunnelsScreen(
-    viewModel: SettingsViewModel
+    viewModel: RouterViewModel
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val vpnConfigs by viewModel.allVpnConfigs.collectAsState()
     
     Column(
         modifier = Modifier
@@ -29,7 +29,7 @@ fun TunnelsScreen(
             .padding(16.dp)
     ) {
         VpnConfigSection(
-            configs = uiState.vpnConfigs,
+            configs = vpnConfigs,
             onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
             onDeleteConfig = { configId -> viewModel.deleteVpnConfig(configId) },
             onFetchNordVpnServer = { regionId, callback -> 
