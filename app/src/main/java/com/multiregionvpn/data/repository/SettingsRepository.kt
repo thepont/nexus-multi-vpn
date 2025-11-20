@@ -1,5 +1,7 @@
 package com.multiregionvpn.data.repository
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.AppRuleDao
 import com.multiregionvpn.data.database.PresetRule
@@ -8,6 +10,7 @@ import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.ProviderCredentialsDao
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.database.VpnConfigDao
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -15,11 +18,17 @@ import javax.inject.Singleton
 
 @Singleton
 class SettingsRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val vpnConfigDao: VpnConfigDao,
     val appRuleDao: AppRuleDao,  // Public for direct DB queries (bypass Flow caching)
     private val providerCredentialsDao: ProviderCredentialsDao,
     private val presetRuleDao: PresetRuleDao
 ) {
+    private val prefs: SharedPreferences = context.getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
+    
+    companion object {
+        private const val PREF_DEFAULT_DNS_TUNNEL_ID = "default_dns_tunnel_id"
+    }
     // VpnConfig operations
     fun getAllVpnConfigs(): Flow<List<VpnConfig>> = vpnConfigDao.getAll()
     
@@ -81,6 +90,22 @@ class SettingsRepository @Inject constructor(
     suspend fun updateAppRule(packageName: String, vpnConfigId: String) {
         // Update or create the app rule with new VPN config
         appRuleDao.save(AppRule(packageName = packageName, vpnConfigId = vpnConfigId))
+    }
+    
+    // Default DNS tunnel operations
+    fun setDefaultDnsTunnelId(tunnelId: String?) {
+        prefs.edit().apply {
+            if (tunnelId != null) {
+                putString(PREF_DEFAULT_DNS_TUNNEL_ID, tunnelId)
+            } else {
+                remove(PREF_DEFAULT_DNS_TUNNEL_ID)
+            }
+            apply()
+        }
+    }
+    
+    fun getDefaultDnsTunnelId(): String? {
+        return prefs.getString(PREF_DEFAULT_DNS_TUNNEL_ID, null)
     }
     
     // Test helper methods
