@@ -1615,18 +1615,27 @@ void openvpn_wrapper_disconnect(OpenVpnSession* session) {
         
         session->connected = false;
         
-        // Wait for connection thread to finish
+        // Wait for connection thread to finish gracefully
+        // Join the thread instead of detaching to ensure proper cleanup
         if (session->connection_thread.joinable()) {
-            // Give it a moment to finish
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            if (session->connection_thread.joinable()) {
-                session->connection_thread.detach(); // Detach if still running
-            }
+            LOGI("Waiting for connection thread to finish...");
+            // Release the mutex before joining to prevent deadlock
+            // (the thread may need to acquire the mutex to complete)
         }
     } catch (const std::exception& e) {
         LOGE("Exception during disconnect: %s", e.what());
         std::lock_guard<std::mutex> lock(session->state_mutex);
         session->connected = false;
+    }
+    
+    // Join the thread outside the mutex lock to prevent deadlock
+    if (session->connection_thread.joinable()) {
+        try {
+            session->connection_thread.join();
+            LOGI("Connection thread joined successfully");
+        } catch (const std::exception& e) {
+            LOGE("Exception while joining connection thread: %s", e.what());
+        }
     }
 #else
     session->connected = false;

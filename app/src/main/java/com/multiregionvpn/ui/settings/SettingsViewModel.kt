@@ -80,6 +80,9 @@ class SettingsViewModel @Inject constructor(
     
     override fun onCleared() {
         super.onCleared()
+        // Cancel all coroutines launched in viewModelScope to prevent memory leaks
+        // This is redundant with viewModelScope's automatic cancellation, but explicit
+        // for clarity. The viewModelScope is already cancelled by the parent class.
         LocalBroadcastManager.getInstance(app).unregisterReceiver(errorReceiver)
     }
     
