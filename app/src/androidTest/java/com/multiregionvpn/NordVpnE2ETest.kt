@@ -15,7 +15,6 @@ import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.ui.MainActivity
-import com.multiregionvpn.data.database.AppDatabase
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.runBlocking
@@ -27,6 +26,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
+import javax.inject.Inject
 
 /**
  * Test Suite 1: NordVpnE2ETest.kt (The "Live" Test)
@@ -60,7 +60,8 @@ class NordVpnE2ETest {
         // and cannot be granted via GrantPermissionRule. They must be granted via manifest or system dialogs.
     )
 
-    private lateinit var settingsRepo: SettingsRepository
+    @Inject
+    lateinit var settingsRepo: SettingsRepository
 
     private lateinit var device: UiDevice
     private lateinit var appContext: Context
@@ -74,8 +75,8 @@ class NordVpnE2ETest {
     // - context.packageName = "com.multiregionvpn.test" (the test instrumentation runner)
     private val TEST_PACKAGE_NAME = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.packageName
     private val APP_PACKAGE_NAME = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.packageName
-    private val UK_VPN_ID = "test-uk-${UUID.randomUUID().toString().take(8)}"
-    private val FR_VPN_ID = "test-fr-${UUID.randomUUID().toString().take(8)}"
+    private val UK_VPN_ID = "test-uk-" + UUID.randomUUID().toString().take(8)
+    private val FR_VPN_ID = "test-fr-" + UUID.randomUUID().toString().take(8)
     private val directRoutingDummyPackages = listOf(
         "com.android.settings",
         "com.android.chrome",
@@ -116,15 +117,6 @@ class NordVpnE2ETest {
             println("   The test will try to handle the permission dialog instead")
         }
         
-        // Initialize repository manually (without Hilt for E2E tests)
-        val database = AppDatabase.getDatabase(appContext)
-        settingsRepo = SettingsRepository(
-            database.vpnConfigDao(),
-            database.appRuleDao(),
-            database.providerCredentialsDao(),
-            database.presetRuleDao()
-        )
-
         // 1. Stop VPN if running from previous test
         println("🛑 Stopping VPN if running...")
         try {
@@ -572,7 +564,7 @@ class NordVpnE2ETest {
         val lastConfig = VpnEngineService.getLastInterfaceConfig()
         throw AssertionError(
             "❌ VPN interface config did not match expected values within ${timeoutMs / 1000} seconds.\n" +
-            "Expected global=$expectedGlobalMode, disallowed=${expectedDisallowed.joinToString()}.\n" +
+            "Expected global=$expectedGlobalMode, disallowed=${expectedDisallowed.joinToString()}\n" +
             "Last config: $lastConfig"
         )
     }
@@ -611,7 +603,8 @@ class NordVpnE2ETest {
         // If not found by testTag, try finding by text
         if (startToggle == null) {
             println("   Toggle not found by testTag, trying by text 'Start VPN'...")
-            val startVpnText = device.wait(Until.findObject(By.text("Start VPN")), 5000)
+            val startVpnText = device.wait(Until.findObject(By.text("Start VPN")),
+            5000)
             if (startVpnText != null) {
                 startToggle = startVpnText.parent
             }
@@ -620,7 +613,8 @@ class NordVpnE2ETest {
         // Last resort: try finding any Switch
         if (startToggle == null) {
             println("   Trying to find any Switch component...")
-            startToggle = device.wait(Until.findObject(By.clazz("android.widget.Switch")), 3000)
+            startToggle = device.wait(Until.findObject(By.clazz("android.widget.Switch")),
+            3000)
         }
         
         if (startToggle != null) {
@@ -917,4 +911,3 @@ class NordVpnE2ETest {
     }
 
 }
-

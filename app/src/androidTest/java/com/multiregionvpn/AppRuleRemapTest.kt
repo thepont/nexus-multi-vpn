@@ -19,6 +19,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
+import javax.inject.Inject
 import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -35,8 +36,8 @@ class AppRuleRemapTest {
     val hiltRule = HiltAndroidRule(this)
 
     private lateinit var context: Context
-    private lateinit var database: AppDatabase
-    private lateinit var settingsRepository: SettingsRepository
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
     private val testPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
 
@@ -47,13 +48,6 @@ class AppRuleRemapTest {
     fun setUp() = runBlocking {
         hiltRule.inject()
         context = ApplicationProvider.getApplicationContext()
-        database = AppDatabase.getDatabase(context)
-        settingsRepository = SettingsRepository(
-            database.vpnConfigDao(),
-            database.appRuleDao(),
-            database.providerCredentialsDao(),
-            database.presetRuleDao()
-        )
 
         // Clear previous state
         settingsRepository.clearAllAppRules()

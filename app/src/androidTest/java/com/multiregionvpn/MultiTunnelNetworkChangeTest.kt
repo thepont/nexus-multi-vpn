@@ -5,18 +5,21 @@ import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.multiregionvpn.core.VpnEngineService
-import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
+import javax.inject.Inject
 
 /**
  * E2E tests for multi-tunnel network change scenarios.
@@ -27,45 +30,48 @@ import java.util.UUID
  * - Network unavailable scenarios
  * - Tunnel-specific failures
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class MultiTunnelNetworkChangeTest {
+
+    @get:Rule
+    var hiltRule = HiltAndroidRule(this)
+    
+    @Inject
+    lateinit var settingsRepo: SettingsRepository
     
     private lateinit var appContext: Context
-    private lateinit var settingsRepo: SettingsRepository
-    private lateinit var database: AppDatabase
-    
-    private val UK_VPN_ID = UUID.randomUUID().toString()
-    private val FR_VPN_ID = UUID.randomUUID().toString()
-    private val US_VPN_ID = UUID.randomUUID().toString()
+
+    private val UK_VPN_ID = "test-uk-${UUID.randomUUID().toString().take(8)}"
+    private val FR_VPN_ID = "test-fr-${UUID.randomUUID().toString().take(8)}"
+    private val US_VPN_ID = "test-us-${UUID.randomUUID().toString().take(8)}"
     
     @Before
-    fun setup() = runBlocking {
+    fun setup() { // Not a suspend function
+        hiltRule.inject()
         appContext = ApplicationProvider.getApplicationContext()
-        database = AppDatabase.getDatabase(appContext)
-        settingsRepo = SettingsRepository(
-            database.vpnConfigDao(),
-            database.appRuleDao(),
-            database.providerCredentialsDao(),
-            database.presetRuleDao()
-        )
         
         // Clean state
-        stopVpn()
-        delay(2000)
-        settingsRepo.clearAllAppRules()
-        settingsRepo.clearAllVpnConfigs()
-        
-        // Bootstrap test data
-        bootstrapCredentials()
-        bootstrapVpnConfigs()
+        runBlocking { // Wrap suspend calls in runBlocking
+            stopVpn()
+            delay(2000)
+            settingsRepo.clearAllAppRules()
+            settingsRepo.clearAllVpnConfigs()
+            
+            // Bootstrap test data
+            bootstrapCredentials()
+            bootstrapVpnConfigs()
+        }
     }
     
     @After
-    fun teardown() = runBlocking {
-        stopVpn()
-        delay(2000)
-        settingsRepo.clearAllAppRules()
-        settingsRepo.clearAllVpnConfigs()
+    fun teardown() { // Not a suspend function
+        runBlocking { // Wrap suspend calls in runBlocking
+            stopVpn()
+            delay(2000)
+            settingsRepo.clearAllAppRules()
+            settingsRepo.clearAllVpnConfigs()
+        }
     }
     
     @Test
@@ -278,4 +284,3 @@ class MultiTunnelNetworkChangeTest {
         delay(2000)
     }
 }
-

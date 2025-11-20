@@ -17,6 +17,9 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.runner.RunWith
 
+import dagger.hilt.android.testing.HiltAndroidRule
+import javax.inject.Inject
+
 /**
  * Base class for local Docker Compose-based tests.
  * 
@@ -29,7 +32,10 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 abstract class BaseLocalTest {
     
-    @get:Rule
+    @get:Rule(order = 0)
+    val hiltRule = HiltAndroidRule(this)
+
+    @get:Rule(order = 1)
     val grantPermissionRule: GrantPermissionRule = GrantPermissionRule.grant(
         android.Manifest.permission.INTERNET,
         android.Manifest.permission.ACCESS_NETWORK_STATE
@@ -37,7 +43,8 @@ abstract class BaseLocalTest {
     
     protected lateinit var device: UiDevice
     protected lateinit var appContext: Context
-    protected lateinit var settingsRepo: SettingsRepository
+    @Inject
+    lateinit var settingsRepo: SettingsRepository
     protected lateinit var hostIp: String
     
     /**
@@ -47,6 +54,7 @@ abstract class BaseLocalTest {
     
     @Before
     open fun setup() = runBlocking {
+        hiltRule.inject()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         device = UiDevice.getInstance(instrumentation)
         appContext = instrumentation.targetContext
@@ -60,15 +68,6 @@ abstract class BaseLocalTest {
             println("⚠️  Could not pre-approve VPN permission: ${e.message}")
         }
         
-        // Initialize repository
-        val database = AppDatabase.getDatabase(appContext)
-        settingsRepo = SettingsRepository(
-            database.vpnConfigDao(),
-            database.appRuleDao(),
-            database.providerCredentialsDao(),
-            database.presetRuleDao()
-        )
-        
         // Get host machine IP (where Docker Compose runs)
         // For emulator: 10.0.2.2, for physical device: detect or configure
         hostIp = HostMachineManager.getHostIp()
@@ -76,6 +75,9 @@ abstract class BaseLocalTest {
         
         // Get Docker Compose file
         val composeFile = getComposeFile()
+        
+        // Start Docker Compose
+        startDockerCompose(composeFile)
         
         // Print setup instructions (Docker Compose must be running on host)
         DockerComposeManager.printSetupInstructions(composeFile)
@@ -99,6 +101,9 @@ abstract class BaseLocalTest {
     
     @After
     open fun tearDown() = runBlocking {
+        // Stop Docker Compose
+        stopDockerCompose(getComposeFile())
+
         // Stop VPN service
         try {
             val stopIntent = Intent(appContext, VpnEngineService::class.java).apply {
@@ -141,5 +146,26 @@ abstract class BaseLocalTest {
             delay(2000) // Wait for service to stop
         }
     }
-}
 
+    private fun startDockerCompose(composeFile: DockerComposeManager.ComposeFile) {
+        try {
+            val projectRoot = System.getProperty("user.dir")
+            val command = "docker-compose -f ${DockerComposeManager.getComposeFilePath(composeFile)} up -d"
+            val process = Runtime.getRuntime().exec(command, null, java.io.File(projectRoot, "app/src/androidTest/resources/docker-compose"))
+            process.waitFor()
+        } catch (e: Exception) {
+            println("⚠️  Could not start Docker Compose: ${e.message}")
+        }
+    }
+
+    private fun stopDockerCompose(composeFile: DockerComposeManager.ComposeFile) {
+        try {
+            val projectRoot = System.getProperty("user.dir")
+            val command = "docker-compose -f ${DockerComposeManager.getComposeFilePath(composeFile)} down"
+            val process = Runtime.getRuntime().exec(command, null, java.io.File(projectRoot, "app/src/androidTest/resources/docker-compose"))
+            process.waitFor()
+        } catch (e: Exception) {
+            println("⚠️  Could not stop Docker Compose: ${e.message}")
+        }
+    }
+}

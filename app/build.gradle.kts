@@ -33,6 +33,7 @@ fun envOrDotenv(key: String): String? =
 android {
     namespace = "com.multiregionvpn"
     compileSdk = 34
+
     
     buildFeatures {
         buildConfig = true
@@ -383,11 +384,9 @@ dependencies {
     androidTestImplementation("com.squareup.retrofit2:converter-moshi:2.9.0")
     androidTestImplementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
     androidTestImplementation("com.google.dagger:hilt-android-testing:2.51.1")
-    ksp("com.google.dagger:hilt-compiler:2.51.1") // Hilt compiler for tests
     androidTestImplementation("androidx.test:rules:1.5.0")
     
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-
