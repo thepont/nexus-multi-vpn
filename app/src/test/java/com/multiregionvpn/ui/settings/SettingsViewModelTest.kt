@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.common.truth.Truth.assertThat
 import com.multiregionvpn.MainCoroutineRule
 import com.multiregionvpn.data.database.AppRule
@@ -12,12 +11,12 @@ import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.network.NordVpnApiService
+import com.multiregionvpn.core.VpnError
+import com.multiregionvpn.ui.components.VpnStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
@@ -41,7 +40,6 @@ class SettingsViewModelTest {
     private lateinit var nordVpnApiService: NordVpnApiService
     private lateinit var application: Application
     private lateinit var packageManager: PackageManager
-    private lateinit var localBroadcastManager: LocalBroadcastManager
 
     // The class we are testing
     private lateinit var viewModel: SettingsViewModel
@@ -52,23 +50,14 @@ class SettingsViewModelTest {
         nordVpnApiService = mockk(relaxed = true)
         application = mockk(relaxed = true)
         packageManager = mockk(relaxed = true)
-        localBroadcastManager = mockk(relaxed = true)
-        
-        mockkStatic(LocalBroadcastManager::class)
         
         // Mock the application context and package manager
         every { application.packageManager } returns packageManager
         every { application.applicationContext } returns application
         every { application.packageName } returns "com.multiregionvpn"
-        every { LocalBroadcastManager.getInstance(application) } returns localBroadcastManager
         
         // Mock the return of getInstalledApplications (empty list by default)
         every { packageManager.getInstalledApplications(PackageManager.GET_META_DATA) } returns emptyList()
-    }
-    
-    @org.junit.After
-    fun tearDown() {
-        unmockkStatic(LocalBroadcastManager::class)
     }
     
     private fun createViewModel() {
@@ -272,5 +261,56 @@ class SettingsViewModelTest {
         assertThat(state.appRules).containsKey("com.bbc.iplayer")
         assertThat(state.appRules).containsKey("com.itv.hub")
         assertThat(state.appRules["com.bbc.iplayer"]).isEqualTo("id1")
+    }
+
+    @Test
+    fun `given a VPN error, when updateError is called, then uiState is updated with error and ERROR status`() = runTest {
+        // GIVEN: A loaded ViewModel
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        createViewModel()
+        kotlinx.coroutines.delay(100)
+
+        // WHEN: updateError is called with a VPN error
+        val error = VpnError(
+            type = VpnError.ErrorType.AUTHENTICATION_FAILED,
+            message = "Auth failed",
+            details = "Invalid credentials",
+            tunnelId = "uk-tunnel"
+        )
+        viewModel.updateError(error)
+
+        // THEN: The UI state is updated with the error and status is ERROR
+        val state = viewModel.uiState.value
+        assertThat(state.currentError).isEqualTo(error)
+        assertThat(state.vpnStatus).isEqualTo(VpnStatus.ERROR)
+    }
+
+    @Test
+    fun `given an error exists, when clearError is called, then currentError is null`() = runTest {
+        // GIVEN: A ViewModel with an error
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        createViewModel()
+        kotlinx.coroutines.delay(100)
+        
+        val error = VpnError(
+            type = VpnError.ErrorType.CONNECTION_FAILED,
+            message = "Connection failed"
+        )
+        viewModel.updateError(error)
+        
+        // Verify error is set
+        assertThat(viewModel.uiState.value.currentError).isNotNull()
+
+        // WHEN: clearError is called
+        viewModel.clearError()
+
+        // THEN: currentError is null
+        assertThat(viewModel.uiState.value.currentError).isNull()
     }
 }

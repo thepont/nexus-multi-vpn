@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,12 +38,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.ui.settings.composables.AppRuleSection
 import com.multiregionvpn.ui.settings.composables.ProviderCredentialsSection
 import com.multiregionvpn.ui.settings.composables.VpnConfigSection
+import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.ui.components.VpnHeaderBar
 
@@ -56,6 +63,50 @@ fun SettingsScreen(
     var showErrorDialog by remember { mutableStateOf<VpnError?>(null) }
     
     val context = LocalContext.current
+    
+    // Register BroadcastReceiver for VPN errors in the UI layer
+    DisposableEffect(context) {
+        val errorReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == VpnEngineService.ACTION_VPN_ERROR) {
+                    val errorTypeStr = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_TYPE) ?: return
+                    val errorMessage = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_MESSAGE) ?: "Unknown error"
+                    val errorDetails = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_DETAILS)
+                    val tunnelId = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_TUNNEL_ID)
+                    val timestamp = intent.getLongExtra(VpnEngineService.EXTRA_ERROR_TIMESTAMP, System.currentTimeMillis())
+                    
+                    val errorType = try {
+                        VpnError.ErrorType.valueOf(errorTypeStr)
+                    } catch (e: Exception) {
+                        VpnError.ErrorType.UNKNOWN
+                    }
+                    
+                    val error = VpnError(
+                        type = errorType,
+                        message = errorMessage,
+                        details = errorDetails,
+                        tunnelId = tunnelId,
+                        timestamp = timestamp
+                    )
+                    
+                    // Update ViewModel with the error
+                    viewModel.updateError(error)
+                }
+            }
+        }
+        
+        // Register the receiver
+        LocalBroadcastManager.getInstance(context).registerReceiver(
+            errorReceiver,
+            IntentFilter(VpnEngineService.ACTION_VPN_ERROR)
+        )
+        
+        // Unregister when the composable is disposed
+        onDispose {
+            LocalBroadcastManager.getInstance(context).unregisterReceiver(errorReceiver)
+        }
+    }
+    
     val vpnPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->

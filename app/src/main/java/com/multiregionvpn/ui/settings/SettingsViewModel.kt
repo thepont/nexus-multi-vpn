@@ -18,11 +18,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.ui.components.VpnStatus
@@ -36,51 +31,21 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
-    
-    private val errorReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == VpnEngineService.ACTION_VPN_ERROR) {
-                val errorTypeStr = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_TYPE) ?: return
-                val errorMessage = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_MESSAGE) ?: "Unknown error"
-                val errorDetails = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_DETAILS)
-                val tunnelId = intent.getStringExtra(VpnEngineService.EXTRA_ERROR_TUNNEL_ID)
-                val timestamp = intent.getLongExtra(VpnEngineService.EXTRA_ERROR_TIMESTAMP, System.currentTimeMillis())
-                
-                val errorType = try {
-                    VpnError.ErrorType.valueOf(errorTypeStr)
-                } catch (e: Exception) {
-                    VpnError.ErrorType.UNKNOWN
-                }
-                
-                val error = VpnError(
-                    type = errorType,
-                    message = errorMessage,
-                    details = errorDetails,
-                    tunnelId = tunnelId,
-                    timestamp = timestamp
-                )
-                
-                android.util.Log.e("SettingsViewModel", "Received VPN error: ${error.type} - ${error.message}")
-                _uiState.update { it.copy(
-                    currentError = error,
-                    vpnStatus = VpnStatus.ERROR
-                ) }
-            }
-        }
-    }
 
     init {
         loadAllData()
-        // Register error receiver
-        LocalBroadcastManager.getInstance(app).registerReceiver(
-            errorReceiver,
-            IntentFilter(VpnEngineService.ACTION_VPN_ERROR)
-        )
     }
     
-    override fun onCleared() {
-        super.onCleared()
-        LocalBroadcastManager.getInstance(app).unregisterReceiver(errorReceiver)
+    /**
+     * Updates the error state from a VPN error broadcast.
+     * Called by the UI layer when a VPN error is received.
+     */
+    fun updateError(error: VpnError) {
+        android.util.Log.e("SettingsViewModel", "Received VPN error: ${error.type} - ${error.message}")
+        _uiState.update { it.copy(
+            currentError = error,
+            vpnStatus = VpnStatus.ERROR
+        ) }
     }
     
     fun clearError() {
