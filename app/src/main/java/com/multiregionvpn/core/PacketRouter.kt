@@ -126,6 +126,7 @@ class PacketRouter(
                         if (uid != null) {
                             // Get the tunnel ID for this UID
                             var tunnelId = tracker.getTunnelIdForUid(uid)
+                            var vpnConfig: com.multiregionvpn.data.database.VpnConfig? = null
                             
                             // If no tunnel ID yet, look up the rule
                             if (tunnelId == null) {
@@ -133,7 +134,7 @@ class PacketRouter(
                                     settingsRepository.getAppRuleByPackageName(packageName)
                                 }
                                 if (appRule != null && appRule.vpnConfigId != null) {
-                                    val vpnConfig = kotlinx.coroutines.runBlocking {
+                                    vpnConfig = kotlinx.coroutines.runBlocking {
                                         settingsRepository.getVpnConfigById(appRule.vpnConfigId!!)
                                     }
                                     if (vpnConfig != null) {
@@ -149,12 +150,7 @@ class PacketRouter(
                             
                             // Log new connection event
                             val protocolName = if (packetInfo.protocol == 6) "TCP" else if (packetInfo.protocol == 17) "UDP" else "Other"
-                            val tunnelAlias = if (tunnelId != null) {
-                                val vpnConfig = kotlinx.coroutines.runBlocking {
-                                    settingsRepository.getVpnConfigById(tunnelId.split("_").drop(1).joinToString("_"))
-                                }
-                                vpnConfig?.alias
-                            } else null
+                            val tunnelAlias = vpnConfig?.name
                             onNewConnection?.invoke(
                                 packageName,
                                 packetInfo.destIp.hostAddress ?: "unknown",
