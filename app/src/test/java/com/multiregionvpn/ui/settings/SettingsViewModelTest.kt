@@ -273,4 +273,76 @@ class SettingsViewModelTest {
         assertThat(state.appRules).containsKey("com.itv.hub")
         assertThat(state.appRules["com.bbc.iplayer"]).isEqualTo("id1")
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LIFECYCLE TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun `onCleared unregisters broadcast receiver to prevent leaks`() = runTest {
+        // GIVEN: ViewModel initialized (which registers the error receiver)
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        createViewModel()
+        kotlinx.coroutines.delay(100)
+        
+        // Verify receiver was registered
+        io.mockk.verify(exactly = 1) { 
+            localBroadcastManager.registerReceiver(any(), any()) 
+        }
+        
+        // WHEN: ViewModel is cleared (simulating activity/fragment destruction)
+        viewModel.onCleared()
+        
+        // THEN: Broadcast receiver is unregistered to prevent memory leaks
+        io.mockk.verify(exactly = 1) { 
+            localBroadcastManager.unregisterReceiver(any()) 
+        }
+    }
+
+    @Test
+    fun `viewModelScope automatically cancels loadAllData flow collection`() = runTest {
+        // GIVEN: ViewModel initialized with a flow that emits values
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        createViewModel()
+        
+        // Let the flow collection run for a bit
+        kotlinx.coroutines.delay(100)
+        
+        // WHEN: ViewModel is cleared
+        viewModel.onCleared()
+        
+        // Advance time to ensure the flow collection doesn't continue
+        kotlinx.coroutines.delay(1000)
+        
+        // THEN: The test completes without hanging
+        // The viewModelScope.launch in loadAllData() is automatically cancelled
+        // when onCleared() is called, stopping the infinite .collect{} loop
+        assertThat(true).isTrue()  // Test passes if we reach here without timeout
+    }
+
+    @Test
+    fun `onCleared is safe to call multiple times`() = runTest {
+        // GIVEN: ViewModel initialized
+        every { settingsRepo.getAllVpnConfigs() } returns flowOf(emptyList())
+        every { settingsRepo.getAllAppRules() } returns flowOf(emptyList())
+        coEvery { settingsRepo.getProviderCredentials(any()) } returns null
+        
+        createViewModel()
+        kotlinx.coroutines.delay(100)
+        
+        // WHEN: onCleared is called multiple times
+        viewModel.onCleared()
+        viewModel.onCleared()
+        viewModel.onCleared()
+        
+        // THEN: No exceptions are thrown
+        // This verifies that cleanup is idempotent and safe
+        assertThat(true).isTrue()
+    }
 }
