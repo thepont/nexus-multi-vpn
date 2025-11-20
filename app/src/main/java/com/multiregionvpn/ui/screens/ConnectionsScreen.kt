@@ -12,6 +12,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.multiregionvpn.ui.connections.ConnectionsViewModel
+import com.multiregionvpn.ui.connections.ConnectionEventDisplay
 
 /**
  * Connections Screen - Performance-Optimized Connection Log
@@ -20,9 +23,10 @@ import androidx.compose.ui.unit.sp
  * Uses pull-to-refresh pattern for performance.
  */
 @Composable
-fun ConnectionsScreen() {
-    var connections by remember { mutableStateOf(emptyList<ConnectionEvent>()) }
-    var isRefreshing by remember { mutableStateOf(false) }
+fun ConnectionsScreen(
+    viewModel: ConnectionsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
     
     Column(
         modifier = Modifier
@@ -43,11 +47,7 @@ fun ConnectionsScreen() {
             )
             
             IconButton(
-                onClick = {
-                    isRefreshing = true
-                    // TODO: Load connections from database
-                    isRefreshing = false
-                }
+                onClick = { viewModel.refresh() }
             ) {
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
             }
@@ -55,7 +55,14 @@ fun ConnectionsScreen() {
         
         Spacer(modifier = Modifier.height(8.dp))
         
-        if (connections.isEmpty()) {
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else if (uiState.connections.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -70,8 +77,8 @@ fun ConnectionsScreen() {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(connections.size) { index ->
-                    ConnectionEventCard(connections[index])
+                items(uiState.connections.size) { index ->
+                    ConnectionEventCard(uiState.connections[index])
                 }
             }
         }
@@ -79,7 +86,7 @@ fun ConnectionsScreen() {
 }
 
 @Composable
-fun ConnectionEventCard(event: ConnectionEvent) {
+fun ConnectionEventCard(event: ConnectionEventDisplay) {
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -129,14 +136,4 @@ fun ConnectionEventCard(event: ConnectionEvent) {
         }
     }
 }
-
-/**
- * Connection event data class
- */
-data class ConnectionEvent(
-    val timestamp: String,
-    val appName: String,
-    val destination: String,
-    val tunnelAlias: String
-)
 

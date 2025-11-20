@@ -20,7 +20,8 @@ class PacketRouter(
     private val vpnService: VpnService,
     private val vpnConnectionManager: VpnConnectionManager,
     private val vpnOutput: java.io.FileOutputStream? = null, // For writing packets back to TUN interface
-    private val connectionTracker: ConnectionTracker? = null // Optional connection tracker for UID detection
+    private val connectionTracker: ConnectionTracker? = null, // Optional connection tracker for UID detection
+    private val onNewConnection: ((packageName: String, destIp: String, destPort: Int, protocol: String, tunnelId: String?, tunnelAlias: String?) -> Unit)? = null
 ) {
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val packageManager = context.packageManager
@@ -145,6 +146,23 @@ class PacketRouter(
                             
                             // Register this connection immediately so future packets are tracked
                             tracker.registerConnection(packetInfo.srcIp, packetInfo.srcPort, uid, tunnelId)
+                            
+                            // Log new connection event
+                            val protocolName = if (packetInfo.protocol == 6) "TCP" else if (packetInfo.protocol == 17) "UDP" else "Other"
+                            val tunnelAlias = if (tunnelId != null) {
+                                val vpnConfig = kotlinx.coroutines.runBlocking {
+                                    settingsRepository.getVpnConfigById(tunnelId.split("_").drop(1).joinToString("_"))
+                                }
+                                vpnConfig?.alias
+                            } else null
+                            onNewConnection?.invoke(
+                                packageName,
+                                packetInfo.destIp.hostAddress ?: "unknown",
+                                packetInfo.destPort,
+                                protocolName,
+                                tunnelId,
+                                tunnelAlias
+                            )
                             
                             if (tunnelId != null) {
                                 // Route to tunnel
