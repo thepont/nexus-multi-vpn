@@ -1,5 +1,7 @@
 package com.multiregionvpn.data.repository
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.AppRuleDao
 import com.multiregionvpn.data.database.ProviderCredentials
@@ -11,6 +13,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -20,6 +23,9 @@ import org.junit.Test
 class SettingsRepositoryTest {
 
     // Create mocks for all dependencies
+    private lateinit var mockContext: Context
+    private lateinit var mockSharedPrefs: SharedPreferences
+    private lateinit var mockEditor: SharedPreferences.Editor
     private lateinit var vpnConfigDao: VpnConfigDao
     private lateinit var appRuleDao: AppRuleDao
     private lateinit var credsDao: ProviderCredentialsDao
@@ -31,11 +37,22 @@ class SettingsRepositoryTest {
 
     @Before
     fun setup() {
+        mockContext = mockk()
+        mockSharedPrefs = mockk()
+        mockEditor = mockk(relaxed = true)
         vpnConfigDao = mockk()
         appRuleDao = mockk()
         credsDao = mockk()
         presetRuleDao = mockk()
-        repository = SettingsRepository(vpnConfigDao, appRuleDao, credsDao, presetRuleDao)
+        
+        // Mock SharedPreferences
+        every { mockContext.getSharedPreferences("vpn_settings", Context.MODE_PRIVATE) } returns mockSharedPrefs
+        every { mockSharedPrefs.edit() } returns mockEditor
+        every { mockEditor.putString(any(), any()) } returns mockEditor
+        every { mockEditor.remove(any()) } returns mockEditor
+        every { mockEditor.apply() } returns Unit
+        
+        repository = SettingsRepository(mockContext, vpnConfigDao, appRuleDao, credsDao, presetRuleDao)
     }
 
     @Test
@@ -188,5 +205,53 @@ class SettingsRepositoryTest {
 
         // THEN: the repository returns the config from the DAO
         assertThat(result).isEqualTo(expectedConfig)
+    }
+
+    @Test
+    fun `given no default DNS tunnel set, when getDefaultDnsTunnelId is called, then it returns null`() {
+        // GIVEN: SharedPreferences returns null
+        every { mockSharedPrefs.getString("default_dns_tunnel_id", null) } returns null
+
+        // WHEN: getDefaultDnsTunnelId is called
+        val result = repository.getDefaultDnsTunnelId()
+
+        // THEN: it returns null
+        assertThat(result).isNull()
+    }
+
+    @Test
+    fun `given a default DNS tunnel is set, when getDefaultDnsTunnelId is called, then it returns the tunnel id`() {
+        // GIVEN: SharedPreferences returns a tunnel id
+        val expectedTunnelId = "nordvpn_UK"
+        every { mockSharedPrefs.getString("default_dns_tunnel_id", null) } returns expectedTunnelId
+
+        // WHEN: getDefaultDnsTunnelId is called
+        val result = repository.getDefaultDnsTunnelId()
+
+        // THEN: it returns the tunnel id
+        assertThat(result).isEqualTo(expectedTunnelId)
+    }
+
+    @Test
+    fun `given a tunnel id, when setDefaultDnsTunnelId is called, then it saves to SharedPreferences`() {
+        // GIVEN: a tunnel id
+        val tunnelId = "nordvpn_UK"
+
+        // WHEN: setDefaultDnsTunnelId is called
+        repository.setDefaultDnsTunnelId(tunnelId)
+
+        // THEN: SharedPreferences editor is used to save the tunnel id
+        verify { mockEditor.putString("default_dns_tunnel_id", tunnelId) }
+        verify { mockEditor.apply() }
+    }
+
+    @Test
+    fun `given null tunnel id, when setDefaultDnsTunnelId is called, then it removes from SharedPreferences`() {
+        // WHEN: setDefaultDnsTunnelId is called with null
+        repository.setDefaultDnsTunnelId(null)
+
+        // THEN: SharedPreferences editor removes the key
+        verify { mockEditor.remove("default_dns_tunnel_id") }
+        verify { mockEditor.apply() }
     }
 }

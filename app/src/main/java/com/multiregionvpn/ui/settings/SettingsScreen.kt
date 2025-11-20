@@ -41,6 +41,7 @@ import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.multiregionvpn.ui.settings.composables.AppRuleSection
+import com.multiregionvpn.ui.settings.composables.DnsTunnelPreference
 import com.multiregionvpn.ui.settings.composables.ProviderCredentialsSection
 import com.multiregionvpn.ui.settings.composables.VpnConfigSection
 import com.multiregionvpn.core.VpnError
@@ -144,7 +145,16 @@ fun SettingsScreen(
 
             Divider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // Section 3: App Routing Rules
+            // Section 3: DNS Tunnel Preference
+            DnsTunnelPreference(
+                configs = uiState.vpnConfigs,
+                selectedTunnelId = uiState.defaultDnsTunnelId,
+                onTunnelSelected = { tunnelId -> viewModel.setDefaultDnsTunnel(tunnelId) }
+            )
+
+            Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+            // Section 4: App Routing Rules
             AppRuleSection(
                 installedApps = uiState.installedApps,
                 appRules = uiState.appRules,
