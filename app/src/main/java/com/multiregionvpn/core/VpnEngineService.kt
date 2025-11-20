@@ -813,6 +813,11 @@ class VpnEngineService : VpnService() {
         // Unregister network callback
         unregisterNetworkCallback()
         
+        // Cancel all coroutines to prevent leaks
+        // This cancels all running coroutines including packet reading, tunnel management, etc.
+        Log.i(TAG, "🧹 Cancelling serviceScope to stop all background coroutines")
+        serviceScope.cancel()
+        
         connectionTracker?.clearAllMappings()
         runningInstance = null
         super.onDestroy()
