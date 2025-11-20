@@ -7,7 +7,6 @@ import com.multiregionvpn.core.vpnclient.OpenVpnClient
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
 import com.multiregionvpn.core.vpnclient.WireGuardVpnClient
 import com.multiregionvpn.core.vpnclient.AuthenticationException
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
@@ -877,8 +876,9 @@ class VpnConnectionManager(
     }
     
     suspend fun closeAll() {
-        connections.values.forEach { 
-            runBlocking { it.disconnect() }
+        // Fully async - disconnect all tunnels concurrently
+        connections.values.forEach { client ->
+            client.disconnect()
         }
         
         // Stop all pipe readers and close writers
