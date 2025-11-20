@@ -9,6 +9,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * The main Room database for the application.
  * This class ties all the Entities and DAOs together.
+ * 
+ * IMPORTANT: This database uses proper migration strategies to preserve user data.
+ * Never use fallbackToDestructiveMigration() in production as it will delete all user data.
+ * 
+ * When changing the schema:
+ * 1. Increment the version number
+ * 2. Create a migration in Migrations.kt
+ * 3. Add the migration using .addMigrations() in getDatabase()
+ * 4. Test the migration thoroughly
  */
 @Database(
     entities = [
@@ -18,7 +27,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PresetRule::class
     ],
     version = 1,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -39,6 +48,10 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "region_router_db"
                 )
+                // Add database migrations to preserve user data during schema changes
+                // Example: .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3)
+                // DO NOT use .fallbackToDestructiveMigration() as it deletes user data
+                
                 // Add the pre-seeding callback
                 .addCallback(PresetRuleCallback(context))
                 .build()
