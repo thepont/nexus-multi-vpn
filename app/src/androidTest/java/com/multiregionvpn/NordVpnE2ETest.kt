@@ -102,7 +102,13 @@ class NordVpnE2ETest {
         }
         
         // Initialize repository manually (without Hilt for E2E tests)
-        val database = AppDatabase.getDatabase(appContext)
+        val database = androidx.room.Room.databaseBuilder(
+            appContext.applicationContext,
+            AppDatabase::class.java,
+            "region_router_db"
+        )
+            .addCallback(AppDatabase.PresetRuleCallback())
+            .build()
         settingsRepo = SettingsRepository(
             database.vpnConfigDao(),
             database.appRuleDao(),

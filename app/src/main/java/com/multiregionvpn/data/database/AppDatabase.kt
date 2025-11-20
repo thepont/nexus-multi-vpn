@@ -1,8 +1,6 @@
 package com.multiregionvpn.data.database
 
-import android.content.Context
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -28,30 +26,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun providerCredentialsDao(): ProviderCredentialsDao
     abstract fun presetRuleDao(): PresetRuleDao
 
-    companion object {
-        @Volatile
-        private var INSTANCE: AppDatabase? = null
-
-        fun getDatabase(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "region_router_db"
-                )
-                // Add the pre-seeding callback
-                .addCallback(PresetRuleCallback(context))
-                .build()
-                INSTANCE = instance
-                instance
-            }
-        }
-    }
-
     /**
      * Database Callback to pre-seed the PresetRule table on first creation.
      */
-    private class PresetRuleCallback(private val context: Context) : RoomDatabase.Callback() {
+    class PresetRuleCallback : RoomDatabase.Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
             // Pre-seed preset rules using direct SQL insertions

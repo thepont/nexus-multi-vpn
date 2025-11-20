@@ -61,7 +61,7 @@ abstract class BaseLocalTest {
         }
         
         // Initialize repository
-        val database = AppDatabase.getDatabase(appContext)
+        val database = TestDatabaseHelper.createDatabase(appContext)
         settingsRepo = SettingsRepository(
             database.vpnConfigDao(),
             database.appRuleDao(),
