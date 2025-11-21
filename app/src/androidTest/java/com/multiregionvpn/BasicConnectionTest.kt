@@ -1,55 +1,31 @@
+package com.multiregionvpn
+
 import android.content.Context
 import android.net.VpnService
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
+import com.google.common.truth.Truth.assertThat
+import org.mockito.Mock
+import org.mockito.MockitoAnnotations
+import org.mockito.kotlin.whenever
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.anyInt // Import anyInt for mocking VpnService.protect
+import okhttp3.ResponseBody
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import org.junit.Before
+import org.junit.After // Import After for teardown
+import org.junit.Test
+import org.junit.runner.RunWith
+import android.os.ParcelFileDescriptor // Import ParcelFileDescriptor
+
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
 import com.multiregionvpn.core.VpnTemplateService
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.network.NordVpnApiService
-import com.google.common.truth.Truth.assertThat
-import org.mockito.MockitoAnnotations
-import org.mockito.kotlin.mock
-import retrofit2.Retrofit
-import retrofit2.converter.scalars.ScalarsConverterFactory
-import retrofit2.converter.moshi.MoshiConverterFactory
-import com.squareup.moshi.Moshi
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
-import org.junit.Before
-import org.junit.Test
-import org.junit.runner.RunWith
-import org.junit.After // Import After
 
-import org.mockito.kotlin.whenever
-import org.mockito.ArgumentMatchers.anyString
-import okhttp3.ResponseBody
-import android.os.ParcelFileDescriptor
-import android.content.Intent
-import android.os.IBinder
-
-// Create a dummy VpnService implementation for testing purposes
-// This class extends VpnService but doesn't implement any actual VPN logic.
-// It exists purely to satisfy the NativeOpenVpnClient constructor's VpnService requirement
-// and to allow a non-null VpnService object to be passed.
-class TestVpnService : VpnService() {
-    override fun onCreate() {
-        super.onCreate()
-        // No actual VPN setup needed for this test
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_NOT_STICKY
-    }
-
-    override fun onBind(intent: Intent?): IBinder? {
-        return null // Not binding to any service
-    }
-}
 
 /**
  * Basic connection test to verify OpenVPN 3 native client can connect to a VPN server.
@@ -60,9 +36,9 @@ class BasicConnectionTest {
 
     private lateinit var appContext: Context
     
-    // private lateinit var mockVpnService: VpnService // Removed
-    private lateinit var testVpnService: TestVpnService // Use actual VpnService for NativeClient
-
+    @Mock
+    private lateinit var mockVpnService: VpnService // Keep mock for protect() method
+    
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var vpnTemplateService: VpnTemplateService
     private val TEST_SERVER = "uk1234.nordvpn.com" // Use a real NordVPN server
@@ -71,20 +47,16 @@ class BasicConnectionTest {
     private lateinit var mockNordVpnApiService: NordVpnApiService
     
     private var tunFd: Int = -1
-    private lateinit var pfd: ParcelFileDescriptor
+    private lateinit var pfd: ParcelFileDescriptor // Hold ParcelFileDescriptor to close it
 
     @Before
     fun setup() {
         appContext = InstrumentationRegistry.getInstrumentation().targetContext
         MockitoAnnotations.openMocks(this)
         
-        // Initialize a dummy VpnService instance
-        testVpnService = TestVpnService()
-        // Attach to context needed for VpnService internal operations
-        // The VpnService context is usually an Application context.
-        // For testing, we can use the targetContext.
-        testVpnService.attach(appContext, null, null, null, null) 
-
+        // Mock VpnService.protect() to return true to satisfy native code
+        whenever(mockVpnService.protect(anyInt())).thenReturn(true)
+        
         // Create a dummy TUN file descriptor using a pipe
         // This provides a valid FD for the native code without creating a real TUN device
         val pipe = ParcelFileDescriptor.createPipe()
@@ -113,10 +85,9 @@ class BasicConnectionTest {
         // Close the ParcelFileDescriptor to prevent resource leaks
         if (tunFd != -1) {
             pfd.close()
-            // The write end of the pipe might also need to be closed if it's held elsewhere
+            // The other end of the pipe (pipe[1]) will be closed by GC or when the process exits
             // For now, assume pfd handles both ends or garbage collection will clean up
         }
-        testVpnService.onDestroy() // Clean up the dummy VpnService
     }
 
     @Test
@@ -189,9 +160,9 @@ class BasicConnectionTest {
         assertThat(authLines!!.size).isAtLeast(2)
         println("   Auth file has ${authLines.size} lines")
         
-        // Create NativeOpenVpnClient
-        println("\n   Creating NativeOpenVpnClient...")
-        val client = NativeOpenVpnClient(appContext, testVpnService, tunFd, "test-basic-connection", null, null)
+        // Create NativeOpenVpnClient with mocked VpnService and dummy TUN FD
+        println("\n   Creating NativeOpenVpnClient with mockVpnService and dummy TUN FD...")
+        val client = NativeOpenVpnClient(appContext, mockVpnService, tunFd, "test-basic-connection", null, null)
         println("✓ Client created")
         
         assertThat(client.isConnected()).isFalse()
@@ -268,7 +239,7 @@ class BasicConnectionTest {
             println("   - Connection attempt: ❌")
         }
         
-        // Cleanup
+        // Cleanup of prepared config file
         preparedConfig.authFile?.delete()
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
