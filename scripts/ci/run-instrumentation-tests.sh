@@ -97,15 +97,7 @@ set +e
 # Use connectedDebugAndroidTest - it will install both APKs and run tests
 # Since we've already built everything, this should just install and run
 # Pass NordVPN credentials as instrumentation arguments
-NORDVPN_ARGS=""
-if [ -n "$NORDVPN_USERNAME" ]; then
-    NORDVPN_ARGS="$NORDVPN_ARGS -Pandroid.testInstrumentationRunnerArguments.NORDVPN_USERNAME=$NORDVPN_USERNAME"
-fi
-if [ -n "$NORDVPN_PASSWORD" ]; then
-    NORDVPN_ARGS="$NORDVPN_ARGS -Pandroid.testInstrumentationRunnerArguments.NORDVPN_PASSWORD=$NORDVPN_PASSWORD"
-fi
-
-./gradlew connectedDebugAndroidTest --info --stacktrace $NORDVPN_ARGS 2>&1 | tee instrumentation-test.log
+./gradlew connectedDebugAndroidTest --info --stacktrace 2>&1 | tee instrumentation-test.log
 
 # Capture exit code of the gradle command (first command in pipeline), not tee
 TEST_EXIT=${PIPESTATUS[0]}
