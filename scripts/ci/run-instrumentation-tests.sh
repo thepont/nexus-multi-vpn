@@ -2,6 +2,17 @@
 # Run instrumentation tests with monitoring
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Load NordVPN credentials from .env file for tests
+if [ -f "$PROJECT_DIR/.env" ]; then
+    echo "Sourcing NordVPN credentials from .env file."
+    source "$PROJECT_DIR/.env"
+else
+    echo "Warning: .env file not found. NordVPN related tests might fail."
+fi
+
 echo "========================================"
 echo "Starting Instrumentation Tests"
 echo "========================================"
