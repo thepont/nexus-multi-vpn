@@ -36,6 +36,7 @@
 #include <client/ovpncli.hpp>
 #include <openvpn/client/dns_options.hpp>  // For DnsOptions
 using namespace openvpn::ClientAPI;
+using namespace openvpn;
 
 // CRITICAL: Include External TUN Factory for proper custom TUN implementation
 #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
@@ -500,10 +501,11 @@ private:
         LOGI("═══════════════════════════════════════════════════════");
         LOGI("🔧 tun_builder_new() called by OpenVPN 3");
         LOGI("   This is called FIRST before any other tun_builder_* methods");
-        LOGI("   TUN interface is already established by VpnEngineService");
-        LOGI("   Returning true to indicate TUN builder is ready");
+        LOGI("   Returning FALSE to force OpenVPN 3 to use ExternalTun mode");
+        LOGI("   This ensures CustomTunClientFactory::new_tun_factory() is called");
+        LOGI("   which creates CustomTunClient and the socketpair for packet I/O");
         LOGI("═══════════════════════════════════════════════════════");
-        return true;
+        return false;
     }
     
     virtual bool tun_builder_add_address(const std::string &address,

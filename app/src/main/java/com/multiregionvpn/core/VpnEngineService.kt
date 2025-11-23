@@ -284,6 +284,7 @@ class VpnEngineService : VpnService() {
     override fun onBind(intent: Intent?): IBinder? = null
     
     private fun startVpn() {
+        vpnStatus.value = com.multiregionvpn.ui.shared.VpnStatus.CONNECTING
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         Log.i(TAG, "🚀 startVpn() called")
         Log.i(TAG, "═══════════════════════════════════════════════════════")
@@ -342,6 +343,7 @@ class VpnEngineService : VpnService() {
                     manageTunnels(emptyMap())
                 }
                 Log.i(TAG, "✅ VPN service started (interface will be established when rules are added)")
+                vpnStatus.value = com.multiregionvpn.ui.shared.VpnStatus.CONNECTED
                 return
             }
             
@@ -427,6 +429,7 @@ class VpnEngineService : VpnService() {
             }
             
             Log.i(TAG, "✅ VPN engine started successfully")
+            vpnStatus.value = com.multiregionvpn.ui.shared.VpnStatus.CONNECTED
         } catch (e: Exception) {
             Log.e(TAG, "Error starting VPN", e)
             stopSelf()
@@ -658,6 +661,7 @@ class VpnEngineService : VpnService() {
      * routed to a black hole, blocking all internet.
      */
     private fun stopVpn() {
+        vpnStatus.value = com.multiregionvpn.ui.shared.VpnStatus.DISCONNECTED
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Log.i(TAG, "🛑 SHUTDOWN: Graceful VPN shutdown initiated...")
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -1534,6 +1538,8 @@ class VpnEngineService : VpnService() {
 
         @Volatile
         private var runningInstance: VpnEngineService? = null
+
+        val vpnStatus: kotlinx.coroutines.flow.MutableStateFlow<com.multiregionvpn.ui.shared.VpnStatus> = kotlinx.coroutines.flow.MutableStateFlow(com.multiregionvpn.ui.shared.VpnStatus.DISCONNECTED)
 
         /** Used by HTTP clients to call protect() on sockets. */
         fun getRunningInstance(): VpnEngineService? = runningInstance

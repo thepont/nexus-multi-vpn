@@ -54,6 +54,22 @@ class BasicConnectionTest {
         appContext = InstrumentationRegistry.getInstrumentation().targetContext
         MockitoAnnotations.openMocks(this)
         
+        // Mock VpnService.mInterface with a pipe to satisfy NativeOpenVpnClient
+        try {
+            val pipeForInterface = android.os.ParcelFileDescriptor.createPipe()
+            // We use the read side for the "interface" so the client can write to it
+            val interfacePfd = pipeForInterface[0] 
+            
+            // Set mInterface field via reflection
+            val field = VpnService::class.java.getDeclaredField("mInterface")
+            field.isAccessible = true
+            field.set(mockVpnService, interfacePfd)
+            
+            println("✓ Mocked VpnService.mInterface with pipe FD: ${interfacePfd.fd}")
+        } catch (e: Exception) {
+            println("⚠️ Failed to mock VpnService.mInterface: ${e.message}")
+        }
+        
         // Mock VpnService.protect() to return true to satisfy native code
         whenever(mockVpnService.protect(anyInt())).thenReturn(true)
         
@@ -124,17 +140,27 @@ class BasicConnectionTest {
         // Stub the API call to return a dummy config
         // This avoids network dependency on api.nordvpn.com
         println("   Stubbing NordVpnApiService.getOvpnConfig...")
+        // Read CA certificate from resources
+        val caCertStream = this::class.java.classLoader?.getResourceAsStream("openvpn-uk/pki/ca.crt")
+        val caCert = caCertStream?.bufferedReader()?.use { it.readText() }
+            ?: throw RuntimeException("Could not read CA certificate from resources")
+            
+        println("✓ Read CA certificate (${caCert.length} bytes)")
+
         val dummyConfig = """
             client
             dev tun
             proto udp
-            remote $TEST_SERVER 1194
+            remote 10.0.2.2 1194
             resolv-retry infinite
             nobind
             persist-key
             persist-tun
             auth-user-pass
             verb 3
+            <ca>
+            $caCert
+            </ca>
         """.trimIndent()
         
         whenever(mockNordVpnApiService.getOvpnConfig(anyString())).thenReturn(

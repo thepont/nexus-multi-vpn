@@ -38,6 +38,8 @@ mkdir -p "$PROJECT_ROOT/http-fr"
 mkdir -p "$PROJECT_ROOT/http-dns"
 mkdir -p "$PROJECT_ROOT/http-uk-conflict"
 mkdir -p "$PROJECT_ROOT/http-fr-conflict"
+mkdir -p "$PROJECT_ROOT/openvpn-dns-domain"
+mkdir -p "$PROJECT_ROOT/http-dns-domain"
 echo "✓ Directories created"
 
 # Generate OpenVPN server configs
