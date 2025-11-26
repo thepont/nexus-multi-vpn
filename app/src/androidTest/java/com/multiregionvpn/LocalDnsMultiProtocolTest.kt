@@ -8,6 +8,7 @@ import com.multiregionvpn.test.TestAppManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Test
 import java.util.UUID
 
@@ -33,6 +34,7 @@ import java.util.UUID
  * - vpn-server-dns-wireguard: WireGuard with DNS = 10.3.0.2
  * - http-server-dns: Web server at 10.3.0.10 returning "DNS_TEST_PASSED"
  */
+@HiltAndroidTest
 class LocalDnsMultiProtocolTest : BaseLocalTest() {
     
     override fun getComposeFile(): DockerComposeManager.ComposeFile {

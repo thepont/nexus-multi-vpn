@@ -13,6 +13,7 @@ import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -51,6 +52,18 @@ class MultiTunnelNetworkChangeTest {
         hiltRule.inject()
         appContext = ApplicationProvider.getApplicationContext()
         
+        // Pre-approve VPN permission using appops (App Operations)
+        try {
+            val device = androidx.test.uiautomator.UiDevice.getInstance(
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            )
+            val appopsCommand = "appops set ${appContext.packageName} ACTIVATE_VPN allow"
+            device.executeShellCommand(appopsCommand)
+            println("✅ VPN permission pre-approved via appops")
+        } catch (e: Exception) {
+            println("⚠️  Could not pre-approve VPN permission via appops: ${e.message}")
+        }
+        
         // Clean state
         runBlocking { // Wrap suspend calls in runBlocking
             stopVpn()
@@ -67,6 +80,13 @@ class MultiTunnelNetworkChangeTest {
     @After
     fun teardown() { // Not a suspend function
         runBlocking { // Wrap suspend calls in runBlocking
+            // CRITICAL: Always reset TestGlobalModeOverride to prevent test pollution
+            try {
+                VpnEngineService.setTestGlobalModeOverride(null)
+            } catch (e: Exception) {
+                println("⚠️  Could not reset TestGlobalModeOverride: ${e.message}")
+            }
+            
             stopVpn()
             delay(2000)
             settingsRepo.clearAllAppRules()
@@ -75,7 +95,7 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testMultipleTunnelsReconnectSimultaneously() = runBlocking {
+    fun testMultipleTunnelsReconnectSimultaneously() = runTest {
         println("🧪 TEST: Multiple tunnels reconnect after network change")
         
         // GIVEN: 3 active tunnels routing different apps
@@ -108,7 +128,7 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testRapidNetworkChanges() = runBlocking {
+    fun testRapidNetworkChanges() = runTest {
         println("🧪 TEST: Rapid network changes (Wi-Fi flapping)")
         
         // GIVEN: Active VPN connection
@@ -139,7 +159,7 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testNetworkUnavailableScenario() = runBlocking {
+    fun testNetworkUnavailableScenario() = runTest {
         println("🧪 TEST: Network completely unavailable")
         
         // GIVEN: Active VPN connection
@@ -163,7 +183,7 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testPartialTunnelFailure() = runBlocking {
+    fun testPartialTunnelFailure() = runTest {
         println("🧪 TEST: One tunnel fails, others should remain connected")
         
         // GIVEN: Multiple tunnels active
@@ -195,7 +215,7 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testVpnStartupDuringNetworkChange() = runBlocking {
+    fun testVpnStartupDuringNetworkChange() = runTest {
         println("🧪 TEST: VPN starts while network is changing")
         
         // GIVEN: VPN configured but not started
@@ -220,7 +240,7 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testConnectionTrackerAfterNetworkChange() = runBlocking {
+    fun testConnectionTrackerAfterNetworkChange() = runTest {
         println("🧪 TEST: Connection tracker maintains state after network change")
         
         // GIVEN: Active connections with tracker state
@@ -273,6 +293,7 @@ class MultiTunnelNetworkChangeTest {
         } else {
             appContext.startService(intent)
         }
+        // Permission should be pre-approved via appops in setup
         delay(3000)
     }
     

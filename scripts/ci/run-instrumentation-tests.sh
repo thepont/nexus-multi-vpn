@@ -5,6 +5,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Set ANDROID_HOME and add emulator to PATH for this script
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator
+
 # Load NordVPN credentials from .env file for tests
 if [ -f "$PROJECT_DIR/.env" ]; then
     echo "Sourcing NordVPN credentials from .env file."
@@ -18,55 +22,46 @@ echo "Starting Instrumentation Tests"
 echo "========================================"
 echo "Timestamp: $(date)"
 
-# Wait for emulator to be fully ready - verify package manager service is available
-echo "Verifying emulator is fully ready..."
-echo "Waiting for ADB device..."
-adb wait-for-device || true
+# --- Drastically Simplified Emulator Management ---
+echo "Attempting to stop any running emulators..."
+adb emu kill || true
+sleep 5 # Give it some time to shut down
 
-echo "Waiting for boot completion..."
-for i in $(seq 1 300); do
-  BOOT=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-  if [ "$BOOT" = "1" ]; then
-    echo "Boot completed."
-    break
-  fi
-  if [ $i -eq 300 ]; then
-    echo "⚠️  Timeout waiting for boot_completed" >&2
-  fi
-  sleep 1
+echo "Starting 'test_device' emulator with wiped data..."
+nohup emulator -avd test_device -wipe-data -no-snapshot-load -no-window > /dev/null 2>&1 &
+EMULATOR_STARTED_PID=$!
+echo "Emulator started in background with PID: $EMULATOR_STARTED_PID"
+
+echo "Waiting for ADB device to become available..."
+adb wait-for-device
+
+echo "Waiting for emulator to boot completely..."
+# Wait for the boot animation to complete or for sys.boot_completed property to be set
+# Note: With -wipe-data, boot can take 8-10 minutes, so we use a longer timeout
+BOOT_COMPLETED=""
+TIMEOUT=600 # 10 minutes (increased from 5 minutes to handle -wipe-data)
+ELAPSED=0
+
+while [[ "$BOOT_COMPLETED" != "1" && $ELAPSED -lt $TIMEOUT ]]; do
+  BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+  echo "Emulator boot status: $BOOT_COMPLETED (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
+  sleep 5
+  ELAPSED=$((ELAPSED + 5))
 done
 
-echo "Verifying package manager service is available..."
-for i in $(seq 1 60); do
-  # Check if package manager service is available by trying to list packages
-  if adb shell pm list packages >/dev/null 2>&1; then
-    echo "✅ Package manager service is ready (attempt $i/60)"
-    break
-  fi
-  if [ $i -eq 60 ]; then
-    echo "⚠️  Package manager service not ready after 60 attempts, but continuing..."
-  fi
-  sleep 1
-done
+if [ "$BOOT_COMPLETED" != "1" ]; then
+  echo "❌ Error: Emulator did not boot completely within the allotted time."
+  exit 1
+fi
+echo "✅ Emulator boot sequence complete."
+# --- End Drastically Simplified Emulator Management ---
 
-# Additional wait for system services to fully initialize
-echo "Waiting for system services to stabilize (10s)..."
-sleep 10
-
-# Verify ADB connection is stable
-echo "Verifying ADB connection stability..."
-for i in $(seq 1 10); do
-  if adb shell echo "ready" >/dev/null 2>&1; then
-    echo "✅ ADB connection verified (attempt $i/10)"
-    break
-  fi
-  if [ $i -eq 10 ]; then
-    echo "⚠️  ADB connection verification failed after 10 attempts"
-  fi
-  sleep 1
-done
-
-echo "Emulator readiness checks complete."
+# Restart ADB server for a fresh connection
+echo "Restarting ADB server..."
+adb kill-server
+adb start-server
+adb wait-for-device || true # Wait for device again after server restart
+echo "ADB server restarted and device reconnected."
 
 # Build diagnostic client APKs if they don't exist (they should be cached, but verify)
 echo "Checking diagnostic client APKs..."
@@ -92,15 +87,62 @@ else
     echo "✅ Main APK found (using cached build)"
 fi
 
+# Explicitly install the main app APK
+echo "Explicitly installing main app APK (app-debug.apk)..."
+timeout 120 adb install -r app/build/outputs/apk/debug/app-debug.apk || { echo "❌ Error: Failed to install app-debug.apk manually (timed out or failed)."; exit 1; }
+
+# Verify app package is installed
+echo "Verifying com.multiregionvpn package is installed on emulator..."
+if adb shell pm list packages | grep -q "package:com.multiregionvpn"; then
+    echo "✅ com.multiregionvpn package is installed."
+else
+    echo "❌ Error: com.multiregionvpn package NOT FOUND on emulator. Installation likely failed."
+    exit 1; fi
+
+# --- Start capturing logcat ---
+echo "Starting adb logcat in background..."
+adb logcat -c # Clear existing logcat buffer
+adb logcat > instrumentation-test-logcat.log &
+LOGCAT_PID=$!
+echo "adb logcat started with PID: $LOGCAT_PID"
+# --- End capturing logcat ---
+
 # Run tests with monitoring
 set +e
 # Use connectedDebugAndroidTest - it will install both APKs and run tests
 # Since we've already built everything, this should just install and run
 # Pass NordVPN credentials as instrumentation arguments
-./gradlew connectedDebugAndroidTest --info --stacktrace 2>&1 | tee instrumentation-test.log
+./gradlew connectedDebugAndroidTest --info --stacktrace > "/home/pont/.gemini/tmp/62f41f50139cb689809816d1723f9d1ac81f1d22472619dba13c135a05bbb506/instrumentation-test-temp.log" 2>&1 &
+GRADLE_PID=$!
+echo "Gradle connectedDebugAndroidTest started with PID: $GRADLE_PID"
 
-# Capture exit code of the gradle command (first command in pipeline), not tee
-TEST_EXIT=${PIPESTATUS[0]}
+TIMEOUT_SECONDS=3000
+ELAPSED_TIME=0
+
+echo "Waiting for Gradle connectedDebugAndroidTest to complete (timeout: ${TIMEOUT_SECONDS}s)..."
+while ps -p $GRADLE_PID > /dev/null && [ $ELAPSED_TIME -lt $TIMEOUT_SECONDS ]; do
+  sleep 5
+  ELAPSED_TIME=$((ELAPSED_TIME + 5))
+  echo "Elapsed: ${ELAPSED_TIME}s / ${TIMEOUT_SECONDS}s"
+done
+
+if ps -p $GRADLE_PID > /dev/null; then
+  echo "Timeout reached. Killing Gradle process $GRADLE_PID..."
+  kill -9 $GRADLE_PID || true
+  TEST_EXIT=124 # Common exit code for timeout
+  echo "Gradle process $GRADLE_PID killed."
+else
+  echo "Gradle connectedDebugAndroidTest completed within timeout."
+  # Need to get the actual exit code from the background process if it completed
+  wait $GRADLE_PID
+  TEST_EXIT=$?
+fi
+
+# --- Stop capturing logcat ---
+echo "Stopping adb logcat (PID: $LOGCAT_PID)..."
+kill $LOGCAT_PID || true
+# --- End capturing logcat ---
+
 set -e
 
 echo ""
@@ -113,13 +155,11 @@ echo "Exit code: $TEST_EXIT"
 # Show test summary
 echo ""
 echo "=== Test Summary ==="
-grep -E "(BUILD SUCCESSFUL|BUILD FAILED|tests completed|test failed|INSTRUMENTATION_STATUS)" instrumentation-test.log | tail -50 || echo "No test summary found"
+grep -E "(BUILD SUCCESSFUL|BUILD FAILED|tests completed|test failed|INSTRUMENTATION_STATUS)" "/home/pont/.gemini/tmp/62f41f50139cb689809816d1723f9d1ac81f1d22472619dba13c135a05bbb506/instrumentation-test-temp.log" | tail -50 || echo "No test summary found"
 
-# If tests failed, show more details
-if [ $TEST_EXIT -ne 0 ]; then
     echo ""
     echo "=== Failed Test Details ==="
-    grep -E "FAILED|FAILURE|Exception|Error" instrumentation-test.log | grep -v "^\s*at " | tail -30 || echo "No detailed failure info found"
+    grep -E "FAILED|FAILURE|Exception|Error" "/home/pont/.gemini/tmp/62f41f50139cb689809816d1723f9d1ac81f1d22472619dba13c135a05bbb506/instrumentation-test-temp.log" | grep -v "^\s*at " | tail -30 || echo "No detailed failure info found"
     echo ""
     echo "=== Test Report Location ==="
     echo "See detailed report at: app/build/reports/androidTests/connected/debug/index.html"

@@ -15,6 +15,7 @@ import com.multiregionvpn.test.TestAppManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Test
 import java.util.UUID
 
@@ -30,6 +31,7 @@ import java.util.UUID
  * - http-server-uk: Web server at 10.1.0.2 returning "SERVER_UK"
  * - http-server-fr: Web server at 10.2.0.2 returning "SERVER_FR"
  */
+@HiltAndroidTest
 class LocalRoutingTest : BaseLocalTest() {
     
     override fun getComposeFile(): DockerComposeManager.ComposeFile {

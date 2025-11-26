@@ -55,6 +55,16 @@ class VpnStartupSequenceTest {
     
     @After
     fun teardown() = runBlocking {
+        // CRITICAL: Always stop VPN service to prevent test pollution
+        try {
+            val stopIntent = android.content.Intent(context, com.multiregionvpn.core.VpnEngineService::class.java)
+            stopIntent.action = com.multiregionvpn.core.VpnEngineService.ACTION_STOP
+            context.stopService(stopIntent)
+            delay(2000) // Wait for service to stop
+        } catch (e: Exception) {
+            println("⚠️  Could not stop VPN service in teardown: ${e.message}")
+        }
+        
         // Clean up test data
         database.vpnConfigDao().clearAll()
         database.appRuleDao().clearAll()

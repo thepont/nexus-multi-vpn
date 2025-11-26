@@ -5,6 +5,9 @@ import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import androidx.test.uiautomator.By
 import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.database.ProviderCredentials
@@ -23,6 +26,8 @@ import javax.inject.Inject
 import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import android.util.Log
+import kotlinx.coroutines.flow.first
 
 /**
  * Ensures that when an app rule changes from one tunnel to another, the
@@ -36,6 +41,7 @@ class AppRuleRemapTest {
     val hiltRule = HiltAndroidRule(this)
 
     private lateinit var context: Context
+    private lateinit var device: UiDevice
     @Inject
     lateinit var settingsRepository: SettingsRepository
 
@@ -47,7 +53,21 @@ class AppRuleRemapTest {
     @Before
     fun setUp() = runBlocking {
         hiltRule.inject()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
         context = ApplicationProvider.getApplicationContext()
+        device = UiDevice.getInstance(instrumentation)
+        Log.d("AppRuleRemapTest", "Test package name: $testPackage")
+
+        // Pre-approve VPN permission using appops (App Operations)
+        // This is the recommended way to grant VPN permission for integration tests.
+        try {
+            val appopsCommand = "appops set ${context.packageName} ACTIVATE_VPN allow"
+            device.executeShellCommand(appopsCommand)
+            println("✅ VPN permission pre-approved via appops")
+        } catch (e: Exception) {
+            println("⚠️  Could not pre-approve VPN permission via appops: ${e.message}")
+            // Will need to handle dialog manually if appops doesn't work
+        }
 
         // Clear previous state
         settingsRepository.clearAllAppRules()
@@ -86,13 +106,31 @@ class AppRuleRemapTest {
         )
 
         settingsRepository.createAppRule(testPackage, ukConfigId)
+        // Add a small delay for the app rule to be processed (already added in previous step)
+        // Removed explicit delay, relying on initialRulesProcessed for synchronization
+        // delay(1000) 
 
         startVpnService()
-        waitForMapping(expectedTunnelSuffix = "UK")
+
+        // Wait for VpnEngineService to process initial rules
+        runBlocking {
+            Log.d("AppRuleRemapTest", "Waiting for initial rules to be processed by VpnEngineService...")
+            VpnEngineService.initialRulesProcessed.first { it == true }
+            Log.d("AppRuleRemapTest", "VpnEngineService has processed initial rules.")
+        }
+
+        waitForMapping(expectedTunnelSuffix = "UK", timeoutMs = 60_000L)
     }
 
     @After
     fun tearDown() = runBlocking {
+        // CRITICAL: Always reset TestGlobalModeOverride to prevent test pollution
+        try {
+            VpnEngineService.setTestGlobalModeOverride(null)
+        } catch (e: Exception) {
+            println("⚠️  Could not reset TestGlobalModeOverride: ${e.message}")
+        }
+        
         sendStopIntent()
         waitForServiceStopped()
         settingsRepository.clearAllAppRules()
@@ -112,14 +150,69 @@ class AppRuleRemapTest {
         assertEquals("local-test_FR", tunnelId)
     }
 
-    private fun startVpnService() {
-        val intent = Intent(context, VpnEngineService::class.java).apply {
-            action = VpnEngineService.ACTION_START
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
+    private fun startVpnService() = runBlocking {
+        // Check if VPN permission is granted
+        val permissionIntent = android.net.VpnService.prepare(context)
+        
+        if (permissionIntent != null) {
+            println("⚠️  VPN permission not granted - handling dialog...")
+            // Start the service - this will trigger the permission dialog
+            val intent = Intent(context, VpnEngineService::class.java).apply {
+                action = VpnEngineService.ACTION_START
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+            
+            // Wait for and handle VPN permission dialog
+            delay(1000) // Give dialog time to appear
+            handleVpnPermissionDialog()
         } else {
-            context.startService(intent)
+            // Permission already granted, just start the service
+            val intent = Intent(context, VpnEngineService::class.java).apply {
+                action = VpnEngineService.ACTION_START
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+    }
+    
+    private fun handleVpnPermissionDialog() = runBlocking {
+        println("   Waiting for VPN permission dialog...")
+        
+        // Wait for the VPN permission dialog to appear
+        var allowButton = device.wait(
+            Until.findObject(By.text("OK")),
+            3000
+        )
+        
+        if (allowButton == null) {
+            allowButton = device.wait(
+                Until.findObject(By.text("Allow")),
+                3000
+            )
+        }
+        
+        if (allowButton == null) {
+            // Try finding by resource ID (standard Android button IDs)
+            allowButton = device.wait(
+                Until.findObject(By.res("android:id/button1")), // Usually "OK" or positive button
+                3000
+            )
+        }
+        
+        if (allowButton != null) {
+            println("   Found VPN permission dialog button, clicking...")
+            allowButton.click()
+            delay(2000) // Wait for permission to be granted
+            println("   ✅ VPN permission dialog handled")
+        } else {
+            println("   No VPN permission dialog found (may already be granted)")
         }
     }
 

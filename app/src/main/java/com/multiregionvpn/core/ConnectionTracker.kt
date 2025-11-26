@@ -46,18 +46,28 @@ class ConnectionTracker(
      * Called when app rules are created.
      */
     fun registerPackage(packageName: String): Int? {
-        return try {
-            val uid = packageManager.getApplicationInfo(packageName, 0).uid
-            packageNameToUid[packageName] = uid
-            Log.d(TAG, "Registered package $packageName -> UID $uid")
-            uid
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.w(TAG, "Package not found: $packageName")
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "Error registering package $packageName", e)
-            null
+        val maxRetries = 3
+        val retryDelayMs = 500L // 0.5 seconds
+
+        for (i in 0 until maxRetries) {
+            try {
+                val uid = packageManager.getApplicationInfo(packageName, 0).uid
+                packageNameToUid[packageName] = uid
+                Log.d(TAG, "Registered package $packageName -> UID $uid")
+                return uid
+            } catch (e: PackageManager.NameNotFoundException) {
+                if (i < maxRetries - 1) {
+                    Log.e(TAG, "Package not found: $packageName (attempt ${i + 1}/$maxRetries). Retrying in ${retryDelayMs}ms...", e)
+                    Thread.sleep(retryDelayMs) // Use Thread.sleep in a non-coroutine context
+                } else {
+                    Log.e(TAG, "Package not found: $packageName (after $maxRetries attempts)", e)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error registering package $packageName", e)
+                return null
+            }
         }
+        return null // All retries failed
     }
     
     /**

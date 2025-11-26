@@ -237,6 +237,7 @@ class VpnEngineService : VpnService() {
                     }
                 }
                 Log.i(TAG, "✅ Package registration complete - ConnectionTracker ready for routing")
+                VpnEngineService.initialRulesProcessed.value = true
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to register packages with ConnectionTracker", e)
             }
@@ -1540,6 +1541,7 @@ class VpnEngineService : VpnService() {
         private var runningInstance: VpnEngineService? = null
 
         val vpnStatus: kotlinx.coroutines.flow.MutableStateFlow<com.multiregionvpn.ui.shared.VpnStatus> = kotlinx.coroutines.flow.MutableStateFlow(com.multiregionvpn.ui.shared.VpnStatus.DISCONNECTED)
+        val initialRulesProcessed: kotlinx.coroutines.flow.MutableStateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(false)
 
         /** Used by HTTP clients to call protect() on sockets. */
         fun getRunningInstance(): VpnEngineService? = runningInstance

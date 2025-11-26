@@ -6,9 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.util.Log
 import androidx.lifecycle.viewModelScope
-import com.multiregionvpn.core.ConnectionTracker
 import com.multiregionvpn.core.VpnEngineService
-import com.multiregionvpn.data.GeoBlockedApps
 import com.multiregionvpn.data.database.AppRule as DbAppRule
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository

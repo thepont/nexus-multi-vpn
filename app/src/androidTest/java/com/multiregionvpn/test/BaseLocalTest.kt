@@ -101,6 +101,14 @@ abstract class BaseLocalTest {
     
     @After
     open fun tearDown() = runBlocking {
+        // CRITICAL: Always reset TestGlobalModeOverride to prevent test pollution
+        // This ensures that if any test sets it, it's cleaned up even if the test fails
+        try {
+            VpnEngineService.setTestGlobalModeOverride(null)
+        } catch (e: Exception) {
+            println("⚠️  Could not reset TestGlobalModeOverride: ${e.message}")
+        }
+        
         // Stop Docker Compose
         stopDockerCompose(getComposeFile())
 

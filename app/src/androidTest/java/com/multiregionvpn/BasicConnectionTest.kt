@@ -124,6 +124,8 @@ class BasicConnectionTest {
         }
         
         println("✓ Credentials loaded (username length: ${username.length})")
+
+        settingsRepository.saveProviderCredentials(com.multiregionvpn.data.database.ProviderCredentials("nordvpn", username, password))
         
         // Create a test VPN config
         println("   Creating test VPN config...")
