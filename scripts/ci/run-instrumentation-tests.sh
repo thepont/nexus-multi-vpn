@@ -22,46 +22,85 @@ echo "Starting Instrumentation Tests"
 echo "========================================"
 echo "Timestamp: $(date)"
 
-# --- Drastically Simplified Emulator Management ---
-echo "Attempting to stop any running emulators..."
-adb emu kill || true
-sleep 5 # Give it some time to shut down
-
-echo "Starting 'test_device' emulator with wiped data..."
-nohup emulator -avd test_device -wipe-data -no-snapshot-load -no-window > /dev/null 2>&1 &
-EMULATOR_STARTED_PID=$!
-echo "Emulator started in background with PID: $EMULATOR_STARTED_PID"
-
-echo "Waiting for ADB device to become available..."
-adb wait-for-device
-
-echo "Waiting for emulator to boot completely..."
-# Wait for the boot animation to complete or for sys.boot_completed property to be set
-# Note: With -wipe-data, boot can take 8-10 minutes, so we use a longer timeout
-BOOT_COMPLETED=""
-TIMEOUT=600 # 10 minutes (increased from 5 minutes to handle -wipe-data)
-ELAPSED=0
-
-while [[ "$BOOT_COMPLETED" != "1" && $ELAPSED -lt $TIMEOUT ]]; do
-  BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-  echo "Emulator boot status: $BOOT_COMPLETED (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
-  sleep 5
-  ELAPSED=$((ELAPSED + 5))
-done
-
-if [ "$BOOT_COMPLETED" != "1" ]; then
-  echo "❌ Error: Emulator did not boot completely within the allotted time."
-  exit 1
+# Check if we're running in GitHub Actions (emulator already provided by android-emulator-runner)
+# or if we need to start our own emulator (local development)
+if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
+    echo "🔍 Running in CI environment - emulator should already be provided"
+    echo "Checking for existing emulator..."
+    
+    # Wait for emulator to be available (it's started by android-emulator-runner)
+    echo "Waiting for ADB device to become available..."
+    adb wait-for-device
+    
+    # Verify emulator is booted
+    echo "Checking emulator boot status..."
+    BOOT_COMPLETED=""
+    TIMEOUT=120 # 2 minutes - emulator should already be booting
+    ELAPSED=0
+    
+    while [[ "$BOOT_COMPLETED" != "1" && $ELAPSED -lt $TIMEOUT ]]; do
+      BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+      if [ -n "$BOOT_COMPLETED" ]; then
+        echo "Emulator boot status: $BOOT_COMPLETED (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
+      fi
+      sleep 5
+      ELAPSED=$((ELAPSED + 5))
+    done
+    
+    if [ "$BOOT_COMPLETED" != "1" ]; then
+      echo "⚠️  Warning: Emulator may not be fully booted, but continuing..."
+      echo "   Boot status: $BOOT_COMPLETED"
+    else
+      echo "✅ Emulator is ready (provided by CI)"
+    fi
+    
+    # List connected devices for debugging
+    echo "Connected devices:"
+    adb devices -l
+    
+else
+    echo "🔍 Running locally - starting emulator..."
+    # --- Local Emulator Management ---
+    echo "Attempting to stop any running emulators..."
+    adb emu kill || true
+    sleep 5 # Give it some time to shut down
+    
+    echo "Starting 'test_device' emulator with wiped data..."
+    nohup emulator -avd test_device -wipe-data -no-snapshot-load -no-window > /dev/null 2>&1 &
+    EMULATOR_STARTED_PID=$!
+    echo "Emulator started in background with PID: $EMULATOR_STARTED_PID"
+    
+    echo "Waiting for ADB device to become available..."
+    adb wait-for-device
+    
+    echo "Waiting for emulator to boot completely..."
+    # Wait for the boot animation to complete or for sys.boot_completed property to be set
+    # Note: With -wipe-data, boot can take 8-10 minutes, so we use a longer timeout
+    BOOT_COMPLETED=""
+    TIMEOUT=600 # 10 minutes (increased from 5 minutes to handle -wipe-data)
+    ELAPSED=0
+    
+    while [[ "$BOOT_COMPLETED" != "1" && $ELAPSED -lt $TIMEOUT ]]; do
+      BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+      echo "Emulator boot status: $BOOT_COMPLETED (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
+      sleep 5
+      ELAPSED=$((ELAPSED + 5))
+    done
+    
+    if [ "$BOOT_COMPLETED" != "1" ]; then
+      echo "❌ Error: Emulator did not boot completely within the allotted time."
+      exit 1
+    fi
+    echo "✅ Emulator boot sequence complete."
+    # --- End Local Emulator Management ---
+    
+    # Restart ADB server for a fresh connection (only needed locally)
+    echo "Restarting ADB server..."
+    adb kill-server
+    adb start-server
+    adb wait-for-device || true # Wait for device again after server restart
+    echo "ADB server restarted and device reconnected."
 fi
-echo "✅ Emulator boot sequence complete."
-# --- End Drastically Simplified Emulator Management ---
-
-# Restart ADB server for a fresh connection
-echo "Restarting ADB server..."
-adb kill-server
-adb start-server
-adb wait-for-device || true # Wait for device again after server restart
-echo "ADB server restarted and device reconnected."
 
 # Build diagnostic client APKs if they don't exist (they should be cached, but verify)
 echo "Checking diagnostic client APKs..."
