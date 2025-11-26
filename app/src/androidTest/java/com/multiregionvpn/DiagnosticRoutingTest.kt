@@ -36,7 +36,7 @@ import javax.inject.Inject
 @RunWith(AndroidJUnit4::class)
 class DiagnosticRoutingTest {
     
-    @get:Rule
+    @get:Rule(order = 0)
     var hiltRule = HiltAndroidRule(this)
 
     private lateinit var appContext: Context
