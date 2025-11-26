@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.ProviderCredentials
@@ -42,6 +43,10 @@ class MultiTunnelNetworkChangeTest {
     lateinit var settingsRepo: SettingsRepository
     
     private lateinit var appContext: Context
+    
+    // Use real package names that exist on the device
+    private val TEST_PACKAGE_NAME = InstrumentationRegistry.getInstrumentation().context.packageName
+    private val APP_PACKAGE_NAME = InstrumentationRegistry.getInstrumentation().targetContext.packageName
 
     private val UK_VPN_ID = "test-uk-${UUID.randomUUID().toString().take(8)}"
     private val FR_VPN_ID = "test-fr-${UUID.randomUUID().toString().take(8)}"
@@ -132,7 +137,7 @@ class MultiTunnelNetworkChangeTest {
         println("🧪 TEST: Rapid network changes (Wi-Fi flapping)")
         
         // GIVEN: Active VPN connection
-        settingsRepo.createAppRule("com.testapp", UK_VPN_ID)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         delay(500)
         
         startVpn()
@@ -163,7 +168,7 @@ class MultiTunnelNetworkChangeTest {
         println("🧪 TEST: Network completely unavailable")
         
         // GIVEN: Active VPN connection
-        settingsRepo.createAppRule("com.testapp", UK_VPN_ID)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         delay(500)
         
         startVpn()
@@ -219,7 +224,7 @@ class MultiTunnelNetworkChangeTest {
         println("🧪 TEST: VPN starts while network is changing")
         
         // GIVEN: VPN configured but not started
-        settingsRepo.createAppRule("com.testapp", UK_VPN_ID)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         delay(500)
         
         // WHEN: VPN starts (which may coincide with network change)
@@ -244,7 +249,7 @@ class MultiTunnelNetworkChangeTest {
         println("🧪 TEST: Connection tracker maintains state after network change")
         
         // GIVEN: Active connections with tracker state
-        settingsRepo.createAppRule("com.testapp", UK_VPN_ID)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         delay(500)
         
         startVpn()
