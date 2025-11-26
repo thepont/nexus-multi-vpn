@@ -112,9 +112,11 @@ set +e
 # Use connectedDebugAndroidTest - it will install both APKs and run tests
 # Since we've already built everything, this should just install and run
 # Pass NordVPN credentials as instrumentation arguments
-./gradlew connectedDebugAndroidTest --info --stacktrace > "/home/pont/.gemini/tmp/62f41f50139cb689809816d1723f9d1ac81f1d22472619dba13c135a05bbb506/instrumentation-test-temp.log" 2>&1 &
+TEST_LOG_FILE="$PROJECT_DIR/instrumentation-test-temp.log"
+./gradlew connectedDebugAndroidTest --info --stacktrace > "$TEST_LOG_FILE" 2>&1 &
 GRADLE_PID=$!
 echo "Gradle connectedDebugAndroidTest started with PID: $GRADLE_PID"
+echo "Test output being logged to: $TEST_LOG_FILE"
 
 TIMEOUT_SECONDS=3000
 ELAPSED_TIME=0
@@ -155,11 +157,19 @@ echo "Exit code: $TEST_EXIT"
 # Show test summary
 echo ""
 echo "=== Test Summary ==="
-grep -E "(BUILD SUCCESSFUL|BUILD FAILED|tests completed|test failed|INSTRUMENTATION_STATUS)" "/home/pont/.gemini/tmp/62f41f50139cb689809816d1723f9d1ac81f1d22472619dba13c135a05bbb506/instrumentation-test-temp.log" | tail -50 || echo "No test summary found"
+if [ -f "$TEST_LOG_FILE" ]; then
+    grep -E "(BUILD SUCCESSFUL|BUILD FAILED|tests completed|test failed|INSTRUMENTATION_STATUS)" "$TEST_LOG_FILE" | tail -50 || echo "No test summary found"
+else
+    echo "Test log file not found: $TEST_LOG_FILE"
+fi
 
 echo ""
 echo "=== Failed Test Details ==="
-grep -E "FAILED|FAILURE|Exception|Error" "/home/pont/.gemini/tmp/62f41f50139cb689809816d1723f9d1ac81f1d22472619dba13c135a05bbb506/instrumentation-test-temp.log" | grep -v "^\s*at " | tail -30 || echo "No detailed failure info found"
+if [ -f "$TEST_LOG_FILE" ]; then
+    grep -E "FAILED|FAILURE|Exception|Error" "$TEST_LOG_FILE" | grep -v "^\s*at " | tail -30 || echo "No detailed failure info found"
+else
+    echo "Test log file not found: $TEST_LOG_FILE"
+fi
 echo ""
 echo "=== Test Report Location ==="
 echo "See detailed report at: app/build/reports/androidTests/connected/debug/index.html"
