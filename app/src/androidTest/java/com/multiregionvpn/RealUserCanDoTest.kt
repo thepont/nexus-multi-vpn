@@ -48,6 +48,8 @@ class RealUserCanDoTest {
 
     @Before
     fun setup() {
+        // CRITICAL: Inject Hilt dependencies BEFORE creating any Compose rules
+        // This ensures Hilt is fully initialized before activities launch
         hiltRule.inject()
         context = ApplicationProvider.getApplicationContext()
         uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -60,6 +62,7 @@ class RealUserCanDoTest {
 
     @Test
     fun mobile_canNavigateToCredentialsAndSave() {
+        // Create Compose rule AFTER Hilt is initialized (in setup)
         val rule = createAndroidComposeRule<MainActivity>()
         
         log("🧪 MOBILE: Can user navigate to credentials and save?")
