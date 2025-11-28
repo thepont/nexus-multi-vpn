@@ -126,6 +126,10 @@ else
     echo "✅ Main APK found (using cached build)"
 fi
 
+# Uninstall existing app first to avoid signature mismatch issues
+echo "Uninstalling existing app (if present) to avoid signature conflicts..."
+adb uninstall com.multiregionvpn 2>/dev/null || echo "   (App not installed or already uninstalled)"
+
 # Explicitly install the main app APK
 echo "Explicitly installing main app APK (app-debug.apk)..."
 timeout 120 adb install -r app/build/outputs/apk/debug/app-debug.apk || { echo "❌ Error: Failed to install app-debug.apk manually (timed out or failed)."; exit 1; }
