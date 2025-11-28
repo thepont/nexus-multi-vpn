@@ -56,6 +56,15 @@ defaultConfig {
         
         testInstrumentationRunner = "com.multiregionvpn.HiltTestRunner"
         testInstrumentationRunnerArguments["useTestStorageService"] = "true"
+        
+        // Pass NordVPN credentials from .env file to instrumentation tests
+        envOrDotenv("NORDVPN_USERNAME")?.let {
+            testInstrumentationRunnerArguments["NORDVPN_USERNAME"] = it
+        }
+        envOrDotenv("NORDVPN_PASSWORD")?.let {
+            testInstrumentationRunnerArguments["NORDVPN_PASSWORD"] = it
+        }
+        
         multiDexEnabled = true
         vectorDrawables {
             useSupportLibrary = true
