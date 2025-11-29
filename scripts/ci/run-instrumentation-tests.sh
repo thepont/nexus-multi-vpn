@@ -184,6 +184,16 @@ else
     fi
 fi
 
+# Verify app is installed before Gradle runs
+echo "Verifying app installation status..."
+if adb shell pm list packages | grep -q "package:com.multiregionvpn"; then
+    echo "✅ com.multiregionvpn is installed"
+    adb shell pm list packages | grep "com.multiregionvpn"
+else
+    echo "⚠️  WARNING: com.multiregionvpn is NOT installed"
+    echo "   Gradle will attempt to install it, but may fail due to signature mismatch"
+fi
+
 # Run tests with monitoring
 set +e
 # Use connectedDebugAndroidTest - it will install test APK and run tests
