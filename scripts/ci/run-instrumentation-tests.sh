@@ -163,16 +163,24 @@ sleep 1
 # Manually install the APK with force flags to override signature mismatch
 # Use -r (replace), -d (allow downgrade), -t (allow test APKs)
 echo "Manually installing main APK with force flags..."
-if timeout 120 adb install -r -d -t app/build/outputs/apk/debug/app-debug.apk 2>&1 | tee /tmp/install-output.log; then
+INSTALL_LOG="$PROJECT_DIR/apk-install.log"
+if timeout 120 adb install -r -d -t app/build/outputs/apk/debug/app-debug.apk > "$INSTALL_LOG" 2>&1; then
     echo "✅ Main APK installed successfully"
+    cat "$INSTALL_LOG"
 else
-    INSTALL_OUTPUT=$(cat /tmp/install-output.log 2>/dev/null || echo "")
+    INSTALL_OUTPUT=$(cat "$INSTALL_LOG" 2>/dev/null || echo "")
+    echo "Install attempt output:"
+    cat "$INSTALL_LOG" 2>/dev/null || echo "(no log file)"
     if echo "$INSTALL_OUTPUT" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
         echo "⚠️  Signature mismatch detected, trying with -r only..."
-        timeout 120 adb install -r app/build/outputs/apk/debug/app-debug.apk || echo "⚠️  Install failed, but continuing - Gradle may handle it"
+        if timeout 120 adb install -r app/build/outputs/apk/debug/app-debug.apk > "$INSTALL_LOG" 2>&1; then
+            echo "✅ Main APK installed with -r flag"
+        else
+            echo "⚠️  Install failed, but continuing - Gradle may handle it"
+            cat "$INSTALL_LOG" 2>/dev/null || true
+        fi
     else
-        echo "⚠️  Install failed: $INSTALL_OUTPUT"
-        echo "⚠️  Continuing anyway - Gradle may be able to install"
+        echo "⚠️  Install failed, but continuing - Gradle may be able to install"
     fi
 fi
 
