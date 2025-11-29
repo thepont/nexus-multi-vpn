@@ -152,25 +152,34 @@ echo "adb logcat started with PID: $LOGCAT_PID"
 # --- End capturing logcat ---
 
 # Final cleanup attempt before Gradle runs
-# Gradle's connectedDebugAndroidTest uses adb install -r which should replace even if uninstall fails
-echo "Final cleanup attempt before Gradle test run..."
+# Since uninstall keeps failing, manually install with force flags before Gradle runs
+# This ensures the APK is installed with correct signature before Gradle tries
+echo "Final cleanup and manual installation before Gradle test run..."
 # Force stop the app
 adb shell am force-stop com.multiregionvpn 2>/dev/null || true
 adb shell am force-stop com.multiregionvpn.test 2>/dev/null || true
 sleep 1
-# Try to disable (may work even if uninstall fails)
-adb shell pm disable-user --user 0 com.multiregionvpn 2>/dev/null || true
-adb shell pm disable-user --user 0 com.multiregionvpn.test 2>/dev/null || true
-sleep 1
-# Try uninstall (may fail, but Gradle's -r flag should handle it)
-adb uninstall com.multiregionvpn 2>/dev/null || true
-adb uninstall com.multiregionvpn.test 2>/dev/null || true
-sleep 1
+
+# Manually install the APK with force flags to override signature mismatch
+# Use -r (replace), -d (allow downgrade), -t (allow test APKs)
+echo "Manually installing main APK with force flags..."
+if timeout 120 adb install -r -d -t app/build/outputs/apk/debug/app-debug.apk 2>&1 | tee /tmp/install-output.log; then
+    echo "✅ Main APK installed successfully"
+else
+    INSTALL_OUTPUT=$(cat /tmp/install-output.log 2>/dev/null || echo "")
+    if echo "$INSTALL_OUTPUT" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
+        echo "⚠️  Signature mismatch detected, trying with -r only..."
+        timeout 120 adb install -r app/build/outputs/apk/debug/app-debug.apk || echo "⚠️  Install failed, but continuing - Gradle may handle it"
+    else
+        echo "⚠️  Install failed: $INSTALL_OUTPUT"
+        echo "⚠️  Continuing anyway - Gradle may be able to install"
+    fi
+fi
 
 # Run tests with monitoring
 set +e
-# Use connectedDebugAndroidTest - it will install both APKs and run tests
-# Since we've already built everything, this should just install and run
+# Use connectedDebugAndroidTest - it will install test APK and run tests
+# Main APK should already be installed above
 # Pass NordVPN credentials as instrumentation arguments
 TEST_LOG_FILE="$PROJECT_DIR/instrumentation-test-temp.log"
 ./gradlew connectedDebugAndroidTest --info --stacktrace > "$TEST_LOG_FILE" 2>&1 &
