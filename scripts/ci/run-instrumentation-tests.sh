@@ -149,87 +149,27 @@ LOGCAT_PID=$!
 echo "adb logcat started with PID: $LOGCAT_PID"
 # --- End capturing logcat ---
 
-# Final cleanup attempt before Gradle runs
-# Since uninstall keeps failing, manually install with force flags before Gradle runs
-# This ensures the APK is installed with correct signature before Gradle tries
-echo "Final cleanup and manual installation before Gradle test run..."
-# Force stop the app
+# Final cleanup before Gradle runs
+# NOTE: We DON'T manually install the APK here anymore
+# Gradle's connectedDebugAndroidTest will handle installation via installDebug task
+# Manual installation was causing conflicts - Gradle would detect the app and hang
+echo "Final cleanup before Gradle test run (Gradle will handle installation)..."
+# Force stop the app (if it exists)
 adb shell am force-stop com.multiregionvpn 2>/dev/null || true
 adb shell am force-stop com.multiregionvpn.test 2>/dev/null || true
 sleep 1
 
-# Manually install the APK with force flags to override signature mismatch
-# Use -r (replace), -d (allow downgrade), -t (allow test APKs)
-echo "Manually installing main APK with force flags..."
-INSTALL_LOG="$PROJECT_DIR/apk-install.log"
-INSTALL_SUCCESS=false
-
-# Try multiple installation strategies
-echo "Attempt 1: Install with -r -d -t flags..."
-if timeout 120 adb install -r -d -t app/build/outputs/apk/debug/app-debug.apk > "$INSTALL_LOG" 2>&1; then
-    echo "✅ Main APK installed successfully with -r -d -t"
-    cat "$INSTALL_LOG"
-    INSTALL_SUCCESS=true
-else
-    INSTALL_OUTPUT=$(cat "$INSTALL_LOG" 2>/dev/null || echo "")
-    echo "Install attempt 1 output:"
-    cat "$INSTALL_LOG" 2>/dev/null || echo "(no log file)"
-    
-    if echo "$INSTALL_OUTPUT" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
-        echo "⚠️  Signature mismatch detected, trying with -r only..."
-        if timeout 120 adb install -r app/build/outputs/apk/debug/app-debug.apk > "$INSTALL_LOG" 2>&1; then
-            echo "✅ Main APK installed with -r flag"
-            INSTALL_SUCCESS=true
-        else
-            echo "⚠️  Install with -r also failed"
-            cat "$INSTALL_LOG" 2>/dev/null || true
-        fi
-    elif echo "$INSTALL_OUTPUT" | grep -q "Success"; then
-        # Sometimes adb install returns non-zero even on success
-        echo "✅ Install appears successful (found 'Success' in output)"
-        INSTALL_SUCCESS=true
-    else
-        echo "⚠️  Install failed with unknown error"
-    fi
-fi
-
-# Final verification
-if [ "$INSTALL_SUCCESS" = "true" ] || adb shell pm list packages | grep -q "package:com.multiregionvpn"; then
-    echo "✅ App is confirmed installed"
-    INSTALL_SUCCESS=true
-else
-    echo "❌ CRITICAL: App installation failed and app is not installed"
-    echo "   This will likely cause Gradle to hang trying to install"
-    echo "   Attempting emergency uninstall to clear state..."
-    # Try one more aggressive cleanup
-    adb shell pm uninstall --user 0 com.multiregionvpn 2>/dev/null || true
-    adb shell pm uninstall --user 0 com.multiregionvpn.test 2>/dev/null || true
-    sleep 2
-    # Try install one more time
-    echo "   Retrying installation..."
-    if timeout 60 adb install -r -d -t app/build/outputs/apk/debug/app-debug.apk > "$INSTALL_LOG" 2>&1; then
-        echo "✅ Emergency install succeeded"
-        INSTALL_SUCCESS=true
-    else
-        echo "❌ Emergency install also failed - Gradle will likely hang"
-        cat "$INSTALL_LOG" 2>/dev/null || true
-    fi
-fi
-
-# Verify app is installed before Gradle runs
-echo "Verifying app installation status..."
-if adb shell pm list packages | grep -q "package:com.multiregionvpn"; then
-    echo "✅ com.multiregionvpn is installed"
-    adb shell pm list packages | grep "com.multiregionvpn"
-else
-    echo "⚠️  WARNING: com.multiregionvpn is NOT installed"
-    echo "   Gradle will attempt to install it, but may fail due to signature mismatch"
-fi
+# Don't manually install - let Gradle's installDebug task handle it completely
+# Manual installation was causing conflicts where Gradle would detect the app
+# and hang waiting for something. Gradle's installDebug task handles installation
+# properly, including signature mismatches via adb install -r flag.
+echo "Skipping manual installation - Gradle will handle it via installDebug task"
+echo "This prevents the hanging issue where Gradle detects manually installed app"
 
 # Run tests with monitoring
 set +e
-# Use connectedDebugAndroidTest - it will install test APK and run tests
-# Main APK should already be installed above
+# Use connectedDebugAndroidTest - it will install both main APK and test APK, then run tests
+# Gradle's installDebug task handles installation properly, including signature mismatches
 # Pass NordVPN credentials as instrumentation arguments
 TEST_LOG_FILE="$PROJECT_DIR/instrumentation-test-temp.log"
 
