@@ -164,23 +164,57 @@ sleep 1
 # Use -r (replace), -d (allow downgrade), -t (allow test APKs)
 echo "Manually installing main APK with force flags..."
 INSTALL_LOG="$PROJECT_DIR/apk-install.log"
+INSTALL_SUCCESS=false
+
+# Try multiple installation strategies
+echo "Attempt 1: Install with -r -d -t flags..."
 if timeout 120 adb install -r -d -t app/build/outputs/apk/debug/app-debug.apk > "$INSTALL_LOG" 2>&1; then
-    echo "✅ Main APK installed successfully"
+    echo "✅ Main APK installed successfully with -r -d -t"
     cat "$INSTALL_LOG"
+    INSTALL_SUCCESS=true
 else
     INSTALL_OUTPUT=$(cat "$INSTALL_LOG" 2>/dev/null || echo "")
-    echo "Install attempt output:"
+    echo "Install attempt 1 output:"
     cat "$INSTALL_LOG" 2>/dev/null || echo "(no log file)"
+    
     if echo "$INSTALL_OUTPUT" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
         echo "⚠️  Signature mismatch detected, trying with -r only..."
         if timeout 120 adb install -r app/build/outputs/apk/debug/app-debug.apk > "$INSTALL_LOG" 2>&1; then
             echo "✅ Main APK installed with -r flag"
+            INSTALL_SUCCESS=true
         else
-            echo "⚠️  Install failed, but continuing - Gradle may handle it"
+            echo "⚠️  Install with -r also failed"
             cat "$INSTALL_LOG" 2>/dev/null || true
         fi
+    elif echo "$INSTALL_OUTPUT" | grep -q "Success"; then
+        # Sometimes adb install returns non-zero even on success
+        echo "✅ Install appears successful (found 'Success' in output)"
+        INSTALL_SUCCESS=true
     else
-        echo "⚠️  Install failed, but continuing - Gradle may be able to install"
+        echo "⚠️  Install failed with unknown error"
+    fi
+fi
+
+# Final verification
+if [ "$INSTALL_SUCCESS" = "true" ] || adb shell pm list packages | grep -q "package:com.multiregionvpn"; then
+    echo "✅ App is confirmed installed"
+    INSTALL_SUCCESS=true
+else
+    echo "❌ CRITICAL: App installation failed and app is not installed"
+    echo "   This will likely cause Gradle to hang trying to install"
+    echo "   Attempting emergency uninstall to clear state..."
+    # Try one more aggressive cleanup
+    adb shell pm uninstall --user 0 com.multiregionvpn 2>/dev/null || true
+    adb shell pm uninstall --user 0 com.multiregionvpn.test 2>/dev/null || true
+    sleep 2
+    # Try install one more time
+    echo "   Retrying installation..."
+    if timeout 60 adb install -r -d -t app/build/outputs/apk/debug/app-debug.apk > "$INSTALL_LOG" 2>&1; then
+        echo "✅ Emergency install succeeded"
+        INSTALL_SUCCESS=true
+    else
+        echo "❌ Emergency install also failed - Gradle will likely hang"
+        cat "$INSTALL_LOG" 2>/dev/null || true
     fi
 fi
 
@@ -200,12 +234,17 @@ set +e
 # Main APK should already be installed above
 # Pass NordVPN credentials as instrumentation arguments
 TEST_LOG_FILE="$PROJECT_DIR/instrumentation-test-temp.log"
-./gradlew connectedDebugAndroidTest --info --stacktrace > "$TEST_LOG_FILE" 2>&1 &
+
+# Add timeout to Gradle command itself to prevent indefinite hanging
+# Use timeout command with kill signal after timeout
+echo "Starting Gradle connectedDebugAndroidTest with 25 minute timeout..."
+timeout 1500 ./gradlew connectedDebugAndroidTest --info --stacktrace > "$TEST_LOG_FILE" 2>&1 &
 GRADLE_PID=$!
 echo "Gradle connectedDebugAndroidTest started with PID: $GRADLE_PID"
 echo "Test output being logged to: $TEST_LOG_FILE"
+echo "Gradle process has 25 minute timeout (1500s)"
 
-TIMEOUT_SECONDS=3000
+TIMEOUT_SECONDS=1800  # 30 minutes total (25 min Gradle timeout + 5 min buffer)
 ELAPSED_TIME=0
 
 echo "Waiting for Gradle connectedDebugAndroidTest to complete (timeout: ${TIMEOUT_SECONDS}s)..."
@@ -216,15 +255,25 @@ while ps -p $GRADLE_PID > /dev/null && [ $ELAPSED_TIME -lt $TIMEOUT_SECONDS ]; d
 done
 
 if ps -p $GRADLE_PID > /dev/null; then
-  echo "Timeout reached. Killing Gradle process $GRADLE_PID..."
-  kill -9 $GRADLE_PID || true
+  echo "⚠️  Timeout reached. Gradle process $GRADLE_PID is still running..."
+  echo "   This suggests Gradle is hung. Checking recent log output..."
+  tail -50 "$TEST_LOG_FILE" 2>/dev/null || echo "   (Log file not accessible)"
+  echo "Killing Gradle process $GRADLE_PID..."
+  kill -9 $GRADLE_PID 2>/dev/null || true
+  sleep 2
+  # Make sure it's dead
+  if ps -p $GRADLE_PID > /dev/null; then
+    echo "⚠️  Process still running, force killing..."
+    kill -9 $GRADLE_PID 2>/dev/null || true
+  fi
   TEST_EXIT=124 # Common exit code for timeout
   echo "Gradle process $GRADLE_PID killed."
 else
-  echo "Gradle connectedDebugAndroidTest completed within timeout."
+  echo "Gradle connectedDebugAndroidTest completed."
   # Need to get the actual exit code from the background process if it completed
   wait $GRADLE_PID
   TEST_EXIT=$?
+  echo "Gradle exit code: $TEST_EXIT"
 fi
 
 # --- Stop capturing logcat ---
