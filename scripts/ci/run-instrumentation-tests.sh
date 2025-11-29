@@ -126,21 +126,15 @@ else
     echo "✅ Main APK found (using cached build)"
 fi
 
-# Uninstall existing app first to avoid signature mismatch issues
-echo "Uninstalling existing app (if present) to avoid signature conflicts..."
-adb uninstall com.multiregionvpn 2>/dev/null || echo "   (App not installed or already uninstalled)"
-
-# Explicitly install the main app APK
-echo "Explicitly installing main app APK (app-debug.apk)..."
-timeout 120 adb install -r app/build/outputs/apk/debug/app-debug.apk || { echo "❌ Error: Failed to install app-debug.apk manually (timed out or failed)."; exit 1; }
-
-# Verify app package is installed
-echo "Verifying com.multiregionvpn package is installed on emulator..."
-if adb shell pm list packages | grep -q "package:com.multiregionvpn"; then
-    echo "✅ com.multiregionvpn package is installed."
-else
-    echo "❌ Error: com.multiregionvpn package NOT FOUND on emulator. Installation likely failed."
-    exit 1; fi
+# Uninstall existing app and test app to avoid signature mismatch issues
+# Gradle's connectedDebugAndroidTest will install the APKs, so we just need to ensure
+# there's no conflicting app with a different signature
+echo "Uninstalling existing app and test app (if present) to avoid signature conflicts..."
+adb uninstall com.multiregionvpn 2>/dev/null || echo "   (Main app not installed or already uninstalled)"
+adb uninstall com.multiregionvpn.test 2>/dev/null || echo "   (Test app not installed or already uninstalled)"
+# Wait a moment for uninstall to complete
+sleep 2
+echo "✅ Clean state ensured - Gradle will install APKs with correct signatures"
 
 # --- Start capturing logcat ---
 echo "Starting adb logcat in background..."
@@ -149,6 +143,14 @@ adb logcat > instrumentation-test-logcat.log &
 LOGCAT_PID=$!
 echo "adb logcat started with PID: $LOGCAT_PID"
 # --- End capturing logcat ---
+
+# Uninstall one more time right before Gradle runs to ensure clean state
+# Gradle's connectedDebugAndroidTest will try to install, so we need to ensure
+# there's no conflicting app with a different signature
+echo "Final uninstall before Gradle test run to prevent signature conflicts..."
+adb uninstall com.multiregionvpn 2>/dev/null || true
+adb uninstall com.multiregionvpn.test 2>/dev/null || true
+sleep 1
 
 # Run tests with monitoring
 set +e
