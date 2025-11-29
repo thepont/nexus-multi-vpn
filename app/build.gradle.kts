@@ -42,6 +42,13 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.4"
     }
+    
+    // Configure ADB timeout for large APK installations
+    // Default timeout (30s) is insufficient for large APKs (99MB main + 20MB test = 119MB)
+    // Increase to 5 minutes to handle large APK transfers on CI runners
+    adbOptions {
+        timeOutInMs = 300000  // 5 minutes (300,000 ms)
+    }
 
     // Android NDK version - will auto-detect if not specified
     // Uncomment and set if auto-detection fails:

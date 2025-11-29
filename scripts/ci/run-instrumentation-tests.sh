@@ -51,8 +51,27 @@ if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
       echo "⚠️  Warning: Emulator may not be fully booted, but continuing..."
       echo "   Boot status: $BOOT_COMPLETED"
     else
-      echo "✅ Emulator is ready (provided by CI)"
+      echo "✅ Emulator boot completed"
     fi
+    
+    # Additional wait for ADB daemon to stabilize after boot
+    # ADB daemon may need time to be ready for large file transfers
+    echo "Waiting for ADB daemon to stabilize (10 seconds)..."
+    sleep 10
+    
+    # Verify ADB sync readiness before proceeding
+    echo "Verifying ADB sync readiness..."
+    if ! adb shell "echo test" > /dev/null 2>&1; then
+      echo "❌ Error: ADB shell not responsive"
+      exit 1
+    fi
+    
+    if ! adb shell pm list packages > /dev/null 2>&1; then
+      echo "❌ Error: Package manager not ready"
+      exit 1
+    fi
+    
+    echo "✅ ADB sync readiness verified"
     
     # List connected devices for debugging
     echo "Connected devices:"
