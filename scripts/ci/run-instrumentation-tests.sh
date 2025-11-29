@@ -127,21 +127,19 @@ else
 fi
 
 # Attempt to clean up existing app to avoid signature mismatch issues
-# Note: Uninstall may fail if app is protected, but Gradle's install with -r flag should handle it
-echo "Attempting to clean up existing app (uninstall may fail, but that's OK)..."
-# Force stop the app first to ensure it's not running
+# Note: DELETE_FAILED_INTERNAL_ERROR is often just "app not installed" - harmless
+# The emulator is fresh each run (no state persistence), so this is just cleanup
+echo "Attempting to clean up existing app (errors are expected if app not installed)..."
+# Force stop the app first to ensure it's not running (silent - app may not exist)
 adb shell am force-stop com.multiregionvpn 2>/dev/null || true
 adb shell am force-stop com.multiregionvpn.test 2>/dev/null || true
 sleep 1
-# Try to disable the app first (this might work even if uninstall fails)
-adb shell pm disable-user --user 0 com.multiregionvpn 2>/dev/null || true
-adb shell pm disable-user --user 0 com.multiregionvpn.test 2>/dev/null || true
+# Try to uninstall (will fail with DELETE_FAILED_INTERNAL_ERROR if app doesn't exist - that's OK)
+# Suppress error output since it's expected when app doesn't exist
+adb uninstall com.multiregionvpn >/dev/null 2>&1 || true
+adb uninstall com.multiregionvpn.test >/dev/null 2>&1 || true
 sleep 1
-# Try to uninstall (may fail, but that's OK - Gradle will use -r flag)
-adb uninstall com.multiregionvpn 2>/dev/null || echo "   (Uninstall failed or app not installed - Gradle will handle with -r flag)"
-adb uninstall com.multiregionvpn.test 2>/dev/null || echo "   (Test app uninstall failed or not installed - Gradle will handle with -r flag)"
-sleep 1
-echo "✅ Cleanup attempted - Gradle will install APKs with -r (replace) flag"
+echo "✅ Cleanup attempted (errors are harmless if app doesn't exist)"
 
 # --- Start capturing logcat ---
 echo "Starting adb logcat in background..."
