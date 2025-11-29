@@ -126,24 +126,22 @@ else
     echo "✅ Main APK found (using cached build)"
 fi
 
-# Uninstall existing app and test app to avoid signature mismatch issues
-# Gradle's connectedDebugAndroidTest will install the APKs, so we just need to ensure
-# there's no conflicting app with a different signature
-echo "Uninstalling existing app and test app (if present) to avoid signature conflicts..."
+# Attempt to clean up existing app to avoid signature mismatch issues
+# Note: Uninstall may fail if app is protected, but Gradle's install with -r flag should handle it
+echo "Attempting to clean up existing app (uninstall may fail, but that's OK)..."
 # Force stop the app first to ensure it's not running
 adb shell am force-stop com.multiregionvpn 2>/dev/null || true
 adb shell am force-stop com.multiregionvpn.test 2>/dev/null || true
 sleep 1
-# Clear app data to help with uninstall
-adb shell pm clear com.multiregionvpn 2>/dev/null || true
-adb shell pm clear com.multiregionvpn.test 2>/dev/null || true
+# Try to disable the app first (this might work even if uninstall fails)
+adb shell pm disable-user --user 0 com.multiregionvpn 2>/dev/null || true
+adb shell pm disable-user --user 0 com.multiregionvpn.test 2>/dev/null || true
 sleep 1
-# Now try to uninstall
-adb uninstall com.multiregionvpn 2>/dev/null || echo "   (Main app not installed or already uninstalled)"
-adb uninstall com.multiregionvpn.test 2>/dev/null || echo "   (Test app not installed or already uninstalled)"
-# Wait a moment for uninstall to complete
-sleep 2
-echo "✅ Clean state ensured - Gradle will install APKs with correct signatures"
+# Try to uninstall (may fail, but that's OK - Gradle will use -r flag)
+adb uninstall com.multiregionvpn 2>/dev/null || echo "   (Uninstall failed or app not installed - Gradle will handle with -r flag)"
+adb uninstall com.multiregionvpn.test 2>/dev/null || echo "   (Test app uninstall failed or not installed - Gradle will handle with -r flag)"
+sleep 1
+echo "✅ Cleanup attempted - Gradle will install APKs with -r (replace) flag"
 
 # --- Start capturing logcat ---
 echo "Starting adb logcat in background..."
@@ -153,17 +151,18 @@ LOGCAT_PID=$!
 echo "adb logcat started with PID: $LOGCAT_PID"
 # --- End capturing logcat ---
 
-# Uninstall one more time right before Gradle runs to ensure clean state
-# Gradle's connectedDebugAndroidTest will try to install, so we need to ensure
-# there's no conflicting app with a different signature
-echo "Final cleanup before Gradle test run to prevent signature conflicts..."
-# Force stop and clear data first
+# Final cleanup attempt before Gradle runs
+# Gradle's connectedDebugAndroidTest uses adb install -r which should replace even if uninstall fails
+echo "Final cleanup attempt before Gradle test run..."
+# Force stop the app
 adb shell am force-stop com.multiregionvpn 2>/dev/null || true
 adb shell am force-stop com.multiregionvpn.test 2>/dev/null || true
-adb shell pm clear com.multiregionvpn 2>/dev/null || true
-adb shell pm clear com.multiregionvpn.test 2>/dev/null || true
 sleep 1
-# Then uninstall
+# Try to disable (may work even if uninstall fails)
+adb shell pm disable-user --user 0 com.multiregionvpn 2>/dev/null || true
+adb shell pm disable-user --user 0 com.multiregionvpn.test 2>/dev/null || true
+sleep 1
+# Try uninstall (may fail, but Gradle's -r flag should handle it)
 adb uninstall com.multiregionvpn 2>/dev/null || true
 adb uninstall com.multiregionvpn.test 2>/dev/null || true
 sleep 1
