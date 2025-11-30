@@ -29,22 +29,67 @@ if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
     echo "Checking for existing emulator..."
     
     # Wait for emulator to be available (it's started by android-emulator-runner)
+    # Note: Device may go offline during boot, so we need to handle that
     echo "Waiting for ADB device to become available..."
-    adb wait-for-device
     
-    # Verify emulator is booted
-    echo "Checking emulator boot status..."
-    BOOT_COMPLETED=""
-    TIMEOUT=120 # 2 minutes - emulator should already be booting
+    # Wait for device and handle offline state
+    DEVICE_ONLINE=false
+    TIMEOUT=180 # 3 minutes - emulator may need time to stabilize
     ELAPSED=0
     
-    while [[ "$BOOT_COMPLETED" != "1" && $ELAPSED -lt $TIMEOUT ]]; do
-      BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-      if [ -n "$BOOT_COMPLETED" ]; then
-        echo "Emulator boot status: $BOOT_COMPLETED (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
+    while [ $ELAPSED -lt $TIMEOUT ]; do
+      # Check if device is online
+      DEVICE_STATE=$(adb devices 2>/dev/null | grep "emulator" | awk '{print $2}' | head -1)
+      
+      if [ "$DEVICE_STATE" = "device" ]; then
+        echo "✅ Device is online (Elapsed: ${ELAPSED}s)"
+        DEVICE_ONLINE=true
+        break
+      elif [ "$DEVICE_STATE" = "offline" ]; then
+        echo "⚠️  Device is offline, waiting for it to come online... (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
+        # Try to reconnect
+        adb kill-server 2>/dev/null || true
+        sleep 2
+        adb start-server 2>/dev/null || true
+        sleep 3
+      else
+        echo "⏳ Waiting for device... (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
+        adb wait-for-device 2>/dev/null || true
       fi
+      
       sleep 5
       ELAPSED=$((ELAPSED + 5))
+    done
+    
+    if [ "$DEVICE_ONLINE" != "true" ]; then
+      echo "❌ ERROR: Device did not come online within ${TIMEOUT}s"
+      echo "   Current device state:"
+      adb devices -l
+      exit 1
+    fi
+    
+    # Verify emulator is booted (now that device is online)
+    echo "Checking emulator boot status..."
+    BOOT_COMPLETED=""
+    BOOT_TIMEOUT=120 # 2 minutes for boot to complete
+    BOOT_ELAPSED=0
+    
+    while [[ "$BOOT_COMPLETED" != "1" && $BOOT_ELAPSED -lt $BOOT_TIMEOUT ]]; do
+      # Check device is still online before checking boot status
+      DEVICE_STATE=$(adb devices 2>/dev/null | grep "emulator" | awk '{print $2}' | head -1)
+      if [ "$DEVICE_STATE" != "device" ]; then
+        echo "⚠️  Device went offline again, waiting for reconnect..."
+        sleep 5
+        BOOT_ELAPSED=$((BOOT_ELAPSED + 5))
+        continue
+      fi
+      
+      BOOT_COMPLETED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+      if [ -n "$BOOT_COMPLETED" ]; then
+        echo "Emulator boot status: $BOOT_COMPLETED (Elapsed: ${BOOT_ELAPSED}s / ${BOOT_TIMEOUT}s)"
+      fi
+      sleep 5
+      BOOT_ELAPSED=$((BOOT_ELAPSED + 5))
     done
     
     if [ "$BOOT_COMPLETED" != "1" ]; then
