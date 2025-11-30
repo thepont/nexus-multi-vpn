@@ -47,11 +47,10 @@ if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
         break
       elif [ "$DEVICE_STATE" = "offline" ]; then
         echo "⚠️  Device is offline, waiting for it to come online... (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
-        # Try to reconnect
-        adb kill-server 2>/dev/null || true
-        sleep 2
-        adb start-server 2>/dev/null || true
-        sleep 3
+        # Don't restart ADB - it may cause device to stay offline
+        # ADB will reconnect automatically when device is ready
+        # Restarting ADB disconnects device, making problem worse
+        sleep 5
       else
         echo "⏳ Waiting for device... (Elapsed: ${ELAPSED}s / ${TIMEOUT}s)"
         adb wait-for-device 2>/dev/null || true
