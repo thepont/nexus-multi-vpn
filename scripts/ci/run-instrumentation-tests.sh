@@ -73,9 +73,32 @@ if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
     
     echo "✅ ADB sync readiness verified"
     
-    # List connected devices for debugging
+    # List connected devices for debugging and verify connection
     echo "Connected devices:"
-    adb devices -l
+    DEVICE_OUTPUT=$(adb devices -l)
+    echo "$DEVICE_OUTPUT"
+    
+    # Verify at least one device is online
+    if ! echo "$DEVICE_OUTPUT" | grep -q "device$"; then
+      echo "❌ ERROR: No devices in 'device' state (online and ready)"
+      echo "   Device states:"
+      echo "$DEVICE_OUTPUT"
+      echo "   This will cause Gradle to hang waiting for a device"
+      exit 1
+    fi
+    
+    # Count online devices
+    ONLINE_DEVICES=$(echo "$DEVICE_OUTPUT" | grep -c "device$" || echo "0")
+    echo "✅ Found $ONLINE_DEVICES online device(s)"
+    
+    # Verify device is actually reachable
+    echo "Verifying device is reachable..."
+    if ! adb shell getprop ro.build.version.sdk > /dev/null 2>&1; then
+      echo "❌ ERROR: Cannot read device properties - device not reachable"
+      exit 1
+    fi
+    SDK_VERSION=$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')
+    echo "✅ Device reachable (Android SDK: $SDK_VERSION)"
     
 else
     echo "🔍 Running locally - starting emulator..."
