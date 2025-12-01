@@ -122,17 +122,20 @@ if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
     DEVICE_OUTPUT=$(adb devices -l)
     echo "$DEVICE_OUTPUT"
     
-    # Verify at least one device is online
-    if ! echo "$DEVICE_OUTPUT" | grep -q "device$"; then
+    # Verify at least one device is online (check second column = "device")
+    # Format: "emulator-5554          device product:..."
+    DEVICE_STATE=$(echo "$DEVICE_OUTPUT" | grep "emulator" | awk '{print $2}' | head -1)
+    if [ "$DEVICE_STATE" != "device" ]; then
       echo "❌ ERROR: No devices in 'device' state (online and ready)"
       echo "   Device states:"
       echo "$DEVICE_OUTPUT"
+      echo "   Current state: '$DEVICE_STATE'"
       echo "   This will cause Gradle to hang waiting for a device"
       exit 1
     fi
     
-    # Count online devices
-    ONLINE_DEVICES=$(echo "$DEVICE_OUTPUT" | grep -c "device$" || echo "0")
+    # Count online devices (check second column = "device")
+    ONLINE_DEVICES=$(echo "$DEVICE_OUTPUT" | grep "emulator" | awk '{print $2}' | grep -c "^device$" || echo "0")
     echo "✅ Found $ONLINE_DEVICES online device(s)"
     
     # Verify device is actually reachable
