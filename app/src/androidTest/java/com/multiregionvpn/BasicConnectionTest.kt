@@ -153,7 +153,7 @@ class BasicConnectionTest {
             client
             dev tun
             proto udp
-            remote 10.0.2.2 1194
+            remote 10.0.2.2 11940
             resolv-retry infinite
             nobind
             persist-key

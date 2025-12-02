@@ -47,7 +47,7 @@ object DockerComposeManager {
      */
     enum class ServicePort(val port: Int, val description: String) {
         // Routing test
-        VPN_UK(1194, "UK VPN server"),
+        VPN_UK(11940, "UK VPN server"),
         VPN_FR(1195, "FR VPN server"),
         HTTP_UK(18080, "UK HTTP server"),
         HTTP_FR(18081, "FR HTTP server"),
@@ -73,7 +73,7 @@ object DockerComposeManager {
      * @param composeFile The Docker Compose file being used
      * @param tunnelType The type of tunnel (UK, FR, DNS, etc.)
      * @param hostIp The host machine IP (from HostMachineManager)
-     * @return VPN server hostname (e.g., "10.0.2.2:1194")
+     * @return VPN server hostname (e.g., "10.0.2.2:11940")
      */
     fun getVpnServerHostname(
         composeFile: ComposeFile,
@@ -95,7 +95,7 @@ object DockerComposeManager {
                 ServicePort.VPN_FR_CONFLICT.port
             else -> {
                 Log.w(TAG, "Unknown tunnel type for compose file: $tunnelType")
-                1194 // Default
+                11940 // Default
             }
         }
         
