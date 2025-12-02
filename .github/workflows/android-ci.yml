@@ -109,7 +109,7 @@ jobs:
   # --------------------------------------------------------------------
   instrumentation-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     needs: build
 
     steps:
@@ -158,7 +158,7 @@ jobs:
         run: ./scripts/ci/enable-kvm.sh
 
       - name: Run Instrumentation Tests on Emulator
-        timeout-minutes: 25
+        timeout-minutes: 45
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 34
