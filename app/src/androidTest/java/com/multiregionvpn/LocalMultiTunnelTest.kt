@@ -28,12 +28,12 @@ import java.util.UUID
  * 3. Mixed protocol routing (OpenVPN UK + WireGuard FR)
  * 
  * Docker Setup:
- * - vpn-server-uk-openvpn: OpenVPN on 10.1.0.0/24 (port 1194)
- * - vpn-server-fr-openvpn: OpenVPN on 10.2.0.0/24 (port 1195)
+ * - vpn-server-uk-openvpn: OpenVPN on 172.31.1.0/24 (port 1194)
+ * - vpn-server-fr-openvpn: OpenVPN on 172.31.2.0/24 (port 1195)
  * - vpn-server-uk-wireguard: WireGuard on 10.13.13.0/24 (port 51822)
  * - vpn-server-fr-wireguard: WireGuard on 10.14.14.0/24 (port 51823)
- * - http-server-uk: Web server at 10.1.0.2 returning "SERVER_UK"
- * - http-server-fr: Web server at 10.2.0.2 returning "SERVER_FR"
+ * - http-server-uk: Web server at 172.31.1.2 returning "SERVER_UK"
+ * - http-server-fr: Web server at 172.31.2.2 returning "SERVER_FR"
  */
 @HiltAndroidTest
 class LocalMultiTunnelTest : BaseLocalTest() {
@@ -53,8 +53,8 @@ class LocalMultiTunnelTest : BaseLocalTest() {
     private lateinit var FR_WIREGUARD_HOST: String
     
     // HTTP server endpoints
-    private val UK_HTTP_SERVER = "http://10.1.0.2"
-    private val FR_HTTP_SERVER = "http://10.2.0.2"
+    private val UK_HTTP_SERVER = "http://172.31.1.2"
+    private val FR_HTTP_SERVER = "http://172.31.2.2"
     
     // OpenVPN template (simulated)
     private val OPENVPN_TEMPLATE = """

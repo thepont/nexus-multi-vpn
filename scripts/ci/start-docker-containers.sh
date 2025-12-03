@@ -57,6 +57,13 @@ cleanup_project "e2e-dns"
 cleanup_project "e2e-dns-domain"
 cleanup_project "e2e-conflict"
 
+# Remove specific networks if they exist (by name pattern)
+# This ensures clean state without affecting other Docker networks
+for network in $(docker network ls --format "{{.Name}}" 2>/dev/null | grep -E "^e2e-routing_|^e2e-dns_|^e2e-dns-domain_|^e2e-conflict_" || true); do
+    echo "Removing network: $network"
+    docker network rm "$network" 2>/dev/null || true
+done
+
 echo "=== Starting OpenVPN and HTTP test containers ==="
 
 # Function to run docker-compose with proper handling

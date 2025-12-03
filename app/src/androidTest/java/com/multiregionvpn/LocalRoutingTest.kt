@@ -26,10 +26,10 @@ import java.util.UUID
  * multiple app packages and route them to different tunnels simultaneously.
  * 
  * This test uses Docker Compose to create a "mini-internet" with:
- * - vpn-server-uk: OpenVPN server on subnet 10.1.0.0/24
- * - vpn-server-fr: OpenVPN server on subnet 10.2.0.0/24
- * - http-server-uk: Web server at 10.1.0.2 returning "SERVER_UK"
- * - http-server-fr: Web server at 10.2.0.2 returning "SERVER_FR"
+ * - vpn-server-uk: OpenVPN server on subnet 172.31.1.0/24
+ * - vpn-server-fr: OpenVPN server on subnet 172.31.2.0/24
+ * - http-server-uk: Web server at 172.31.1.2 returning "SERVER_UK"
+ * - http-server-fr: Web server at 172.31.2.2 returning "SERVER_FR"
  */
 @HiltAndroidTest
 class LocalRoutingTest : BaseLocalTest() {
@@ -47,8 +47,8 @@ class LocalRoutingTest : BaseLocalTest() {
     private lateinit var FR_VPN_HOST: String  // Format: "hostIp:port"
     
     // HTTP server endpoints
-    private val UK_HTTP_SERVER = "http://10.1.0.2"
-    private val FR_HTTP_SERVER = "http://10.2.0.2"
+    private val UK_HTTP_SERVER = "http://172.31.1.2"
+    private val FR_HTTP_SERVER = "http://172.31.2.2"
     
     private lateinit var ukVpnConfigId: String
     private lateinit var frVpnConfigId: String
