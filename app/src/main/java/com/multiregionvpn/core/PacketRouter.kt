@@ -121,6 +121,13 @@ class PacketRouter(
                     // Try each registered package to find the one that matches
                     // Since we use addAllowedApplication, packets can only come from registered apps
                     for (packageName in registeredPackages) {
+                        // Skip test packages that may not be accessible
+                        if (packageName.startsWith("androidx.test.") || 
+                            packageName.startsWith("android.test.") ||
+                            packageName == "androidx.test.services") {
+                            continue
+                        }
+                        
                         val uid = tracker.getUidForPackage(packageName)
                         if (uid != null) {
                             // Get the tunnel ID for this UID
@@ -180,16 +187,40 @@ class PacketRouter(
             }
             
             // Fallback: Get package name from UID and look up rule
-            val packageNames = packageManager.getPackagesForUid(uid) ?: return
+            val packageNames = try {
+                packageManager.getPackagesForUid(uid)
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Security exception getting packages for UID $uid: ${e.message} - sending to direct internet")
+                sendToDirectInternet(packet)
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "Error getting packages for UID $uid: ${e.message} - sending to direct internet", e)
+                sendToDirectInternet(packet)
+                return
+            }
             
-            if (packageNames.isEmpty()) {
+            if (packageNames == null || packageNames.isEmpty()) {
                 // System or unknown app, send to direct internet
                 sendToDirectInternet(packet)
                 return
             }
             
-            // Use first package name (in case of shared UID)
-            val packageName = packageNames[0]
+            // Filter out test packages and use first valid package name (in case of shared UID)
+            val validPackageNames = packageNames.filter { 
+                !it.startsWith("androidx.test.") && 
+                !it.startsWith("android.test.") &&
+                it != "androidx.test.services"
+            }
+            
+            if (validPackageNames.isEmpty()) {
+                // Only test packages found, send to direct internet
+                Log.v(TAG, "Only test packages found for UID $uid: ${packageNames.joinToString(", ")} - sending to direct internet")
+                sendToDirectInternet(packet)
+                return
+            }
+            
+            // Use first valid package name
+            val packageName = validPackageNames[0]
             
             // Get rule from repository - use runBlocking for synchronous access
             // Note: In production, this should be done asynchronously with proper coroutine handling
