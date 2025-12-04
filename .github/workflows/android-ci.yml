@@ -48,80 +48,21 @@ jobs:
           path: app/src/test/cpp/build/Testing/
 
   # --------------------------------------------------------------------
-  # JOB 2: WARM THE CACHE
-  # This job's ONLY purpose is to download dependencies.
-  # We give it a long timeout so the slow Robolectric JAR download
-  # can finish successfully just one time.
+  # JOB 2: BUILD DEBUG APK
+  # Uses reusable workflow to build and cache the APK
+  # Shared with maestro-e2e workflow
   # --------------------------------------------------------------------
-  warm-cache:
+  build:
+    uses: ./.github/workflows/build-and-cache.yml
+
+  # --------------------------------------------------------------------
+  # JOB 3: ROBOLECTRIC UNIT TESTS
+  # Runs Robolectric unit tests using the cached build
+  # --------------------------------------------------------------------
+  robolectric-tests:
     runs-on: ubuntu-latest
-    
-    # Give this job 60 minutes, just for the slow download
-    timeout-minutes: 60 
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Build Dependencies
-        run: ./scripts/ci/install-android-build-deps.sh
-
-      - name: Ensure Gradle wrapper is executable
-        run: chmod +x gradlew
-
-      - name: Cache Android NDK (if native builds are needed later)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.ANDROID_HOME }}/ndk
-            ~/.android/build-cache
-          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-ndk-
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Download Dependencies (with enhanced logging and timeout monitoring)
-        timeout-minutes: 30
-        env:
-          CI: true
-          SKIP_NATIVE_BUILD: true
-        run: ./scripts/ci/download-gradle-dependencies.sh
-
-      - name: Upload Gradle logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-dependency-logs
-          path: gradle-dependency-download.log
-
-  # --------------------------------------------------------------------
-  # JOB 3: BUILD AND TEST
-  # This job will only run AFTER the 'warm-cache' job succeeds.
-  # It will be fast because it uses the cache from Job 2.
-  # --------------------------------------------------------------------
-  build-and-test:
-    runs-on: ubuntu-latest
-    
-    # This job depends on the cache being successfully built
-    needs: warm-cache
+    timeout-minutes: 15
+    needs: build
 
     steps:
       - name: Checkout code
@@ -139,7 +80,6 @@ jobs:
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
 
-      # This step will be very fast, as the cache is already warm
       - name: Restore Gradle Cache
         uses: actions/cache@v4
         with:
@@ -151,10 +91,9 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Run Robolectric Unit Tests
-        timeout-minutes: 20
+        timeout-minutes: 15
         env:
           CI: true
-          SKIP_NATIVE_BUILD: true
         run: ./scripts/ci/run-robolectric-tests.sh
 
       - name: Upload Robolectric Test Logs
@@ -164,18 +103,71 @@ jobs:
           name: robolectric-test-logs
           path: robolectric-test.log
 
-      # --- Steps for Instrumentation Tests ---
+  # --------------------------------------------------------------------
+  # JOB 4: INSTRUMENTATION TESTS
+  # Runs instrumentation tests using the cached build
+  # --------------------------------------------------------------------
+  instrumentation-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
+      - name: Restore Gradle Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Restore Build Artifacts
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            app/build/outputs/apk/debug/
+            app/build/intermediates/
+            app/.cxx/
+            diagnostic-client-uk/build/outputs/apk/debug/
+            diagnostic-client-fr/build/outputs/apk/debug/
+            diagnostic-client-direct/build/outputs/apk/debug/
+          key: ${{ needs.build.outputs.cache-key }}
+          fail-on-cache-miss: true
+
+      - name: Start Docker Containers for E2E Tests
+        run: ./scripts/ci/start-docker-containers.sh
 
       - name: Enable KVM
         run: ./scripts/ci/enable-kvm.sh
 
       - name: Run Instrumentation Tests on Emulator
-        timeout-minutes: 25
+        timeout-minutes: 45
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
           script: ./scripts/ci/run-instrumentation-tests.sh
+
+      - name: Stop Docker Containers
+        if: always()
+        run: ./scripts/ci/stop-docker-containers.sh
 
       - name: Upload Instrumentation Test Logs
         if: always()

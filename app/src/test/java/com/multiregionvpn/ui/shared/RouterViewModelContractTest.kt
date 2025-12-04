@@ -36,12 +36,15 @@ class RouterViewModelContractTest {
             MutableStateFlow(null)
         override val liveStats: MutableStateFlow<VpnStats> =
             MutableStateFlow(VpnStats())
+        override val error: MutableStateFlow<String?> =
+            MutableStateFlow(null)
         
         var toggleVpnCalled = false
         var appRuleChangeCalled = false
         var serverGroupSelectedCalled = false
         var addServerGroupCalled = false
         var removeServerGroupCalled = false
+        var clearErrorCalled = false
         
         override fun onToggleVpn(enable: Boolean) {
             toggleVpnCalled = true
@@ -63,6 +66,10 @@ class RouterViewModelContractTest {
         
         override fun onRemoveServerGroup(group: ServerGroup) {
             removeServerGroupCalled = true
+        }
+
+        override fun onClearError() {
+            clearErrorCalled = true
         }
     }
     
@@ -121,6 +128,14 @@ class RouterViewModelContractTest {
         // THEN: Should have liveStats StateFlow
         assertNotNull(mockViewModel.liveStats, "liveStats should not be null")
         assertEquals(VpnStats(), mockViewModel.liveStats.value)
+    }
+
+    @Test
+    fun `RouterViewModel should expose error StateFlow`() {
+        // GIVEN: RouterViewModel implementation
+        // THEN: Should have error StateFlow
+        assertNotNull(mockViewModel.error, "error should not be null")
+        assertEquals(null, mockViewModel.error.value)
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -204,10 +219,19 @@ class RouterViewModelContractTest {
         // THEN: Should be called
         assertEquals(true, mockViewModel.removeServerGroupCalled)
     }
+
+    @Test
+    fun `onClearError should be callable`() {
+        // WHEN: Calling onClearError
+        mockViewModel.onClearError()
+        
+        // THEN: Should be called
+        assertEquals(true, mockViewModel.clearErrorCalled)
+    }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE UPDATES TESTS
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════════════════════════
     
     @Test
     fun `vpnStatus should be mutable by implementation`() {

@@ -35,6 +35,13 @@ class RealUserCanDoTest {
 
     @get:Rule(order = 0)
     val hiltRule = HiltAndroidRule(this)
+    
+    // Compose rules - must be field rules with proper ordering for Compose test infrastructure
+    @get:Rule(order = 1)
+    val mobileComposeRule = createAndroidComposeRule<MainActivity>()
+    
+    @get:Rule(order = 1)
+    val tvComposeRule = createAndroidComposeRule<TvActivity>()
 
     @Inject
     lateinit var settingsRepository: SettingsRepository
@@ -48,6 +55,8 @@ class RealUserCanDoTest {
 
     @Before
     fun setup() {
+        // CRITICAL: Inject Hilt dependencies FIRST
+        // This ensures Hilt is fully initialized before any activities launch
         hiltRule.inject()
         context = ApplicationProvider.getApplicationContext()
         uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -60,45 +69,43 @@ class RealUserCanDoTest {
 
     @Test
     fun mobile_canNavigateToCredentialsAndSave() {
-        val rule = createAndroidComposeRule<MainActivity>()
-        
         log("🧪 MOBILE: Can user navigate to credentials and save?")
-        rule.waitForIdle()
+        mobileComposeRule.waitForIdle()
         
         // Navigate to credentials section
-        rule.onNodeWithText("Provider Credentials", substring = true)
+        mobileComposeRule.onNodeWithText("Provider Credentials", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
         
         log("  ✓ Found credentials section")
         
         // Find username field
-        rule.onNodeWithTag("nord_username_textfield")
+        mobileComposeRule.onNodeWithTag("nord_username_textfield")
             .assertExists()
             .assertIsDisplayed()
         
         log("  ✓ Username field exists and is accessible")
         
         // Find password field  
-        rule.onNodeWithTag("nord_password_textfield")
+        mobileComposeRule.onNodeWithTag("nord_password_textfield")
             .assertExists()
             .assertIsDisplayed()
         
         log("  ✓ Password field exists and is accessible")
         
         // Enter credentials
-        rule.onNodeWithTag("nord_username_textfield")
+        mobileComposeRule.onNodeWithTag("nord_username_textfield")
             .performClick()
             .performTextReplacement(NORD_USERNAME)
         
-        rule.onNodeWithTag("nord_password_textfield")
+        mobileComposeRule.onNodeWithTag("nord_password_textfield")
             .performClick()
             .performTextReplacement(NORD_PASSWORD)
         
         log("  ✓ Entered credentials")
         
         // Save
-        rule.onNodeWithTag("nord_credentials_save_button")
+        mobileComposeRule.onNodeWithTag("nord_credentials_save_button")
             .performScrollTo()
             .performClick()
         
@@ -113,7 +120,7 @@ class RealUserCanDoTest {
 
     @Test
     fun tv_canNavigateToCredentials() {
-        val rule = createAndroidComposeRule<TvActivity>()
+        val rule = tvComposeRule
         
         log("🧪 TV: Can user navigate to credentials with D-pad?")
         rule.waitForIdle()
@@ -159,7 +166,7 @@ class RealUserCanDoTest {
 
     @Test
     fun mobile_canRouteApp() {
-        val rule = createAndroidComposeRule<MainActivity>()
+        val rule = mobileComposeRule
         
         log("🧪 MOBILE: Can user route an app?")
         
@@ -208,7 +215,7 @@ class RealUserCanDoTest {
 
     @Test
     fun mobile_canToggleVpn() {
-        val rule = createAndroidComposeRule<MainActivity>()
+        val rule = mobileComposeRule
         
         log("🧪 MOBILE: Can user toggle VPN?")
         
@@ -243,7 +250,7 @@ class RealUserCanDoTest {
 
     @Test
     fun tv_canNavigateTabs() {
-        val rule = createAndroidComposeRule<TvActivity>()
+        val rule = tvComposeRule
         
         log("🧪 TV: Can user navigate tabs with D-pad?")
         
@@ -283,7 +290,7 @@ class RealUserCanDoTest {
 
     @Test
     fun tv_canSeeTunnels() {
-        val rule = createAndroidComposeRule<TvActivity>()
+        val rule = tvComposeRule
         
         log("🧪 TV: Can user see tunnels?")
         
@@ -311,7 +318,7 @@ class RealUserCanDoTest {
 
     @Test
     fun tv_canSeeAppRules() {
-        val rule = createAndroidComposeRule<TvActivity>()
+        val rule = tvComposeRule
         
         log("🧪 TV: Can user navigate to app rules and see apps?")
         
@@ -343,7 +350,7 @@ class RealUserCanDoTest {
 
     @Test
     fun tv_canSeeInstalledAppsInList() {
-        val rule = createAndroidComposeRule<TvActivity>()
+        val rule = tvComposeRule
         
         log("🧪 TV: Can user see installed apps in the app list?")
         
@@ -397,7 +404,7 @@ class RealUserCanDoTest {
 
     @Test
     fun mobile_showsAllInstalledApps() {
-        val rule = createAndroidComposeRule<MainActivity>()
+        val rule = mobileComposeRule
         
         log("🧪 MOBILE: Does mobile show all installed apps?")
         

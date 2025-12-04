@@ -48,6 +48,11 @@ abstract class RouterViewModel : ViewModel() {
      * Live statistics (bytes sent, bytes received, connection time)
      */
     abstract val liveStats: StateFlow<VpnStats>
+
+    /**
+     * A message for any error that occurs. Null if no error.
+     */
+    abstract val error: StateFlow<String?>
     
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS (Triggered by UI)
@@ -86,6 +91,11 @@ abstract class RouterViewModel : ViewModel() {
      * @param group The group to remove
      */
     abstract fun onRemoveServerGroup(group: ServerGroup)
+
+    /**
+     * User dismissed the error message
+     */
+    abstract fun onClearError()
 }
 
 /**

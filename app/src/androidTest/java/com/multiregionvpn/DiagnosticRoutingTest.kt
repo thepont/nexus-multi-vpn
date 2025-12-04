@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import androidx.test.uiautomator.By
 import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.database.AppRule
@@ -18,76 +20,97 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import dagger.hilt.android.testing.HiltAndroidTest
+import dagger.hilt.android.testing.HiltAndroidRule
+import org.junit.Rule
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.inject.Inject
+
 
 /**
  * Diagnostic test to understand WHY HTTP requests bypass VPN
  * even when test package is in allowed apps and tunnel is connected.
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class DiagnosticRoutingTest {
     
+    @get:Rule(order = 0)
+    var hiltRule = HiltAndroidRule(this)
+
     private lateinit var appContext: Context
     private lateinit var device: UiDevice
-    private lateinit var settingsRepo: SettingsRepository
+    @Inject
+    lateinit var settingsRepo: SettingsRepository
     
     @Before
-    fun setup() = runBlocking {
+    fun setup() {
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("🔬 DIAGNOSTIC TEST SETUP")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
+        hiltRule.inject()
         appContext = ApplicationProvider.getApplicationContext()
         device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         
-        val database = AppDatabase.getDatabase(appContext)
-        settingsRepo = SettingsRepository(
-            database.vpnConfigDao(),
-            database.appRuleDao(),
-            database.providerCredentialsDao(),
-            database.presetRuleDao()
-        )
-        
-        // Stop VPN
-        println("1️⃣ Stopping VPN if running...")
-        val stopIntent = Intent(appContext, VpnEngineService::class.java).apply {
-            action = VpnEngineService.ACTION_STOP
+        // Pre-approve VPN permission using appops (App Operations)
+        try {
+            val appopsCommand = "appops set ${appContext.packageName} ACTIVATE_VPN allow"
+            device.executeShellCommand(appopsCommand)
+            println("✅ VPN permission pre-approved via appops")
+        } catch (e: Exception) {
+            println("⚠️  Could not pre-approve VPN permission via appops: ${e.message}")
         }
-        appContext.startService(stopIntent)
-        delay(2000)
-        println("✅ VPN stopped")
         
-        // Clear data
-        println("2️⃣ Clearing test data...")
-        settingsRepo.clearAllAppRules()
-        settingsRepo.clearAllVpnConfigs()
-        println("✅ Test data cleared")
-        
-        // Save credentials
-        println("3️⃣ Saving NordVPN credentials...")
-        val testArgs = InstrumentationRegistry.getArguments()
-        val username = testArgs.getString("NORDVPN_USERNAME") ?: throw IllegalArgumentException("Need NORDVPN_USERNAME")
-        val password = testArgs.getString("NORDVPN_PASSWORD") ?: throw IllegalArgumentException("Need NORDVPN_PASSWORD")
-        settingsRepo.saveProviderCredentials(ProviderCredentials("nordvpn", username, password))
-        println("✅ Credentials saved")
-        
-        // Save UK config
-        println("4️⃣ Creating UK tunnel config...")
-        val ukConfig = VpnConfig(
-            id = "test-uk-diag",
-            name = "UK Diagnostic",
-            regionId = "UK",
-            templateId = "nordvpn",
-            serverHostname = "uk2303.nordvpn.com"
-        )
-        settingsRepo.saveVpnConfig(ukConfig)
-        println("✅ UK tunnel config saved")
+        runBlocking {
+            // Stop VPN
+            println("1️⃣ Stopping VPN if running...")
+            val stopIntent = Intent(appContext, VpnEngineService::class.java).apply {
+                action = VpnEngineService.ACTION_STOP
+            }
+            appContext.startService(stopIntent)
+            delay(2000)
+            println("✅ VPN stopped")
+            
+            // Clear data
+            println("2️⃣ Clearing test data...")
+            settingsRepo.clearAllAppRules()
+            settingsRepo.clearAllVpnConfigs()
+            println("✅ Test data cleared")
+            
+            // Save credentials
+            println("3️⃣ Saving NordVPN credentials...")
+            val testArgs = InstrumentationRegistry.getArguments()
+            val username = testArgs.getString("NORDVPN_USERNAME") ?: throw IllegalArgumentException("Need NORDVPN_USERNAME")
+            val password = testArgs.getString("NORDVPN_PASSWORD") ?: throw IllegalArgumentException("Need NORDVPN_PASSWORD")
+            settingsRepo.saveProviderCredentials(ProviderCredentials("nordvpn", username, password))
+            println("✅ Credentials saved")
+            
+            // Save UK config
+            println("4️⃣ Creating UK tunnel config...")
+            val ukConfig = VpnConfig(
+                id = "test-uk-diag",
+                name = "UK Diagnostic",
+                regionId = "UK",
+                templateId = "nordvpn",
+                serverHostname = "uk2303.nordvpn.com"
+            )
+            settingsRepo.saveVpnConfig(ukConfig)
+            println("✅ UK tunnel config saved")
+        }
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     }
     
     @After
     fun teardown() = runBlocking {
+        // CRITICAL: Always reset TestGlobalModeOverride to prevent test pollution
+        try {
+            VpnEngineService.setTestGlobalModeOverride(null)
+        } catch (e: Exception) {
+            println("⚠️  Could not reset TestGlobalModeOverride: ${e.message}")
+        }
+        
         println("\n🧹 Teardown: Stopping VPN...")
         val stopIntent = Intent(appContext, VpnEngineService::class.java).apply {
             action = VpnEngineService.ACTION_STOP
@@ -107,7 +130,7 @@ class DiagnosticRoutingTest {
         println("🧪 DIAGNOSTIC: App Rule Created BEFORE VPN Start")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        val testPackage = InstrumentationRegistry.getInstrumentation().context.packageName
+        val testPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         println("Test package: $testPackage")
         println("Test UID: ${android.os.Process.myUid()}")
         
@@ -123,10 +146,22 @@ class DiagnosticRoutingTest {
         
         // Step 2: Start VPN
         println("\n2️⃣ Starting VPN (should read 1 app rule)...")
-        val startIntent = Intent(appContext, VpnEngineService::class.java).apply {
-            action = VpnEngineService.ACTION_START
+        // Check if VPN permission is granted
+        val permissionIntent = android.net.VpnService.prepare(appContext)
+        if (permissionIntent != null) {
+            println("⚠️  VPN permission not granted - handling dialog...")
+            val startIntent = Intent(appContext, VpnEngineService::class.java).apply {
+                action = VpnEngineService.ACTION_START
+            }
+            appContext.startForegroundService(startIntent)
+            delay(1000) // Give dialog time to appear
+            handleVpnPermissionDialog()
+        } else {
+            val startIntent = Intent(appContext, VpnEngineService::class.java).apply {
+                action = VpnEngineService.ACTION_START
+            }
+            appContext.startForegroundService(startIntent)
         }
-        appContext.startForegroundService(startIntent)
         
         // Step 3: Wait for VPN to fully start and read rules
         println("\n3️⃣ Waiting 10 seconds for VPN to start and read app rules...")
@@ -199,6 +234,40 @@ class DiagnosticRoutingTest {
             }
         } finally {
             connection.disconnect()
+        }
+    }
+    
+    private fun handleVpnPermissionDialog() = runBlocking {
+        println("   Waiting for VPN permission dialog...")
+        
+        // Wait for the VPN permission dialog to appear
+        var allowButton = device.wait(
+            Until.findObject(By.text("OK")),
+            3000
+        )
+        
+        if (allowButton == null) {
+            allowButton = device.wait(
+                Until.findObject(By.text("Allow")),
+                3000
+            )
+        }
+        
+        if (allowButton == null) {
+            // Try finding by resource ID (standard Android button IDs)
+            allowButton = device.wait(
+                Until.findObject(By.res("android:id/button1")), // Usually "OK" or positive button
+                3000
+            )
+        }
+        
+        if (allowButton != null) {
+            println("   Found VPN permission dialog button, clicking...")
+            allowButton.click()
+            delay(2000) // Wait for permission to be granted
+            println("   ✅ VPN permission dialog handled")
+        } else {
+            println("   No VPN permission dialog found (may already be granted)")
         }
     }
 }

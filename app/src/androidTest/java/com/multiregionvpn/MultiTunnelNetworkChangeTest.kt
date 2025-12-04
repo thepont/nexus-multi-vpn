@@ -4,19 +4,24 @@ import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.multiregionvpn.core.VpnEngineService
-import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.database.AppRule
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
+import javax.inject.Inject
 
 /**
  * E2E tests for multi-tunnel network change scenarios.
@@ -27,49 +32,75 @@ import java.util.UUID
  * - Network unavailable scenarios
  * - Tunnel-specific failures
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class MultiTunnelNetworkChangeTest {
+
+    @get:Rule
+    var hiltRule = HiltAndroidRule(this)
+    
+    @Inject
+    lateinit var settingsRepo: SettingsRepository
     
     private lateinit var appContext: Context
-    private lateinit var settingsRepo: SettingsRepository
-    private lateinit var database: AppDatabase
     
-    private val UK_VPN_ID = UUID.randomUUID().toString()
-    private val FR_VPN_ID = UUID.randomUUID().toString()
-    private val US_VPN_ID = UUID.randomUUID().toString()
+    // Use real package names that exist on the device
+    private val TEST_PACKAGE_NAME = InstrumentationRegistry.getInstrumentation().context.packageName
+    private val APP_PACKAGE_NAME = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+
+    private val UK_VPN_ID = "test-uk-${UUID.randomUUID().toString().take(8)}"
+    private val FR_VPN_ID = "test-fr-${UUID.randomUUID().toString().take(8)}"
+    private val US_VPN_ID = "test-us-${UUID.randomUUID().toString().take(8)}"
     
     @Before
-    fun setup() = runBlocking {
+    fun setup() { // Not a suspend function
+        hiltRule.inject()
         appContext = ApplicationProvider.getApplicationContext()
-        database = AppDatabase.getDatabase(appContext)
-        settingsRepo = SettingsRepository(
-            database.vpnConfigDao(),
-            database.appRuleDao(),
-            database.providerCredentialsDao(),
-            database.presetRuleDao()
-        )
+        
+        // Pre-approve VPN permission using appops (App Operations)
+        try {
+            val device = androidx.test.uiautomator.UiDevice.getInstance(
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            )
+            val appopsCommand = "appops set ${appContext.packageName} ACTIVATE_VPN allow"
+            device.executeShellCommand(appopsCommand)
+            println("✅ VPN permission pre-approved via appops")
+        } catch (e: Exception) {
+            println("⚠️  Could not pre-approve VPN permission via appops: ${e.message}")
+        }
         
         // Clean state
-        stopVpn()
-        delay(2000)
-        settingsRepo.clearAllAppRules()
-        settingsRepo.clearAllVpnConfigs()
-        
-        // Bootstrap test data
-        bootstrapCredentials()
-        bootstrapVpnConfigs()
+        runBlocking { // Wrap suspend calls in runBlocking
+            stopVpn()
+            delay(2000)
+            settingsRepo.clearAllAppRules()
+            settingsRepo.clearAllVpnConfigs()
+            
+            // Bootstrap test data
+            bootstrapCredentials()
+            bootstrapVpnConfigs()
+        }
     }
     
     @After
-    fun teardown() = runBlocking {
-        stopVpn()
-        delay(2000)
-        settingsRepo.clearAllAppRules()
-        settingsRepo.clearAllVpnConfigs()
+    fun teardown() { // Not a suspend function
+        runBlocking { // Wrap suspend calls in runBlocking
+            // CRITICAL: Always reset TestGlobalModeOverride to prevent test pollution
+            try {
+                VpnEngineService.setTestGlobalModeOverride(null)
+            } catch (e: Exception) {
+                println("⚠️  Could not reset TestGlobalModeOverride: ${e.message}")
+            }
+            
+            stopVpn()
+            delay(2000)
+            settingsRepo.clearAllAppRules()
+            settingsRepo.clearAllVpnConfigs()
+        }
     }
     
     @Test
-    fun testMultipleTunnelsReconnectSimultaneously() = runBlocking {
+    fun testMultipleTunnelsReconnectSimultaneously() = runTest {
         println("🧪 TEST: Multiple tunnels reconnect after network change")
         
         // GIVEN: 3 active tunnels routing different apps
@@ -102,11 +133,11 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testRapidNetworkChanges() = runBlocking {
+    fun testRapidNetworkChanges() = runTest {
         println("🧪 TEST: Rapid network changes (Wi-Fi flapping)")
         
         // GIVEN: Active VPN connection
-        settingsRepo.createAppRule("com.testapp", UK_VPN_ID)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         delay(500)
         
         startVpn()
@@ -133,11 +164,11 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testNetworkUnavailableScenario() = runBlocking {
+    fun testNetworkUnavailableScenario() = runTest {
         println("🧪 TEST: Network completely unavailable")
         
         // GIVEN: Active VPN connection
-        settingsRepo.createAppRule("com.testapp", UK_VPN_ID)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         delay(500)
         
         startVpn()
@@ -157,7 +188,7 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testPartialTunnelFailure() = runBlocking {
+    fun testPartialTunnelFailure() = runTest {
         println("🧪 TEST: One tunnel fails, others should remain connected")
         
         // GIVEN: Multiple tunnels active
@@ -189,11 +220,11 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testVpnStartupDuringNetworkChange() = runBlocking {
+    fun testVpnStartupDuringNetworkChange() = runTest {
         println("🧪 TEST: VPN starts while network is changing")
         
         // GIVEN: VPN configured but not started
-        settingsRepo.createAppRule("com.testapp", UK_VPN_ID)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         delay(500)
         
         // WHEN: VPN starts (which may coincide with network change)
@@ -214,11 +245,11 @@ class MultiTunnelNetworkChangeTest {
     }
     
     @Test
-    fun testConnectionTrackerAfterNetworkChange() = runBlocking {
+    fun testConnectionTrackerAfterNetworkChange() = runTest {
         println("🧪 TEST: Connection tracker maintains state after network change")
         
         // GIVEN: Active connections with tracker state
-        settingsRepo.createAppRule("com.testapp", UK_VPN_ID)
+        settingsRepo.createAppRule(TEST_PACKAGE_NAME, UK_VPN_ID)
         delay(500)
         
         startVpn()
@@ -267,6 +298,7 @@ class MultiTunnelNetworkChangeTest {
         } else {
             appContext.startService(intent)
         }
+        // Permission should be pre-approved via appops in setup
         delay(3000)
     }
     
@@ -278,4 +310,3 @@ class MultiTunnelNetworkChangeTest {
         delay(2000)
     }
 }
-

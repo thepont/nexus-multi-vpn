@@ -62,27 +62,27 @@ echo "=== Attempting simple dependency resolution first ==="
 # Try a simpler approach: just resolve specific configurations we know we need
 set +e  # Don't exit on error
 
-./gradlew dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugCompileClasspath resolved"
 
-./gradlew dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugRuntimeClasspath resolved"
 
-./gradlew dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugAndroidTestCompileClasspath resolved"
 
-./gradlew dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugAndroidTestRuntimeClasspath resolved"
 
 # Now try our custom task
 echo ""
 echo "=== Running androidDependencies task ==="
+# Don't exclude native build tasks when SKIP_NATIVE_BUILD=true, as they don't exist
 ./gradlew androidDependencies \
-  -x externalNativeBuildDebug \
-  -x externalNativeBuildRelease \
   --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
 
-GRADLE_EXIT=$?
+# Capture exit code of the gradle command (first command in pipeline), not tee
+GRADLE_EXIT=${PIPESTATUS[0]}
 set -e
 
 # Stop monitoring

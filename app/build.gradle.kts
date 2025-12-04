@@ -33,89 +33,49 @@ fun envOrDotenv(key: String): String? =
 android {
     namespace = "com.multiregionvpn"
     compileSdk = 34
-    
+
     buildFeatures {
         buildConfig = true
+        compose = true // Ensure compose is enabled at the android block level
     }
     
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.4"
+    }
+    
+    // Configure installation timeout for large APK installations
+    // Default timeout (30s) is insufficient for large APKs (99MB main + 20MB test = 119MB)
+    // Increase to 5 minutes to handle large APK transfers on CI runners
+    // Note: adbOptions is deprecated, using installation API instead
+    installation {
+        timeOutInMs = 300000  // 5 minutes (300,000 ms)
+    }
+
     // Android NDK version - will auto-detect if not specified
     // Uncomment and set if auto-detection fails:
     // ndkVersion = "26.1.10909125"
     
-    defaultConfig {
-        externalNativeBuild {
-            cmake {
-                // Build type will be set per build variant
-                arguments += listOf(
-                    "-DANDROID_STL=c++_shared"
-                )
-                // Enable vcpkg if VCPKG_ROOT environment variable is set
-                // Usage: export VCPKG_ROOT=/path/to/vcpkg
-                //        ./gradlew build
-                // Note: For Android, vcpkg requires the Android triplet to be set
-                // and dependencies must be installed for that triplet first
-                // 
-                // vcpkg chainloading: vcpkg's toolchain file will chainload Android's toolchain
-                // CRITICAL: VCPKG_CHAINLOAD_TOOLCHAIN_FILE must be set BEFORE vcpkg.cmake is processed
-                // So we set it as a command-line argument which CMake processes before toolchain files
-                // Only enable vcpkg if VCPKG_ROOT is set AND the file exists
-                val vcpkgRoot = System.getenv("VCPKG_ROOT")
-                if (vcpkgRoot != null) {
-                    val vcpkgToolchain = "$vcpkgRoot/scripts/buildsystems/vcpkg.cmake"
-                    val vcpkgToolchainFile = file(vcpkgToolchain)
-                    if (vcpkgToolchainFile.exists()) {
-                            // Get Android NDK directory (not the toolchain file path yet)
-                            // Use the actual NDK path from Gradle, which is more reliable
-                            val androidNdkDir = "${android.ndkDirectory}"
-                            
-                            // Construct the full path to android.toolchain.cmake
-                            // Android NDK has the toolchain file at: <ndk>/build/cmake/android.toolchain.cmake
-                            val androidToolchainFile = "$androidNdkDir/build/cmake/android.toolchain.cmake"
-                            
-                            // Verify the file exists before using it
-                            val androidToolchainFileObj = file(androidToolchainFile)
-                            if (androidToolchainFileObj.exists()) {
-                                // Don't set VCPKG_TARGET_TRIPLET here - let CMakeLists.txt auto-detect based on ANDROID_ABI
-                                arguments += listOf(
-                                    "-DUSE_VCPKG=ON",
-                                    "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$androidToolchainFile"
-                                )
-                            } else {
-                                // Fallback: try to find it in common locations
-                                val fallbackPaths = listOf(
-                                    "${System.getenv("ANDROID_NDK")}/build/cmake/android.toolchain.cmake",
-                                    "${System.getenv("ANDROID_NDK_HOME")}/build/cmake/android.toolchain.cmake",
-                                    "${System.getenv("ANDROID_HOME")}/ndk-bundle/build/cmake/android.toolchain.cmake"
-                                )
-                                val foundPath = fallbackPaths.firstOrNull { file(it).exists() }
-                                if (foundPath != null) {
-                                    arguments += listOf(
-                                        "-DUSE_VCPKG=ON",
-                                        "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$foundPath"
-                                    )
-                                } else {
-                                    // If we can't find it, skip vcpkg for this build
-                                    println("Warning: Could not find android.toolchain.cmake, skipping vcpkg")
-                                }
-                            }
-                        
-                        // Set vcpkg toolchain file - this will be processed by CMake
-                        // and vcpkg.cmake will include the chainloaded Android toolchain
-                        arguments += listOf("-DCMAKE_TOOLCHAIN_FILE=$vcpkgToolchain")
-                    }
-                }
-                cppFlags += listOf(
-                    "-std=c++20",  // Required for OpenVPN 3
-                    "-fexceptions",
-                    "-frtti"
-                )
-            }
+defaultConfig {
+        applicationId = "com.multiregionvpn"
+        minSdk = 29
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+        
+        testInstrumentationRunner = "com.multiregionvpn.HiltTestRunner"
+        testInstrumentationRunnerArguments["useTestStorageService"] = "true"
+        
+        // Pass NordVPN credentials from .env file to instrumentation tests
+        envOrDotenv("NORDVPN_USERNAME")?.let {
+            testInstrumentationRunnerArguments["NORDVPN_USERNAME"] = it
+        }
+        envOrDotenv("NORDVPN_PASSWORD")?.let {
+            testInstrumentationRunnerArguments["NORDVPN_PASSWORD"] = it
         }
         
-        ndk {
-            // Build for ARM (real devices) and x86 (emulators) architectures
-            // Required for E2E tests which run on x86_64 emulators
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+        multiDexEnabled = true
+        vectorDrawables {
+            useSupportLibrary = true
         }
     }
     
@@ -142,42 +102,6 @@ android {
     
     kotlinOptions {
         jvmTarget = "17"
-    }
-
-    defaultConfig {
-        applicationId = "com.multiregionvpn"
-        minSdk = 29
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
-        
-        testInstrumentationRunner = "com.multiregionvpn.HiltTestRunner"
-        testInstrumentationRunnerArguments["useTestStorageService"] = "true"
-        envOrDotenv("NORDVPN_USERNAME")?.let { username ->
-            testInstrumentationRunnerArguments["NORDVPN_USERNAME"] = username
-        }
-        envOrDotenv("NORDVPN_PASSWORD")?.let { password ->
-            testInstrumentationRunnerArguments["NORDVPN_PASSWORD"] = password
-        }
-        envOrDotenv("BASELINE_IP_OVERRIDE")?.let { ip ->
-            testInstrumentationRunnerArguments["BASELINE_IP_OVERRIDE"] = ip
-        }
-        envOrDotenv("BASELINE_COUNTRY_OVERRIDE")?.let { country ->
-            testInstrumentationRunnerArguments["BASELINE_COUNTRY_OVERRIDE"] = country
-        }
-        // Allow passing test arguments for E2E tests (e.g., NordVPN credentials)
-        // Usage: -Pandroid.testInstrumentationRunnerArguments.NORDVPN_USERNAME='user' -Pandroid.testInstrumentationRunnerArguments.NORDVPN_PASSWORD='pass'
-        multiDexEnabled = true
-        vectorDrawables {
-            useSupportLibrary = true
-        }
-    }
-    
-    testOptions {
-        animationsDisabled = true
-        unitTests {
-            isReturnDefaultValues = true
-        }
     }
     
     packaging {
@@ -208,24 +132,11 @@ android {
         }
     }
     
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-    
-    buildFeatures {
-        compose = true
-    }
-    
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.4"
-    }
-
-    testOptions {
+testOptions {
+        animationsDisabled = true
+        unitTests {
+            isReturnDefaultValues = true
+        }
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
             it.jvmArgs(
@@ -234,12 +145,40 @@ android {
                 "--add-opens=java.base/java.util=ALL-UNNAMED",
                 "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
             )
+            
+            // Prevent tests from running in parallel to reduce resource contention
+            // This helps avoid deadlocks and race conditions in CI
+            it.maxParallelForks = 1
+            
+            // Enable fail-fast: stop on first test failure to provide quicker feedback
+            it.failFast = true
+            
+            // Configure test logging for better visibility
+            it.testLogging {
+                events("passed", "skipped", "failed", "standardOut", "standardError")
+                showExceptions = true
+                showCauses = true
+                showStackTraces = true
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
         }
     }
     
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    // Configure connectedDebugAndroidTest dependencies
+    // Diagnostic client APKs are built separately in CI scripts, but Gradle needs explicit dependencies
+    // to satisfy validation. We use evaluationDependsOn to ensure projects are evaluated, then declare dependencies.
+    afterEvaluate {
+        // Ensure diagnostic client projects are evaluated
+        evaluationDependsOn(":diagnostic-client-uk")
+        evaluationDependsOn(":diagnostic-client-fr")
+        evaluationDependsOn(":diagnostic-client-direct")
+        
+        tasks.matching { it.name.contains("connectedDebugAndroidTest") }.configureEach {
+            dependsOn(
+                project(":diagnostic-client-uk").tasks.named("packageDebug"),
+                project(":diagnostic-client-fr").tasks.named("packageDebug"),
+                project(":diagnostic-client-direct").tasks.named("packageDebug")
+            )
         }
     }
 }
@@ -315,6 +254,7 @@ dependencies {
     // UI Automator for E2E Testing
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    // Note: Dependencies on packageDebug tasks are declared in afterEvaluate block below
     androidTestUtil(files("${rootDir}/diagnostic-client-uk/build/outputs/apk/debug/diagnostic-client-uk-debug.apk"))
     androidTestUtil(files("${rootDir}/diagnostic-client-fr/build/outputs/apk/debug/diagnostic-client-fr-debug.apk"))
     androidTestUtil(files("${rootDir}/diagnostic-client-direct/build/outputs/apk/debug/diagnostic-client-direct-debug.apk"))
@@ -330,6 +270,7 @@ dependencies {
     
     // Coroutines Testing (ESSENTIAL for ViewModels)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
     testImplementation("org.robolectric:robolectric:4.11.1")
     
     // Room (for DAO testing)
@@ -348,20 +289,11 @@ dependencies {
     androidTestImplementation("com.squareup.retrofit2:converter-moshi:2.9.0")
     androidTestImplementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
     androidTestImplementation("com.google.dagger:hilt-android-testing:2.51.1")
-    ksp("com.google.dagger:hilt-compiler:2.51.1") // Hilt compiler for tests
+    // KSP for Hilt for Android tests
+    kspAndroidTest("com.google.dagger:hilt-compiler:2.51.1")
     androidTestImplementation("androidx.test:rules:1.5.0")
     
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-}
-
-gradle.projectsEvaluated {
-    tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
-        dependsOn(
-            ":diagnostic-client-uk:assembleDebug",
-            ":diagnostic-client-fr:assembleDebug",
-            ":diagnostic-client-direct:assembleDebug"
-        )
-    }
 }

@@ -155,9 +155,9 @@ cd app/openvpn-dns-domain && docker-compose up -d
 - `test_routeTrafficThroughUKServer()` - Route via WireGuard UK
 - `test_multiTunnelRouting()` - Two WireGuard tunnels
 - `test_wireGuardProtocolDetection()` - Config parsing
-- `test_openVpnDnsIssue_EXPECTED_TO_FAIL()` - ⚠️ OUTDATED (OpenVPN now works!)
+- `test_openVpnProtocolDetection()` - OpenVPN config validation
 
-**Note**: The last test comment is outdated since we fixed OpenVPN!
+**Note**: For full E2E OpenVPN tests with Docker containers, see LocalMultiTunnelTest
 
 ---
 
@@ -262,12 +262,23 @@ NordVPN tests remain intact for production environment validation.
 
 ## 📝 Test Requirements
 
-### **For Local Docker Tests**:
+### **For CI/CD (GitHub Actions)**:
+1. ✅ Docker containers are automatically started by CI workflow
+2. ✅ The `start-docker-containers.sh` script starts all required containers
+3. ✅ Containers include: OpenVPN UK/FR, WireGuard UK/FR, HTTP test servers
+4. ✅ Containers are automatically stopped after tests complete
+
+### **For Local Docker Tests (Manual Testing)**:
 1. ✅ Docker installed and running on host machine
 2. ✅ Docker Compose started for specific test:
    ```bash
-   cd app/openvpn-uk && docker-compose up -d
-   cd app/openvpn-fr && docker-compose up -d
+   # Start all containers for comprehensive testing
+   ./scripts/ci/start-docker-containers.sh
+   
+   # Or start specific compose files
+   cd app/src/androidTest/resources/docker-compose
+   docker-compose -f docker-compose.routing.yaml up -d
+   docker-compose -f docker-compose.dns.yaml up -d
    ```
 3. ✅ Host machine IP accessible from emulator (usually 10.0.2.2)
 4. ✅ Test apps installed (optional, for end-to-end validation):

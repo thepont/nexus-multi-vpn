@@ -197,7 +197,7 @@ run_tests() {
     source .env
     
     # Determine which test to run
-    TEST_CLASS="${1:-com.multiregionvpn.VpnRoutingTest}"
+    TEST_CLASS="${1:-com.multiregionvpn.NordVpnE2ETest}"
     TEST_METHOD="${2:-}"
     
     if [ -n "$TEST_METHOD" ]; then
@@ -217,9 +217,7 @@ run_tests() {
     log_info "Credentials: NORDVPN_USERNAME=${NORDVPN_USERNAME:0:3}***"
     
     if timeout 120 ./gradlew :app:connectedDebugAndroidTest \
-        "$TEST_ARG" \
-        -Pandroid.testInstrumentationRunnerArguments.NORDVPN_USERNAME="$NORDVPN_USERNAME" \
-        -Pandroid.testInstrumentationRunnerArguments.NORDVPN_PASSWORD="$NORDVPN_PASSWORD"; then
+        "$TEST_ARG"; then
         log_success "All tests passed!"
         return 0
     else
@@ -234,7 +232,7 @@ show_logs() {
     if [ "${SHOW_LOGS:-false}" = "true" ]; then
         log_step "Recent Test Logs"
         log_info "Showing relevant log entries..."
-        adb logcat -d | grep -E "(VpnEngineService|VpnConnectionManager|NativeOpenVpnClient|VpnRoutingTest|❌|✅|VPN)" | tail -50
+        adb logcat -d | grep -E "(VpnEngineService|VpnConnectionManager|NativeOpenVpnClient|NordVpnE2ETest|❌|✅|VPN)" | tail -50
     fi
 }
 
@@ -283,7 +281,7 @@ main() {
 Usage: $0 [OPTIONS]
 
 Options:
-  --test-class CLASS       Run specific test class (default: VpnRoutingTest)
+  --test-class CLASS       Run specific test class (default: NordVpnE2ETest)
   --test-method METHOD     Run specific test method (requires --test-class)
   --skip-install           Skip app installation
   --skip-permissions       Skip permission granting
@@ -292,7 +290,7 @@ Options:
   --help                   Show this help message
 
 Examples:
-  $0                                    # Run all VpnRoutingTest tests
+  $0                                    # Run all NordVpnE2ETest tests
   $0 --test-method test_routesToUK      # Run single test method
   $0 --test-class VpnToggleTest        # Run different test class
   $0 --clear-data --show-logs          # Clear data and show logs
@@ -312,7 +310,7 @@ EOF
     done
     
     # Set defaults
-    TEST_CLASS="${TEST_CLASS:-com.multiregionvpn.VpnRoutingTest}"
+    TEST_CLASS="${TEST_CLASS:-com.multiregionvpn.NordVpnE2ETest}"
     
     # Run setup steps
     check_prerequisites

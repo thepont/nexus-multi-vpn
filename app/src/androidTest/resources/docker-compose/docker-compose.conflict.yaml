@@ -12,7 +12,7 @@ services:
     ports:
       - "1197:1194/udp"
     volumes:
-      - ../../../../openvpn-uk-conflict:/etc/openvpn
+      - ../../../../../openvpn-uk-conflict:/etc/openvpn
     networks:
       vpn-conflict:
         ipv4_address: 10.8.0.1
@@ -39,7 +39,7 @@ services:
     ports:
       - "1198:1194/udp"
     volumes:
-      - ../../../../openvpn-fr-conflict:/etc/openvpn
+      - ../../../../../openvpn-fr-conflict:/etc/openvpn
     networks:
       vpn-conflict:
         ipv4_address: 10.8.0.2
@@ -65,7 +65,7 @@ services:
       vpn-conflict:
         ipv4_address: 10.8.0.3
     volumes:
-      - ../../../../http-uk-conflict:/usr/share/nginx/html:ro
+      - ../../../../../http-uk-conflict:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
 
   # HTTP Server on FR side (10.8.0.4)
@@ -78,7 +78,7 @@ services:
       vpn-conflict:
         ipv4_address: 10.8.0.4
     volumes:
-      - ../../../../http-fr-conflict:/usr/share/nginx/html:ro
+      - ../../../../../http-fr-conflict:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
 
 networks:
