@@ -130,7 +130,7 @@ class DiagnosticRoutingTest {
         println("🧪 DIAGNOSTIC: App Rule Created BEFORE VPN Start")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        val testPackage = InstrumentationRegistry.getInstrumentation().context.packageName
+        val testPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         println("Test package: $testPackage")
         println("Test UID: ${android.os.Process.myUid()}")
         

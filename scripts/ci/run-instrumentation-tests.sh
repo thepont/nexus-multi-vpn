@@ -2,6 +2,53 @@
 # Run instrumentation tests with monitoring
 set -e
 
+# Helper: Retry an adb shell no-op until it responds
+wait_for_adb_shell() {
+    local max_attempts=${1:-6}
+    local sleep_seconds=${2:-5}
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        if adb shell "echo adb-ready" >/dev/null 2>&1; then
+            echo "✅ ADB shell responsive (attempt ${attempt}/${max_attempts})"
+            return 0
+        fi
+        echo "⚠️  ADB shell not ready yet (attempt ${attempt}/${max_attempts}), retrying in ${sleep_seconds}s..."
+        sleep $sleep_seconds
+        attempt=$((attempt + 1))
+    done
+
+    echo "❌ Error: ADB shell unresponsive after ${max_attempts} attempts"
+    return 1
+}
+
+# Helper: Wait for Package Manager to become available
+wait_for_package_manager() {
+    local max_attempts=${1:-12}
+    local sleep_seconds=${2:-5}
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        if adb shell pm list packages >/dev/null 2>&1; then
+            echo "✅ Package manager ready (attempt ${attempt}/${max_attempts})"
+            return 0
+        fi
+        PM_OUTPUT=$(adb shell pm list packages 2>&1 | head -20 || true)
+        [ -n "$PM_OUTPUT" ] && echo "   Package manager error: ${PM_OUTPUT}"
+        echo "⚠️  Package manager not ready (attempt ${attempt}/${max_attempts}), retrying in ${sleep_seconds}s..."
+        if [ $attempt -eq 1 ]; then
+            echo "   Giving device a short grace period to finish boot tasks..."
+        fi
+        sleep $sleep_seconds
+        attempt=$((attempt + 1))
+    done
+
+    echo "❌ Error: Package manager not ready after ${max_attempts} attempts"
+    echo "Dumping package service status for diagnostics:"
+    adb shell dumpsys package 2>/dev/null | head -n 200 || true
+    return 1
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
@@ -105,15 +152,8 @@ if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
     
     # Verify ADB sync readiness before proceeding
     echo "Verifying ADB sync readiness..."
-    if ! adb shell "echo test" > /dev/null 2>&1; then
-      echo "❌ Error: ADB shell not responsive"
-      exit 1
-    fi
-    
-    if ! adb shell pm list packages > /dev/null 2>&1; then
-      echo "❌ Error: Package manager not ready"
-      exit 1
-    fi
+    wait_for_adb_shell 8 5
+    wait_for_package_manager 12 5
     
     echo "✅ ADB sync readiness verified"
     
