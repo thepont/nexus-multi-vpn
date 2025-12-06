@@ -39,30 +39,40 @@ fi
 
 echo "Using Docker Compose command: $DOCKER_COMPOSE"
 echo ""
-echo "=== Cleaning up old containers first ==="
+SHOULD_CLEANUP=true
+if [ -z "$CI" ] && [ -z "$GITHUB_ACTIONS" ] && [ -z "$FORCE_DOCKER_CLEANUP" ]; then
+    SHOULD_CLEANUP=false
+fi
 
-# Function to stop and remove containers for a project
-cleanup_project() {
-    local project_name="$1"
-    if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
-        (cd "$COMPOSE_DIR" && docker compose -p "$project_name" down --remove-orphans 2>/dev/null || true)
-    else
-        (cd "$COMPOSE_DIR" && docker-compose -p "$project_name" down --remove-orphans 2>/dev/null || true)
-    fi
-}
+if [ "$SHOULD_CLEANUP" = true ]; then
+    echo "=== Cleaning up old containers first ==="
 
-# Clean up any existing containers with our project names
-cleanup_project "e2e-routing"
-cleanup_project "e2e-dns"
-cleanup_project "e2e-dns-domain"
-cleanup_project "e2e-conflict"
+    # Function to stop and remove containers for a project
+    cleanup_project() {
+        local project_name="$1"
+        if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
+            (cd "$COMPOSE_DIR" && docker compose -p "$project_name" down --remove-orphans 2>/dev/null || true)
+        else
+            (cd "$COMPOSE_DIR" && docker-compose -p "$project_name" down --remove-orphans 2>/dev/null || true)
+        fi
+    }
 
-# Remove specific networks if they exist (by name pattern)
-# This ensures clean state without affecting other Docker networks
-for network in $(docker network ls --format "{{.Name}}" 2>/dev/null | grep -E "^e2e-routing_|^e2e-dns_|^e2e-dns-domain_|^e2e-conflict_" || true); do
-    echo "Removing network: $network"
-    docker network rm "$network" 2>/dev/null || true
-done
+    # Clean up any existing containers with our project names
+    cleanup_project "e2e-routing"
+    cleanup_project "e2e-dns"
+    cleanup_project "e2e-dns-domain"
+    cleanup_project "e2e-conflict"
+
+    # Remove specific networks if they exist (by name pattern)
+    # This ensures clean state without affecting other Docker networks
+    for network in $(docker network ls --format "{{.Name}}" 2>/dev/null | grep -E "^e2e-routing_|^e2e-dns_|^e2e-dns-domain_|^e2e-conflict_" || true); do
+        echo "Removing network: $network"
+        docker network rm "$network" 2>/dev/null || true
+    done
+else
+    echo "Skipping cleanup of existing test containers (local run detected)."
+    echo "Set FORCE_DOCKER_CLEANUP=1 to force cleanup."
+fi
 
 echo "=== Starting OpenVPN and HTTP test containers ==="
 
