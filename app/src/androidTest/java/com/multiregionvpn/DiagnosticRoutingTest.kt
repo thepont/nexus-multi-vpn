@@ -1,7 +1,9 @@
 package com.multiregionvpn
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -23,8 +25,10 @@ import org.junit.runner.RunWith
 import dagger.hilt.android.testing.HiltAndroidTest
 import dagger.hilt.android.testing.HiltAndroidRule
 import org.junit.Rule
-import java.net.HttpURLConnection
-import java.net.URL
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.multiregionvpn.diagnostic.DiagnosticHttpProbeService
 import javax.inject.Inject
 
 
@@ -197,43 +201,59 @@ class DiagnosticRoutingTest {
         delay(5000)
         
         // Step 6: Make simple HTTP request
-        println("\n6️⃣ Making HTTP request...")
+        println("\n6️⃣ Making HTTP request from app process...")
         println("   URL: http://ip-api.com/json")
         println("   Expected: This request should go through VPN → UK servers")
-        println("   Method: Direct HttpURLConnection (no Retrofit)")
-        
-        val url = URL("http://ip-api.com/json")
-        val connection = url.openConnection() as HttpURLConnection
-        connection.connectTimeout = 10000
-        connection.readTimeout = 10000
-        
-        try {
-            connection.connect()
-            val responseCode = connection.responseCode
-            println("   Response code: $responseCode")
-            
-            if (responseCode == 200) {
-                val response = connection.inputStream.bufferedReader().readText()
-                println("   Response: ${response.take(200)}...")
-                
-                // Parse country
-                val countryMatch = Regex(""""countryCode":"([A-Z]{2})"""").find(response)
-                val country = countryMatch?.groupValues?.get(1) ?: "UNKNOWN"
-                
-                println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                println("📍 RESULT:")
-                println("   Country: $country")
-                println("   Expected: GB")
-                println("   Match: ${country == "GB"}")
-                println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                
-                assert(country == "GB") { "Expected GB, got $country" }
-                println("✅ TEST PASSED!")
-            } else {
-                throw AssertionError("HTTP request failed: $responseCode")
+        println("   Method: DiagnosticHttpProbeService (runs in app UID)")
+
+        val latch = CountDownLatch(1)
+        var probeSuccess = false
+        var probeResponseBody: String? = null
+        var probeError: String? = null
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent) {
+                probeSuccess = intent.getBooleanExtra(DiagnosticHttpProbeService.EXTRA_SUCCESS, false)
+                probeResponseBody = intent.getStringExtra(DiagnosticHttpProbeService.EXTRA_RESPONSE_BODY)
+                probeError = intent.getStringExtra(DiagnosticHttpProbeService.EXTRA_ERROR_MESSAGE)
+                latch.countDown()
             }
+        }
+
+        val broadcastManager = LocalBroadcastManager.getInstance(appContext)
+        broadcastManager.registerReceiver(
+            receiver,
+            IntentFilter(DiagnosticHttpProbeService.ACTION_PROBE_RESULT)
+        )
+
+        try {
+            val serviceIntent = Intent(appContext, DiagnosticHttpProbeService::class.java).apply {
+                putExtra(DiagnosticHttpProbeService.EXTRA_URL, "http://ip-api.com/json")
+            }
+            val started = appContext.startService(serviceIntent)
+            assert(started != null) { "Failed to start DiagnosticHttpProbeService" }
+
+            val completed = latch.await(30, TimeUnit.SECONDS)
+            assert(completed) { "Diagnostic HTTP probe timed out" }
+            assert(probeSuccess) { "HTTP probe failed: $probeError" }
+
+            val response = probeResponseBody ?: error("HTTP probe returned empty body")
+            println("   Response: ${response.take(200)}...")
+
+            val countryMatch = Regex(""""countryCode":"([A-Z]{2})"""").find(response)
+            val country = countryMatch?.groupValues?.get(1) ?: "UNKNOWN"
+
+            println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            println("📍 RESULT:")
+            println("   Country: $country")
+            println("   Expected: GB")
+            println("   Match: ${country == "GB"}")
+            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+            assert(country == "GB") { "Expected GB, got $country" }
+            println("✅ TEST PASSED!")
         } finally {
-            connection.disconnect()
+            broadcastManager.unregisterReceiver(receiver)
         }
     }
     

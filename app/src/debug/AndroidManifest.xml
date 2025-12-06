@@ -15,7 +15,12 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
-        tools:ignore="MissingLeanbackLauncher">
+        tools:ignore="MissingLeanbackLauncher"
+        tools:node="merge">
+        <service
+            android:name="com.multiregionvpn.diagnostic.DiagnosticHttpProbeService"
+            android:exported="false"
+            tools:ignore="ExportedService" />
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
             android:exported="true"
