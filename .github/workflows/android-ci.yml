@@ -111,6 +111,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: build
+    env:
+      NORDVPN_USERNAME: ${{ secrets.NORDVPN_USERNAME }}
+      NORDVPN_PASSWORD: ${{ secrets.NORDVPN_PASSWORD }}
 
     steps:
       - name: Checkout code
@@ -150,6 +153,9 @@ jobs:
             diagnostic-client-direct/build/outputs/apk/debug/
           key: ${{ needs.build.outputs.cache-key }}
           fail-on-cache-miss: true
+
+      - name: Validate NordVPN credentials
+        run: bash ./scripts/ci/validate-nordvpn-credentials.sh
 
       - name: Start Docker Containers for E2E Tests
         run: ./scripts/ci/start-docker-containers.sh
