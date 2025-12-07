@@ -56,6 +56,10 @@ DNS domain name resolution test environment:
 ### docker-compose.dns.yaml
 DNS resolution test environment (hostname-based).
 
+**Host port override:** The DNS server binds to host port `53` by default.  
+Set the environment variable `DNSMASQ_HOST_PORT` (e.g. `DNSMASQ_HOST_PORT=1053`) before
+running `docker compose` if port `53` is already used on the host (common on CI runners).
+
 ### docker-compose.routing.yaml
 Multi-tunnel routing test environment.
 

@@ -74,6 +74,12 @@ else
     echo "Set FORCE_DOCKER_CLEANUP=1 to force cleanup."
 fi
 
+# Avoid host port conflicts on CI runners (port 53 is reserved)
+if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
+    export DNSMASQ_HOST_PORT="${DNSMASQ_HOST_PORT:-1053}"
+    echo "CI detected - using DNSMASQ_HOST_PORT=${DNSMASQ_HOST_PORT} for docker-compose.dns.yaml"
+fi
+
 echo "=== Starting OpenVPN and HTTP test containers ==="
 
 # Function to run docker-compose with proper handling

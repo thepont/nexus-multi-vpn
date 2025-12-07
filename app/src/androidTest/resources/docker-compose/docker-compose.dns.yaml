@@ -6,8 +6,8 @@ services:
     image: strm/dnsmasq:latest
     container_name: dns-server
     ports:
-      - "53:53/udp"
-      - "53:53/tcp"
+      - "${DNSMASQ_HOST_PORT:-53}:53/udp"
+      - "${DNSMASQ_HOST_PORT:-53}:53/tcp"
     networks:
       vpn-dns:
         ipv4_address: 10.3.0.2
