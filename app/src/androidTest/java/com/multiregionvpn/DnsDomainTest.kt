@@ -7,6 +7,7 @@ import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.test.BaseLocalTest
 import com.multiregionvpn.test.DockerComposeManager
 import com.multiregionvpn.test.HostMachineManager
+import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
@@ -31,9 +32,10 @@ import java.util.concurrent.TimeUnit
  * - OpenVPN server that pushes DNS server (10.4.0.2) via DHCP
  * - HTTP server at test.example.com that returns "DNS_TEST_PASSED"
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class DnsDomainTest : BaseLocalTest() {
-    
+
     override fun getComposeFile(): DockerComposeManager.ComposeFile {
         // We'll add this as a new compose file type
         return DockerComposeManager.ComposeFile.DNS_DOMAIN
@@ -194,4 +196,3 @@ class DnsDomainTest : BaseLocalTest() {
         println("\n✅ TEST PASSED: DNS servers received from OpenVPN DHCP")
     }
 }
-

@@ -8,6 +8,7 @@ import com.multiregionvpn.test.TestAppManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Test
 import java.util.UUID
 
@@ -22,6 +23,7 @@ import java.util.UUID
  * - vpn-server-dns: OpenVPN server (10.3.0.0/24) with push "dhcp-option DNS 10.3.0.2"
  * - http-server-dns: Web server at 10.3.0.10 returning "DNS_TEST_PASSED"
  */
+@HiltAndroidTest
 class LocalDnsTest : BaseLocalTest() {
     
     override fun getComposeFile(): DockerComposeManager.ComposeFile {

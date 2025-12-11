@@ -9,17 +9,20 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
-import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.database.ProviderCredentials
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
+import javax.inject.Inject
 
 /**
  * Google TV / Android TV Compatibility Tests
@@ -38,25 +41,24 @@ import java.util.UUID
  *   -e class com.multiregionvpn.GoogleTvCompatibilityTest \
  *   com.multiregionvpn.test/androidx.test.runner.AndroidJUnitRunner
  */
+@HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class GoogleTvCompatibilityTest {
     
+    @get:Rule
+    var hiltRule = HiltAndroidRule(this)
+    
+    @Inject
+    lateinit var settingsRepo: SettingsRepository
+    
     private lateinit var appContext: Context
     private lateinit var device: UiDevice
-    private lateinit var settingsRepo: SettingsRepository
     
     @Before
     fun setup() = runBlocking {
+        hiltRule.inject()
         appContext = ApplicationProvider.getApplicationContext()
         device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        
-        val database = AppDatabase.getDatabase(appContext)
-        settingsRepo = SettingsRepository(
-            database.vpnConfigDao(),
-            database.appRuleDao(),
-            database.providerCredentialsDao(),
-            database.presetRuleDao()
-        )
         
         // Clear test data
         settingsRepo.clearAllAppRules()
@@ -505,4 +507,3 @@ class GoogleTvCompatibilityTest {
         println("✅ All critical text elements are visible on TV")
     }
 }
-

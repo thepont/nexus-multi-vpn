@@ -41,6 +41,9 @@ class MockRouterViewModel : RouterViewModel() {
     
     private val _liveStats = MutableStateFlow(VpnStats())
     override val liveStats: StateFlow<VpnStats> = _liveStats.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    override val error: StateFlow<String?> = _error.asStateFlow()
     
     // ═══════════════════════════════════════════════════════════════════════════
     // MOCK DATA CREATION
@@ -231,6 +234,10 @@ class MockRouterViewModel : RouterViewModel() {
         if (_selectedServerGroup.value?.id == group.id) {
             _selectedServerGroup.value = null
         }
+    }
+
+    override fun onClearError() {
+        _error.value = null
     }
     
     // ═══════════════════════════════════════════════════════════════════════════

@@ -474,9 +474,11 @@ public:
     virtual TunClient::Ptr new_tun_client_obj(openvpn_io::io_context& io_context,
                                               TunClientParent& parent,
                                               TransportClient* transcli) override {
-        OPENVPN_LOG("Creating new CustomTunClient for tunnel: " << tunnel_id_);
+        OPENVPN_LOG("CustomTunClientFactory::new_tun_client_obj() called for tunnel: " << tunnel_id_);
+        OPENVPN_LOG("   Creating CustomTunClient...");
         auto client = new CustomTunClient(io_context, parent, tunnel_id_, callback_);
         tun_client_ = client;  // Keep reference to get FDs later
+        OPENVPN_LOG("   CustomTunClient created at " << (void*)client);
         return TunClient::Ptr(client);
     }
     
@@ -484,6 +486,7 @@ public:
      * Layer 2 tunnels not supported
      */
     virtual bool layer_2_supported() const override {
+        OPENVPN_LOG("CustomTunClientFactory::layer_2_supported() called - returning false");
         return false;
     }
     
@@ -491,8 +494,11 @@ public:
      * Data v3 features not supported yet
      */
     virtual bool supports_epoch_data() override {
+        OPENVPN_LOG("CustomTunClientFactory::supports_epoch_data() called - returning false");
         return false;
     }
+
+
     
     /**
      * Get the app FD from the created TunClient

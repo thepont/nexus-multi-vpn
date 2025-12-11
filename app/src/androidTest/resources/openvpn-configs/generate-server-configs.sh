@@ -58,8 +58,8 @@ EOF
 
 # Generate configurations
 echo ""
-generate_server_config "uk" "10.1.0.0" "1194"
-generate_server_config "fr" "10.2.0.0" "1194"
+generate_server_config "uk" "172.31.1.0" "1194"
+generate_server_config "fr" "172.31.2.0" "1194"
 generate_server_config "dns" "10.3.0.0" "1194"
 generate_server_config "uk-conflict" "10.8.0.0" "1194"
 generate_server_config "fr-conflict" "10.8.0.0" "1194"

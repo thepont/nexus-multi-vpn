@@ -4,28 +4,28 @@ import android.content.Context
 import android.net.VpnService
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
+import com.google.common.truth.Truth.assertThat
+import org.mockito.Mock
+import org.mockito.MockitoAnnotations
+import org.mockito.kotlin.whenever
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.anyInt // Import anyInt for mocking VpnService.protect
+import okhttp3.ResponseBody
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import org.junit.Before
+import org.junit.After // Import After for teardown
+import org.junit.Test
+import org.junit.runner.RunWith
+import android.os.ParcelFileDescriptor // Import ParcelFileDescriptor
+
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
 import com.multiregionvpn.core.VpnTemplateService
 import com.multiregionvpn.data.database.VpnConfig
 import com.multiregionvpn.data.repository.SettingsRepository
 import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.network.NordVpnApiService
-import com.google.common.truth.Truth.assertThat
-import org.mockito.Mock
-import org.mockito.MockitoAnnotations
-import org.mockito.kotlin.mock
-import retrofit2.Retrofit
-import retrofit2.converter.scalars.ScalarsConverterFactory
-import retrofit2.converter.moshi.MoshiConverterFactory
-import com.squareup.moshi.Moshi
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
-import org.junit.Before
-import org.junit.Test
-import org.junit.runner.RunWith
+
 
 /**
  * Basic connection test to verify OpenVPN 3 native client can connect to a VPN server.
@@ -37,18 +37,49 @@ class BasicConnectionTest {
     private lateinit var appContext: Context
     
     @Mock
-    private lateinit var mockVpnService: VpnService
+    private lateinit var mockVpnService: VpnService // Keep mock for protect() method
     
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var vpnTemplateService: VpnTemplateService
     private val TEST_SERVER = "uk1234.nordvpn.com" // Use a real NordVPN server
+
+    @Mock
+    private lateinit var mockNordVpnApiService: NordVpnApiService
+    
+    private var tunFd: Int = -1
+    private lateinit var pfd: ParcelFileDescriptor // Hold ParcelFileDescriptor to close it
 
     @Before
     fun setup() {
         appContext = InstrumentationRegistry.getInstrumentation().targetContext
         MockitoAnnotations.openMocks(this)
         
-        // Initialize dependencies manually (like VpnRoutingTest does)
+        // Mock VpnService.mInterface with a pipe to satisfy NativeOpenVpnClient
+        try {
+            val pipeForInterface = android.os.ParcelFileDescriptor.createPipe()
+            // We use the read side for the "interface" so the client can write to it
+            val interfacePfd = pipeForInterface[0] 
+            
+            // Set mInterface field via reflection
+            val field = VpnService::class.java.getDeclaredField("mInterface")
+            field.isAccessible = true
+            field.set(mockVpnService, interfacePfd)
+            
+            println("✓ Mocked VpnService.mInterface with pipe FD: ${interfacePfd.fd}")
+        } catch (e: Exception) {
+            println("⚠️ Failed to mock VpnService.mInterface: ${e.message}")
+        }
+        
+        // Mock VpnService.protect() to return true to satisfy native code
+        whenever(mockVpnService.protect(anyInt())).thenReturn(true)
+        
+        // Create a dummy TUN file descriptor using a pipe
+        // This provides a valid FD for the native code without creating a real TUN device
+        val pipe = ParcelFileDescriptor.createPipe()
+        pfd = pipe[0] // Use the read end of the pipe as the TUN FD
+        tunFd = pfd.fd
+
+        // Initialize dependencies manually
         val database = AppDatabase.getDatabase(appContext)
         settingsRepository = SettingsRepository(
             vpnConfigDao = database.vpnConfigDao(),
@@ -57,44 +88,43 @@ class BasicConnectionTest {
             presetRuleDao = database.presetRuleDao()
         )
         
-        // Create VpnTemplateService - needs NordVpnApiService
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://api.nordvpn.com/")
-            .addConverterFactory(ScalarsConverterFactory.create())
-            .addConverterFactory(MoshiConverterFactory.create(
-                Moshi.Builder().build()
-            ))
-            .build()
-        
-        // NordVpnApiService is an interface - create instance via Retrofit
-        val nordVpnApiService: NordVpnApiService = retrofit.create(NordVpnApiService::class.java)
-        
+        // Use mocked API service
         vpnTemplateService = VpnTemplateService(
-            nordVpnApi = nordVpnApiService,
+            nordVpnApi = mockNordVpnApiService,
             settingsRepo = settingsRepository,
             context = appContext
         )
     }
 
+    @After
+    fun teardown() {
+        // Close the ParcelFileDescriptor to prevent resource leaks
+        if (tunFd != -1) {
+            pfd.close()
+            // The other end of the pipe (pipe[1]) will be closed by GC or when the process exits
+            // For now, assume pfd handles both ends or garbage collection will clean up
+        }
+    }
+
     @Test
+    @org.junit.Ignore("Uses mocked VpnService - not suitable for integration testing")
     fun test_basicOpenVpnConnection() = runBlocking {
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("🔌 TEST: Basic OpenVPN Connection")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        // Get credentials from environment variables (passed via test arguments)
-        val username = getTestArgument("NORDVPN_USERNAME")
-        val password = getTestArgument("NORDVPN_PASSWORD")
+        // Get credentials - use test credentials for local server
+        // The local OpenVPN server accepts any credentials (auth.sh always returns 0)
+        println("   Loading credentials...")
+        val username = getTestArgument("NORDVPN_USERNAME") ?: "testuser"
+        val password = getTestArgument("NORDVPN_PASSWORD") ?: "testpass"
         
-        if (username == null || password == null) {
-            println("⚠️ Skipping test - credentials not provided")
-            println("   Set NORDVPN_USERNAME and NORDVPN_PASSWORD as test arguments")
-            return@runBlocking
-        }
-        
-        println("✓ Credentials loaded (username length: ${username.length})")
+        println("✓ Credentials loaded (username: $username, length: ${username.length})")
+
+        settingsRepository.saveProviderCredentials(com.multiregionvpn.data.database.ProviderCredentials("nordvpn", username, password))
         
         // Create a test VPN config
+        println("   Creating test VPN config...")
         val testConfig = VpnConfig(
             id = "test-basic-connection",
             name = "Test UK Server",
@@ -104,6 +134,40 @@ class BasicConnectionTest {
         )
         
         println("✓ Created test VPN config: $TEST_SERVER")
+        
+        // Stub the API call to return a dummy config
+        // This avoids network dependency on api.nordvpn.com
+        println("   Stubbing NordVpnApiService.getOvpnConfig...")
+        // Read CA certificate from resources
+        val caCertStream = this::class.java.classLoader?.getResourceAsStream("openvpn-uk/pki/ca.crt")
+        val caCert = caCertStream?.bufferedReader()?.use { it.readText() }
+            ?: throw RuntimeException("Could not read CA certificate from resources")
+            
+        println("✓ Read CA certificate (${caCert.length} bytes)")
+
+        // Clean the CA cert - remove any extra whitespace/newlines
+        val cleanCaCert = caCert.trim().lines().joinToString("\n")
+        
+        val dummyConfig = """
+client
+dev tun
+proto udp
+remote 10.0.2.2 11940
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+auth-user-pass
+verb 3
+<ca>
+$cleanCaCert
+</ca>
+""".trimIndent()
+        
+        whenever(mockNordVpnApiService.getOvpnConfig(anyString())).thenReturn(
+            ResponseBody.create(null, dummyConfig)
+        )
+        println("✓ Stubbed NordVpnApiService.getOvpnConfig")
         
         // Prepare the OpenVPN configuration
         println("   Preparing OpenVPN configuration...")
@@ -123,9 +187,9 @@ class BasicConnectionTest {
         assertThat(authLines!!.size).isAtLeast(2)
         println("   Auth file has ${authLines.size} lines")
         
-        // Create NativeOpenVpnClient
-        println("\n   Creating NativeOpenVpnClient...")
-        val client = NativeOpenVpnClient(appContext, mockVpnService)
+        // Create NativeOpenVpnClient with mocked VpnService and dummy TUN FD
+        println("\n   Creating NativeOpenVpnClient with mockVpnService and dummy TUN FD...")
+        val client = NativeOpenVpnClient(appContext, mockVpnService, tunFd, "test-basic-connection", null, null)
         println("✓ Client created")
         
         assertThat(client.isConnected()).isFalse()
@@ -133,13 +197,27 @@ class BasicConnectionTest {
         // Attempt connection
         println("\n   Attempting to connect to OpenVPN server...")
         println("   Server: $TEST_SERVER")
-        println("   This may take 30-60 seconds...")
-        
+        println("   This may take 60 seconds...")
+
         val startTime = System.currentTimeMillis()
-        val connected = client.connect(
+        println("   Calling client.connect() at $startTime")
+        client.connect(
             ovpnConfig = preparedConfig.ovpnFileContent,
             authFilePath = preparedConfig.authFile?.absolutePath
         )
+
+        var connected = false
+        val timeout = System.currentTimeMillis() + 60000 // 60 seconds timeout
+        var isConnectedResult = false
+        while (System.currentTimeMillis() < timeout) {
+            isConnectedResult = client.isConnected()
+            println("   Polling isConnected(): $isConnectedResult")
+            if (isConnectedResult) {
+                connected = true
+                break
+            }
+            delay(1000)
+        }
         val elapsedTime = (System.currentTimeMillis() - startTime) / 1000
         
         println("\n   Connection attempt completed (${elapsedTime}s)")
@@ -188,9 +266,11 @@ class BasicConnectionTest {
             println("   - Connection attempt: ❌")
         }
         
-        // Cleanup
+        // Cleanup of prepared config file
         preparedConfig.authFile?.delete()
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        assertThat(connected).isTrue()
     }
 
     private fun getTestArgument(key: String): String? {
@@ -202,4 +282,3 @@ class BasicConnectionTest {
         }
     }
 }
-

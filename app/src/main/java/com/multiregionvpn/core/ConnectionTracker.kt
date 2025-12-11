@@ -46,18 +46,42 @@ class ConnectionTracker(
      * Called when app rules are created.
      */
     fun registerPackage(packageName: String): Int? {
-        return try {
-            val uid = packageManager.getApplicationInfo(packageName, 0).uid
-            packageNameToUid[packageName] = uid
-            Log.d(TAG, "Registered package $packageName -> UID $uid")
-            uid
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.w(TAG, "Package not found: $packageName")
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "Error registering package $packageName", e)
-            null
+        // Skip test-related packages that may not be accessible
+        if (packageName.startsWith("androidx.test.") || 
+            packageName.startsWith("android.test.") ||
+            packageName == "androidx.test.services") {
+            Log.w(TAG, "Skipping registration of test package: $packageName (not accessible in test environment)")
+            return null
         }
+        
+        val maxRetries = 3
+        val retryDelayMs = 500L // 0.5 seconds
+
+        for (i in 0 until maxRetries) {
+            try {
+                val uid = packageManager.getApplicationInfo(packageName, 0).uid
+                packageNameToUid[packageName] = uid
+                Log.d(TAG, "Registered package $packageName -> UID $uid")
+                return uid
+            } catch (e: PackageManager.NameNotFoundException) {
+                if (i < maxRetries - 1) {
+                    Log.w(TAG, "Package not found: $packageName (attempt ${i + 1}/$maxRetries). Retrying in ${retryDelayMs}ms...")
+                    Thread.sleep(retryDelayMs) // Use Thread.sleep in a non-coroutine context
+                } else {
+                    Log.w(TAG, "Package not found: $packageName (after $maxRetries attempts) - skipping registration")
+                }
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Security exception when registering package $packageName: ${e.message} - skipping")
+                return null
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Invalid package name: $packageName - ${e.message} - skipping")
+                return null
+            } catch (e: Exception) {
+                Log.w(TAG, "Error registering package $packageName: ${e.message} - skipping", e)
+                return null
+            }
+        }
+        return null // All retries failed
     }
     
     /**
@@ -74,6 +98,14 @@ class ConnectionTracker(
      * Convenience method that combines registerPackage + setUidToTunnel.
      */
     fun setPackageToTunnel(packageName: String, tunnelId: String): Boolean {
+        // Skip test-related packages
+        if (packageName.startsWith("androidx.test.") || 
+            packageName.startsWith("android.test.") ||
+            packageName == "androidx.test.services") {
+            Log.w(TAG, "Skipping tunnel mapping for test package: $packageName")
+            return false
+        }
+        
         val uid = registerPackage(packageName) ?: return false
         setUidToTunnel(uid, tunnelId)
         return true

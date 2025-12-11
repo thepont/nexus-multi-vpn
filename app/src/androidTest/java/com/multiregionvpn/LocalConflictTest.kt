@@ -9,6 +9,7 @@ import com.multiregionvpn.test.TestAppManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Test
 import java.util.UUID
 
@@ -23,6 +24,7 @@ import java.util.UUID
  * - http-server-uk at 10.8.0.2 returning "SERVER_UK"
  * - http-server-fr at 10.8.0.3 returning "SERVER_FR"
  */
+@HiltAndroidTest
 class LocalConflictTest : BaseLocalTest() {
     
     override fun getComposeFile(): DockerComposeManager.ComposeFile {

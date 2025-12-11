@@ -25,83 +25,22 @@ env:
 
 jobs:
   # --------------------------------------------------------------------
-  # JOB 1: WARM THE CACHE
-  # This job downloads dependencies with a long timeout to prevent
-  # timeouts during the E2E test execution.
+  # JOB 1: BUILD DEBUG APK
+  # Uses reusable workflow to build and cache the APK
+  # Shared with android-ci workflow
   # --------------------------------------------------------------------
-  warm-cache:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+  build:
+    uses: ./.github/workflows/build-and-cache.yml
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Build Dependencies
-        run: ./scripts/ci/install-android-build-deps.sh
-
-      - name: Ensure Gradle wrapper is executable
-        run: chmod +x gradlew
-
-      - name: Cache Android NDK
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.ANDROID_HOME }}/ndk
-            ~/.android/build-cache
-          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-ndk-
-
-      - name: Cache native build outputs
-        uses: actions/cache@v4
-        with:
-          path: |
-            app/.cxx
-            app/build/intermediates/cxx
-            app/build/intermediates/cmake
-          key: ${{ runner.os }}-native-build-${{ hashFiles('app/src/main/cpp/**', '**/CMakeLists.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-native-build-
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Download Dependencies (with enhanced logging and timeout monitoring)
-        timeout-minutes: 30
-        env:
-          CI: true
-          SKIP_NATIVE_BUILD: true
-        run: ./scripts/ci/download-gradle-dependencies.sh
-
-      - name: Upload Gradle logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-dependency-logs-macos
-          path: gradle-dependency-download.log
-
+  # --------------------------------------------------------------------
+  # JOB 2: EVALUATE PRECONDITIONS
+  # Check if Maestro tests should run based on credentials
+  # --------------------------------------------------------------------
   guard:
     name: Evaluate Maestro Preconditions
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: warm-cache
+    needs: build
     outputs:
       run-maestro: ${{ steps.evaluate.outputs.run_maestro }}
       allow-empty: ${{ steps.evaluate.outputs.allow_empty }}
@@ -125,12 +64,16 @@ jobs:
           ALLOW_EMPTY: ${{ steps.evaluate.outputs.allow_empty }}
         run: ./scripts/ci/publish-maestro-summary.sh
 
+  # --------------------------------------------------------------------
+  # JOB 3: MAESTRO E2E TESTS
+  # Runs Maestro UI tests using the cached build
+  # --------------------------------------------------------------------
   maestro:
     name: Maestro E2E
     runs-on: ubuntu-latest
     timeout-minutes: 90
     needs: 
-      - warm-cache
+      - build
       - guard
     if: ${{ needs.guard.outputs.run-maestro == 'true' }}
     env:
@@ -140,6 +83,7 @@ jobs:
       TEST_VPN_HOSTNAME: ${{ secrets.TEST_VPN_HOSTNAME != '' && secrets.TEST_VPN_HOSTNAME || 'uk1234.nordvpn.com' }}
       TEST_VPN_REGION: ${{ secrets.TEST_VPN_REGION != '' && secrets.TEST_VPN_REGION || 'UK' }}
       TEST_APP_PACKAGE: ${{ secrets.TEST_APP_PACKAGE != '' && secrets.TEST_APP_PACKAGE || 'com.android.chrome' }}
+      MAESTRO_VERSION: "1.39.0"
 
     steps:
       - name: Checkout repository
@@ -157,27 +101,6 @@ jobs:
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
 
-      - name: Restore NDK Cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.ANDROID_HOME }}/ndk
-            ~/.android/build-cache
-          key: ${{ runner.os }}-ndk-${{ hashFiles('**/CMakeLists.txt', 'app/build.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-ndk-
-
-      - name: Restore native build cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            app/.cxx
-            app/build/intermediates/cxx
-            app/build/intermediates/cmake
-          key: ${{ runner.os }}-native-build-${{ hashFiles('app/src/main/cpp/**', '**/CMakeLists.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-native-build-
-
       - name: Restore Gradle Cache
         uses: actions/cache@v4
         with:
@@ -187,6 +110,19 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
+
+      - name: Restore Build Artifacts
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            app/build/outputs/apk/debug/
+            app/build/intermediates/
+            app/.cxx/
+            diagnostic-client-uk/build/outputs/apk/debug/
+            diagnostic-client-fr/build/outputs/apk/debug/
+            diagnostic-client-direct/build/outputs/apk/debug/
+          key: ${{ needs.build.outputs.cache-key }}
+          fail-on-cache-miss: true
 
       - name: Validate NordVPN credentials
         shell: bash
@@ -198,14 +134,6 @@ jobs:
       - name: Generate .env file
         shell: bash
         run: ./scripts/ci/generate-env-file.sh
-
-      - name: Assemble debug build with native libraries
-        timeout-minutes: 45
-        env:
-          # SKIP_NATIVE_BUILD is not set, so native builds will be enabled
-          # This is required for E2E tests to create actual VPN connections
-          ENABLE_NATIVE_BUILD: true
-        run: ./scripts/ci/build-debug-apk.sh
 
       - name: Enable KVM
         run: ./scripts/ci/enable-kvm.sh

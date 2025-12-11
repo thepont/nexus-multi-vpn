@@ -36,6 +36,7 @@
 #include <client/ovpncli.hpp>
 #include <openvpn/client/dns_options.hpp>  // For DnsOptions
 using namespace openvpn::ClientAPI;
+using namespace openvpn;
 
 // CRITICAL: Include External TUN Factory for proper custom TUN implementation
 #ifdef OPENVPN_EXTERNAL_TUN_FACTORY
@@ -500,10 +501,11 @@ private:
         LOGI("═══════════════════════════════════════════════════════");
         LOGI("🔧 tun_builder_new() called by OpenVPN 3");
         LOGI("   This is called FIRST before any other tun_builder_* methods");
-        LOGI("   TUN interface is already established by VpnEngineService");
-        LOGI("   Returning true to indicate TUN builder is ready");
+        LOGI("   Returning FALSE to force OpenVPN 3 to use ExternalTun mode");
+        LOGI("   This ensures CustomTunClientFactory::new_tun_factory() is called");
+        LOGI("   which creates CustomTunClient and the socketpair for packet I/O");
         LOGI("═══════════════════════════════════════════════════════");
-        return true;
+        return false;
     }
     
     virtual bool tun_builder_add_address(const std::string &address,
@@ -819,7 +821,7 @@ private:
     virtual int tun_builder_establish() override {
         LOGI("═══════════════════════════════════════════════════════");
         LOGI("🔧 tun_builder_establish() called by OpenVPN 3");
-        LOGI("   This is called AFTER tun_builder_add_address()");
+        LOGI("   This is called AFTER tun_builder_add_address();");
         LOGI("   OpenVPN 3 needs a valid TUN FD to start TLS handshake");
         LOGI("   Current TUN FD: %d", tunFd_);
         LOGI("═══════════════════════════════════════════════════════");
@@ -829,8 +831,8 @@ private:
         if (tunFd_ < 0) {
             LOGE("❌ CRITICAL: TUN file descriptor not set!");
             LOGE("   OpenVPN 3 cannot establish connection without a valid TUN FD");
-            LOGE("   This means setTunFileDescriptor() was not called before connect()");
-            LOGE("   The FD should be passed via nativeConnect() and setTunFileDescriptor()");
+            LOGE("   This means setTunFileDescriptor() was not called before connect();");
+            LOGE("   The FD should be passed via nativeConnect() and setTunFileDescriptor();");
             LOGE("   TLS handshake will NOT start without valid TUN FD");
             return -1;
         }
@@ -1020,7 +1022,7 @@ void openvpn_wrapper_set_tunnel_id_and_callback(OpenVpnSession* session,
             session->androidClient->setTunnelId(tunnelId);
             LOGI("✅ Set tunnel ID on AndroidOpenVPNClient: %s", tunnelId);
             LOGI("   AndroidOpenVPNClient implements ExternalTun::Factory");
-            LOGI("   OpenVPN 3 will call client->new_tun_factory()");
+            LOGI("   OpenVPN 3 will call client->new_tun_factory();");
         }
         #endif
     }
@@ -1148,6 +1150,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
     LOGI("openvpn_wrapper_connect called");
     LOGI("Using OpenVPN 3 ClientAPI service");
     LOGI("Username: %s", username);
+    LOGI("Password: %s", password);
     
 #ifdef OPENVPN3_AVAILABLE
     try {
@@ -1309,7 +1312,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         // so that credentials can be updated via submit_creds() in connect_setup().
         // autologinSessions is in ConfigCommon (which Config inherits from)
         session->config.autologinSessions = false;
-        LOGI("Set autologinSessions = false to allow credential updates via provide_creds()");
+        LOGI("Set autologinSessions = false to allow credential updates via provide_creds();");
         
         LOGI("Evaluating OpenVPN 3 config using ClientAPI...");
         LOGI("Config content length: %zu bytes", session->config.content.length());
@@ -1402,7 +1405,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         
         LOGI("✅ provide_creds() succeeded - credentials should be stored in client");
         LOGI("   Client instance: %p", (void*)session->client);
-        LOGI("   Same client will be used for connect()");
+        LOGI("   Same client will be used for connect();");
         
         // CRITICAL: Verify that state->creds was set correctly
         // provide_creds() creates a new ClientCreds and sets state->creds = cc
@@ -1494,7 +1497,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
                 
                 // Log immediately before connect() to see if we reach this point
                 LOGI("═══════════════════════════════════════════════════════");
-                LOGI("About to call session->client->connect()");
+                LOGI("About to call session->client->connect();");
                 LOGI("Client pointer: %p", (void*)session->client);
                 LOGI("Config content length: %zu bytes", session->config.content.length());
                 LOGI("Config preview (first 200 chars): %s", session->config.content.substr(0, 200).c_str());

@@ -60,7 +60,7 @@ object HostMachineManager {
      * 
      * @param servicePort The port the VPN server is listening on (host port)
      * @param configuredHostIp Optional configured host IP
-     * @return Hostname string (e.g., "10.0.2.2:1194")
+     * @return Hostname string (e.g., "10.0.2.2:11940")
      */
     fun getVpnServerHostname(servicePort: Int, configuredHostIp: String? = null): String {
         val hostIp = getHostIp(configuredHostIp)

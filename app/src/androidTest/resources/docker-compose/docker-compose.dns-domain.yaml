@@ -14,6 +14,12 @@ services:
       vpn-dns-domain:
         ipv4_address: 10.5.0.2  # DNS server IP
     command: dnsmasq --no-daemon --log-queries
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "dnsmasq"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # OpenVPN Server that pushes DNS via DHCP
   vpn-server-dns:
@@ -26,7 +32,7 @@ services:
     ports:
       - "1199:1194/udp"  # Different port for DNS domain test
     volumes:
-      - ../../../../openvpn-dns-domain:/etc/openvpn
+      - ../../../../../openvpn-dns-domain:/etc/openvpn
     networks:
       vpn-dns-domain:
     command: >
@@ -41,7 +47,14 @@ services:
     environment:
       - OVPN_SERVER_URL=udp://vpn-server-dns-domain:1194
     depends_on:
-      - dns-server
+      dns-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "openvpn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
 
   # HTTP Server accessible via domain name
   http-server-dns:
@@ -53,10 +66,19 @@ services:
       vpn-dns-domain:
         ipv4_address: 10.5.0.10  # Accessible via DNS as test.example.com
     volumes:
-      - ../../../../http-dns-domain:/usr/share/nginx/html:ro
+      - ../../../../../http-dns-domain:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
     depends_on:
-      - dns-server
+      dns-server:
+        condition: service_healthy
+      vpn-server-dns:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
 networks:
   vpn-dns-domain:

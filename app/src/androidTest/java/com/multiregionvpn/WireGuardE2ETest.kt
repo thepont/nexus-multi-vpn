@@ -3,6 +3,7 @@ package com.multiregionvpn
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,7 +35,6 @@ class WireGuardE2ETest {
     fun test_loadWireGuardUKConfig() {
         println("🧪 Test: Load WireGuard UK config")
         
-        // Load config from assets
         val ukConfig = context.assets.open("wireguard_uk.conf").bufferedReader().use { it.readText() }
         
         println("📋 UK Config loaded (${ukConfig.length} bytes)")
@@ -55,7 +55,6 @@ class WireGuardE2ETest {
     fun test_loadWireGuardFRConfig() {
         println("🧪 Test: Load WireGuard FR config")
         
-        // Load config from assets
         val frConfig = context.assets.open("wireguard_fr.conf").bufferedReader().use { it.readText() }
         
         println("📋 FR Config loaded (${frConfig.length} bytes)")
@@ -76,7 +75,6 @@ class WireGuardE2ETest {
     fun test_verifyWireGuardConfigStructure() {
         println("🧪 Test: Verify WireGuard config structure")
         
-        // Load UK config
         val ukConfig = context.assets.open("wireguard_uk.conf").bufferedReader().use { it.readText() }
         
         // Verify it contains expected WireGuard sections

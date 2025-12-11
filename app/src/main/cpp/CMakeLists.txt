@@ -513,6 +513,13 @@ if(ENABLE_OPENVPN3 AND EXISTS "${OPENVPN3_DIR}/CMakeLists.txt")
         endif()
     else()
         # Fetch and build mbedTLS for Android
+        
+        # Fix for mbedtls on x86 emulator: enable required instruction sets for AES-NI
+        if(ANDROID_ABI STREQUAL "x86")
+            add_compile_options(-mpclmul -msse2 -maes)
+            message(STATUS "Added x86 flags for mbedtls: -mpclmul -msse2 -maes")
+        endif()
+
         FetchContent_Declare(
             mbedtls
             GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
