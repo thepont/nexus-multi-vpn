@@ -55,7 +55,7 @@ android {
     // Uncomment and set if auto-detection fails:
     // ndkVersion = "26.1.10909125"
     
-defaultConfig {
+    defaultConfig {
         applicationId = "com.multiregionvpn"
         minSdk = 29
         targetSdk = 34
@@ -76,6 +76,12 @@ defaultConfig {
         multiDexEnabled = true
         vectorDrawables {
             useSupportLibrary = true
+        }
+        
+        // ABI filtering: Only build for arm64-v8a to reduce APK size
+        // Most modern devices support arm64, and this significantly reduces native library size
+        ndk {
+            abiFilters += listOf("arm64-v8a")
         }
     }
     
@@ -120,15 +126,28 @@ defaultConfig {
 
     buildTypes {
         debug {
-            // Debug builds don't require vcpkg - use pre-built libraries or skip native build
-            // This allows faster iteration during development
-        }
-        release {
-            isMinifyEnabled = false
+            // Enable minification and resource shrinking even for debug to reduce APK size
+            // This is especially important for CI where large APKs cause installation timeouts
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            isDebuggable = true
+        }
+        release {
+            // Enable minification and resource shrinking for release builds
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            // Remove debug symbols from native libraries to reduce size
+            ndk {
+                debugSymbolLevel = "NONE"
+            }
         }
     }
     
@@ -195,7 +214,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
+    // Use core icons instead of extended to reduce APK size (~5-10MB savings)
+    // Extended includes all Material icons, core includes only commonly used ones
+    implementation("androidx.compose.material:material-icons-core")
     
     // Android TV Compose - D-pad optimized components
     implementation("androidx.tv:tv-material:1.0.0-alpha10")
