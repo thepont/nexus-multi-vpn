@@ -25,12 +25,23 @@ fi
 
 # Determine which docker-compose command to use
 DOCKER_COMPOSE=""
+USE_WAIT=""
 if command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE="docker-compose"
     echo "✓ Found docker-compose command"
+    # Check if --wait is supported (docker-compose v1.29.0+)
+    if docker-compose --help 2>&1 | grep -q "\-\-wait"; then
+        USE_WAIT="--wait"
+        echo "✓ docker-compose supports --wait flag"
+    else
+        USE_WAIT=""
+        echo "⚠️  docker-compose version doesn't support --wait, will use fixed delay"
+    fi
 elif docker compose version &> /dev/null 2>&1; then
     DOCKER_COMPOSE="docker compose"
     echo "✓ Found docker compose plugin"
+    USE_WAIT="--wait"
+    echo "✓ docker compose supports --wait flag"
 else
     echo "⚠️  Docker Compose not found - skipping container setup"
     echo "   Tests requiring Docker will be skipped"
@@ -89,10 +100,44 @@ run_compose() {
     local compose_file="$1"
     local project_name="$2"
     shift 2
+    local compose_args=("$@")
+    
+    # Add --wait flag if supported and up command is present
+    if [ -n "$USE_WAIT" ]; then
+        for i in "${!compose_args[@]}"; do
+            if [ "${compose_args[$i]}" = "up" ]; then
+                # Check if -d is present
+                local has_d=false
+                for arg in "${compose_args[@]}"; do
+                    if [ "$arg" = "-d" ]; then
+                        has_d=true
+                        break
+                    fi
+                done
+                
+                # Insert --wait after -d if present, otherwise after up
+                local new_args=()
+                local wait_added=false
+                for j in "${!compose_args[@]}"; do
+                    new_args+=("${compose_args[$j]}")
+                    if [ "$has_d" = true ] && [ "${compose_args[$j]}" = "-d" ] && [ "$wait_added" = false ]; then
+                        new_args+=("$USE_WAIT")
+                        wait_added=true
+                    elif [ "$has_d" = false ] && [ "${compose_args[$j]}" = "up" ] && [ "$wait_added" = false ]; then
+                        new_args+=("$USE_WAIT")
+                        wait_added=true
+                    fi
+                done
+                compose_args=("${new_args[@]}")
+                break
+            fi
+        done
+    fi
+    
     if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
-        (cd "$COMPOSE_DIR" && docker compose -p "$project_name" -f "$(basename "$compose_file")" "$@")
+        (cd "$COMPOSE_DIR" && docker compose -p "$project_name" -f "$(basename "$compose_file")" "${compose_args[@]}")
     else
-        (cd "$COMPOSE_DIR" && docker-compose -p "$project_name" -f "$(basename "$compose_file")" "$@")
+        (cd "$COMPOSE_DIR" && docker-compose -p "$project_name" -f "$(basename "$compose_file")" "${compose_args[@]}")
     fi
 }
 
@@ -100,7 +145,12 @@ run_compose() {
 if [ -f "$COMPOSE_DIR/docker-compose.routing.yaml" ]; then
     echo "Starting routing containers..."
     if run_compose "$COMPOSE_DIR/docker-compose.routing.yaml" "e2e-routing" up -d; then
-        echo "✅ Routing containers started"
+        if [ -n "$USE_WAIT" ]; then
+            echo "✅ Routing containers started and healthy"
+        else
+            echo "✅ Routing containers started (waiting for health checks manually)..."
+            sleep 15
+        fi
     else
         echo "⚠️  Failed to start routing containers (exit code: $?)"
     fi
@@ -112,7 +162,12 @@ fi
 if [ -f "$COMPOSE_DIR/docker-compose.dns.yaml" ]; then
     echo "Starting DNS containers..."
     if run_compose "$COMPOSE_DIR/docker-compose.dns.yaml" "e2e-dns" up -d; then
-        echo "✅ DNS containers started"
+        if [ -n "$USE_WAIT" ]; then
+            echo "✅ DNS containers started and healthy"
+        else
+            echo "✅ DNS containers started (waiting for health checks manually)..."
+            sleep 15
+        fi
     else
         echo "⚠️  Failed to start DNS containers (exit code: $?)"
     fi
@@ -124,7 +179,12 @@ fi
 if [ -f "$COMPOSE_DIR/docker-compose.dns-domain.yaml" ]; then
     echo "Starting DNS domain containers..."
     if run_compose "$COMPOSE_DIR/docker-compose.dns-domain.yaml" "e2e-dns-domain" up -d; then
-        echo "✅ DNS domain containers started"
+        if [ -n "$USE_WAIT" ]; then
+            echo "✅ DNS domain containers started and healthy"
+        else
+            echo "✅ DNS domain containers started (waiting for health checks manually)..."
+            sleep 15
+        fi
     else
         echo "⚠️  Failed to start DNS domain containers (exit code: $?)"
     fi
@@ -136,7 +196,12 @@ fi
 if [ -f "$COMPOSE_DIR/docker-compose.conflict.yaml" ]; then
     echo "Starting conflict test containers..."
     if run_compose "$COMPOSE_DIR/docker-compose.conflict.yaml" "e2e-conflict" up -d; then
-        echo "✅ Conflict test containers started"
+        if [ -n "$USE_WAIT" ]; then
+            echo "✅ Conflict test containers started and healthy"
+        else
+            echo "✅ Conflict test containers started (waiting for health checks manually)..."
+            sleep 15
+        fi
     else
         echo "⚠️  Failed to start conflict containers (exit code: $?)"
     fi
@@ -145,12 +210,22 @@ else
 fi
 
 echo ""
-echo "=== Waiting for containers to be ready ==="
-sleep 10
-
-echo ""
 echo "=== Container Status ==="
-docker ps --filter "name=vpn-server" --filter "name=http-server" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "Could not list containers"
+docker ps --filter "name=vpn-server" --filter "name=http-server" --filter "name=dns-server" \
+  --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "Could not list containers"
+
+# Show health status if --wait was used
+if [ -n "$USE_WAIT" ]; then
+    echo ""
+    echo "=== Health Check Status ==="
+    for project in e2e-routing e2e-dns e2e-dns-domain e2e-conflict; do
+        if [ "$DOCKER_COMPOSE" = "docker compose" ]; then
+            docker compose -p "$project" ps 2>/dev/null | grep -E "(NAME|healthy|unhealthy)" || true
+        else
+            docker-compose -p "$project" ps 2>/dev/null | grep -E "(NAME|healthy|unhealthy)" || true
+        fi
+    done
+fi
 
 echo ""
 echo "========================================"

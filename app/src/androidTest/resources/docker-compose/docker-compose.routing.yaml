@@ -35,6 +35,12 @@ services:
       "
     environment:
       - OVPN_SERVER_URL=udp://vpn-server-uk:1194
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "openvpn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
 
   # FR VPN Server (subnet 192.168.241.0/24 - changed to avoid conflicts with existing VPNs)
   vpn-server-fr:
@@ -70,6 +76,12 @@ services:
       "
     environment:
       - OVPN_SERVER_URL=udp://vpn-server-fr:1194
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "openvpn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
 
   # HTTP Server on UK VPN Network
   http-server-uk:
@@ -83,6 +95,12 @@ services:
     volumes:
       - ../../../../../http-uk:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # HTTP Server on FR VPN Network
   http-server-fr:
@@ -96,6 +114,12 @@ services:
     volumes:
       - ../../../../../http-fr:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
 networks:
   vpn-uk:

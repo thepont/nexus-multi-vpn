@@ -27,6 +27,12 @@ services:
       "
     environment:
       - OVPN_SERVER_URL=udp://vpn-server-uk-conflict:1194
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "openvpn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
 
   # FR VPN Server (SAME subnet 10.8.0.0/24 - CONFLICT!)
   vpn-server-fr:
@@ -54,6 +60,12 @@ services:
       "
     environment:
       - OVPN_SERVER_URL=udp://vpn-server-fr-conflict:1194
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "openvpn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
 
   # HTTP Server on UK side (10.8.0.3)
   http-server-uk:
@@ -67,6 +79,12 @@ services:
     volumes:
       - ../../../../../http-uk-conflict:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # HTTP Server on FR side (10.8.0.4)
   http-server-fr:
@@ -80,6 +98,12 @@ services:
     volumes:
       - ../../../../../http-fr-conflict:/usr/share/nginx/html:ro
     command: nginx -g 'daemon off;'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
 networks:
   vpn-conflict:
