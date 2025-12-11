@@ -56,13 +56,8 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 export ANDROID_HOME="$HOME/Android/Sdk"
 export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator
 
-# Load NordVPN credentials from .env file for tests
-if [ -f "$PROJECT_DIR/.env" ]; then
-    echo "Sourcing NordVPN credentials from .env file."
-    source "$PROJECT_DIR/.env"
-else
-    echo "Warning: .env file not found. NordVPN related tests might fail."
-fi
+# NordVPN credentials are provided via environment variables from GitHub Actions secrets
+# No local .env file sourcing needed
 
 echo "========================================"
 echo "Starting Instrumentation Tests"
@@ -301,6 +296,7 @@ set +e
 # Gradle's installDebug task handles installation properly, including signature mismatches
 # Pass NordVPN credentials as instrumentation arguments
 TEST_LOG_FILE="$PROJECT_DIR/instrumentation-test-temp.log"
+ARTIFACT_LOG_FILE="$PROJECT_DIR/instrumentation-test.log"
 
 # Add timeout to Gradle command itself to prevent indefinite hanging
 # Use timeout command with kill signal after timeout
@@ -362,6 +358,8 @@ echo ""
 echo "=== Test Summary ==="
 if [ -f "$TEST_LOG_FILE" ]; then
     grep -E "(BUILD SUCCESSFUL|BUILD FAILED|tests completed|test failed|INSTRUMENTATION_STATUS)" "$TEST_LOG_FILE" | tail -50 || echo "No test summary found"
+    cp "$TEST_LOG_FILE" "$ARTIFACT_LOG_FILE"
+    echo "Saved test log for artifact: $ARTIFACT_LOG_FILE"
 else
     echo "Test log file not found: $TEST_LOG_FILE"
 fi
