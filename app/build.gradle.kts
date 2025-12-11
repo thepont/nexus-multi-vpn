@@ -126,14 +126,10 @@ android {
 
     buildTypes {
         debug {
-            // Enable minification and resource shrinking even for debug to reduce APK size
-            // This is especially important for CI where large APKs cause installation timeouts
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            // Don't enable minification for debug builds - causes compilation issues
+            // CI will benefit from other optimizations (ABI filtering, etc.)
+            isMinifyEnabled = false
+            isShrinkResources = false
             isDebuggable = true
         }
         release {
@@ -214,9 +210,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    // Use core icons instead of extended to reduce APK size (~5-10MB savings)
-    // Extended includes all Material icons, core includes only commonly used ones
-    implementation("androidx.compose.material:material-icons-core")
+    // Keep extended icons - some icons used (VpnKey, Apps, Timeline, Shield) are only in extended
+    // TODO: Replace with core icons to save 5-10MB, but requires icon replacements
+    implementation("androidx.compose.material:material-icons-extended")
     
     // Android TV Compose - D-pad optimized components
     implementation("androidx.tv:tv-material:1.0.0-alpha10")
