@@ -47,23 +47,14 @@ echo "Verifying device responsiveness..."
 adb -s emulator-5554 shell dumpsys window | grep "mCurrentFocus" || echo "Window manager check completed"
 
 # After installing large APK, Android performs background optimizations
-# Give it extra time to complete before Maestro tries to connect
-echo "Waiting 60s for post-install optimizations to complete..."
+# Give it time to complete before Maestro tries to connect
+# Maestro's timeout is configured via MAESTRO_DRIVER_STARTUP_TIMEOUT env var (5 min in CI)
+echo "Waiting 45s for post-install optimizations to complete..."
 echo "(Android may be optimizing the 81MB APK in the background)"
-echo "This extended wait helps Maestro's daemon initialize successfully."
-sleep 60
-
-# Check if background compilation is still running
-echo "Checking for background compilation processes..."
-DEXOPT_RUNNING=$(adb -s emulator-5554 shell "pgrep -f 'dex2oat|installd' || true" | wc -l)
-if [ "$DEXOPT_RUNNING" -gt 0 ]; then
-  echo "Background compilation still running, waiting additional 30s..."
-  sleep 30
-else
-  echo "No background compilation detected, proceeding..."
-fi
+sleep 45
 
 echo "Maestro setup complete, ready to run tests..."
+echo "Note: Maestro driver startup timeout set to 5 minutes (MAESTRO_DRIVER_STARTUP_TIMEOUT)"
 
 echo "Running Maestro tests (with single retry on failure)..."
 echo "Note: TV tests in .maestro/tv/ are intentionally excluded (require D-pad navigation)"
@@ -89,9 +80,8 @@ maestro test --device emulator-5554 "${TEST_FILES[@]}"
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo ""
-  echo "Maestro failed (exit $EXIT_CODE). Retrying once after 30s delay..."
-  echo "Giving the system more time to stabilize before retry..."
-  sleep 30
+  echo "Maestro failed (exit $EXIT_CODE). Retrying once after 15s delay..."
+  sleep 15
   maestro test --device emulator-5554 "${TEST_FILES[@]}"
   EXIT_CODE=$?
 fi
