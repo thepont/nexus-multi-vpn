@@ -33,6 +33,27 @@ sleep 20
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
 
+echo ""
+echo "=== Preparing Maestro Connection ==="
+
+# Ensure device is fully awake and unlocked
+echo "Waking device and ensuring screen is on..."
+adb -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
+adb -s emulator-5554 shell input keyevent KEYCODE_MENU
+sleep 2
+
+# Verify device is responsive
+echo "Verifying device responsiveness..."
+adb -s emulator-5554 shell dumpsys window | grep "mCurrentFocus" || echo "Window manager check completed"
+
+# After installing large APK, Android performs background optimizations
+# Give it extra time to complete before Maestro tries to connect
+echo "Waiting 30s for post-install optimizations to complete..."
+echo "(Android may be optimizing the 81MB APK in the background)"
+sleep 30
+
+echo "Maestro setup complete, ready to run tests..."
+
 echo "Running Maestro tests (with single retry on failure)..."
 echo "Note: TV tests in .maestro/tv/ are intentionally excluded (require D-pad navigation)"
 
@@ -49,13 +70,17 @@ fi
 echo "Found ${#TEST_FILES[@]} test files to run:"
 printf '  - %s\n' "${TEST_FILES[@]}"
 
+echo ""
+echo "Target device: emulator-5554"
+
 set +e
-maestro test "${TEST_FILES[@]}"
+maestro test --device emulator-5554 "${TEST_FILES[@]}"
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
-  echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
-  sleep 5
-  maestro test "${TEST_FILES[@]}"
+  echo ""
+  echo "Maestro failed (exit $EXIT_CODE). Retrying once after 10s delay..."
+  sleep 10
+  maestro test --device emulator-5554 "${TEST_FILES[@]}"
   EXIT_CODE=$?
 fi
 
