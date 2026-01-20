@@ -142,9 +142,10 @@ jobs:
       TEST_VPN_REGION: ${{ secrets.TEST_VPN_REGION != '' && secrets.TEST_VPN_REGION || 'UK' }}
       TEST_APP_PACKAGE: ${{ secrets.TEST_APP_PACKAGE != '' && secrets.TEST_APP_PACKAGE || 'com.android.chrome' }}
       # Increase Maestro driver startup timeout for CI environment without hardware acceleration
-      # Default is 120000ms (2 min), we increase to 300000ms (5 min) for slow emulators
+      # Default is 120000ms (2 min), we increase to 600000ms (10 min) for slow emulators
+      # This timeout handles waiting for the daemon to start, including time for APK optimization
       # See: https://docs.maestro.dev/advanced/configuring-maestro-driver-timeout
-      MAESTRO_DRIVER_STARTUP_TIMEOUT: 300000
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: 600000
 
     steps:
       - name: Checkout repository

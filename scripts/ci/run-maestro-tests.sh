@@ -46,15 +46,9 @@ sleep 2
 echo "Verifying device responsiveness..."
 adb -s emulator-5554 shell dumpsys window | grep "mCurrentFocus" || echo "Window manager check completed"
 
-# After installing large APK, Android performs background optimizations
-# Give it time to complete before Maestro tries to connect
-# Maestro's timeout is configured via MAESTRO_DRIVER_STARTUP_TIMEOUT env var (5 min in CI)
-echo "Waiting 45s for post-install optimizations to complete..."
-echo "(Android may be optimizing the 81MB APK in the background)"
-sleep 45
-
 echo "Maestro setup complete, ready to run tests..."
-echo "Note: Maestro driver startup timeout set to 5 minutes (MAESTRO_DRIVER_STARTUP_TIMEOUT)"
+echo "Note: MAESTRO_DRIVER_STARTUP_TIMEOUT set to 10 minutes for CI environment"
+echo "      Maestro will wait for daemon to start, including APK optimization time"
 
 echo "Running Maestro tests (with single retry on failure)..."
 echo "Note: TV tests in .maestro/tv/ are intentionally excluded (require D-pad navigation)"
