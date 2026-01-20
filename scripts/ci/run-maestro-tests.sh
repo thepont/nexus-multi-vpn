@@ -48,9 +48,20 @@ adb -s emulator-5554 shell dumpsys window | grep "mCurrentFocus" || echo "Window
 
 # After installing large APK, Android performs background optimizations
 # Give it extra time to complete before Maestro tries to connect
-echo "Waiting 30s for post-install optimizations to complete..."
+echo "Waiting 60s for post-install optimizations to complete..."
 echo "(Android may be optimizing the 81MB APK in the background)"
-sleep 30
+echo "This extended wait helps Maestro's daemon initialize successfully."
+sleep 60
+
+# Check if background compilation is still running
+echo "Checking for background compilation processes..."
+DEXOPT_RUNNING=$(adb -s emulator-5554 shell "pgrep -f 'dex2oat|installd' || true" | wc -l)
+if [ "$DEXOPT_RUNNING" -gt 0 ]; then
+  echo "Background compilation still running, waiting additional 30s..."
+  sleep 30
+else
+  echo "No background compilation detected, proceeding..."
+fi
 
 echo "Maestro setup complete, ready to run tests..."
 
@@ -78,8 +89,9 @@ maestro test --device emulator-5554 "${TEST_FILES[@]}"
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo ""
-  echo "Maestro failed (exit $EXIT_CODE). Retrying once after 10s delay..."
-  sleep 10
+  echo "Maestro failed (exit $EXIT_CODE). Retrying once after 30s delay..."
+  echo "Giving the system more time to stabilize before retry..."
+  sleep 30
   maestro test --device emulator-5554 "${TEST_FILES[@]}"
   EXIT_CODE=$?
 fi
