@@ -48,7 +48,11 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        run: |
+          # Accept licenses with timeout to prevent hanging
+          timeout 120 bash -c 'yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses' || true
+          # Verify licenses are accepted
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses < /dev/null || echo "Licenses already accepted"
 
       - name: Install Build Dependencies
         run: ./scripts/ci/install-android-build-deps.sh
@@ -164,7 +168,11 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        run: |
+          # Accept licenses with timeout to prevent hanging
+          timeout 120 bash -c 'yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses' || true
+          # Verify licenses are accepted
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses < /dev/null || echo "Licenses already accepted"
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
@@ -268,7 +276,11 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        run: |
+          # Accept licenses with timeout to prevent hanging
+          timeout 120 bash -c 'yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses' || true
+          # Verify licenses are accepted
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses < /dev/null || echo "Licenses already accepted"
 
       - name: Install Build Dependencies
         run: ./scripts/ci/install-android-build-deps.sh

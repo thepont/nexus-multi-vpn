@@ -18,8 +18,7 @@ cmake --version
 ninja --version
 
 echo "=== Accepting Android SDK licenses ==="
-# Accept all licenses to prevent interactive prompts
-yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+# Accept all licenses to prevent interactive prompts with timeout
+timeout 120 bash -c 'yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses' || true
 
-echo "=== Android SDK Components ==="
-$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed
+echo "=== Android SDK setup complete ==="
