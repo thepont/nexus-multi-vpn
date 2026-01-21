@@ -47,6 +47,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
       - name: Install Build Dependencies
         run: ./scripts/ci/install-android-build-deps.sh
 
@@ -160,6 +163,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
 
@@ -247,7 +253,7 @@ jobs:
     timeout-minutes: 60
     needs: maestro
     if: success()
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -260,6 +266,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Install Build Dependencies
         run: ./scripts/ci/install-android-build-deps.sh
