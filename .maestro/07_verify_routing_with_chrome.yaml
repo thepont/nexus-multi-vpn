@@ -6,6 +6,8 @@ appId: "com.multiregionvpn"
 
 - launchApp
 
+- waitForAnimationToEnd
+
 # Assign Chrome to UK tunnel
 - tapOn:
     text: "Chrome"

@@ -5,6 +5,8 @@ appId: "com.multiregionvpn"
 
 - launchApp
 
+- waitForAnimationToEnd
+
 # Prerequisites: Assume tunnels exist (skip strict checks)
 
 # ============================================
