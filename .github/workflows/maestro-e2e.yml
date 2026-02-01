@@ -250,6 +250,7 @@ jobs:
           target: google_apis
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
+          emulator-boot-timeout: 900
           script: ./scripts/ci/run-maestro-tests.sh
 
       - name: Upload Maestro artifacts
