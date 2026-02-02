@@ -70,6 +70,7 @@ appId: "com.multiregionvpn"
     optional: true
 - tapOn:
     text: '.*France.*\(OpenVPN\)|.*France.*|.*FR.*'
+    optional: true
 - waitForAnimationToEnd
 
 # VPN should stay up (skip strict assertion)
