@@ -88,7 +88,10 @@ echo "=== Test Summary ==="
 grep -E "(BUILD SUCCESSFUL|BUILD FAILED|> Task :app:testDebugUnitTest|tests completed|test failed|tests? skipped|SKIPPED)" robolectric-test.log | tail -30 || echo "No test summary found"
 
 # Check for skipped tests
-SKIPPED_COUNT=$(grep -c "SKIPPED" robolectric-test.log || echo "0")
+SKIPPED_COUNT=$(grep -c "SKIPPED" robolectric-test.log || true)
+if [ -z "$SKIPPED_COUNT" ]; then
+  SKIPPED_COUNT=0
+fi
 echo ""
 echo "=== Skipped tests: $SKIPPED_COUNT ==="
 if [ "$SKIPPED_COUNT" -gt "0" ]; then
