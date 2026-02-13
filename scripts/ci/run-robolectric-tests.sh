@@ -29,7 +29,7 @@ while true; do
       STALL_COUNT=$((STALL_COUNT + 1))
       echo "⚠️  No new test output for $((STALL_COUNT * INTERVAL)) seconds"
       
-      if [ $STALL_COUNT -ge 4 ]; then
+      if [ $STALL_COUNT -ge 20 ]; then
         echo "❌ TESTS STALLED: No output for $((STALL_COUNT * INTERVAL)) seconds"
         echo "Last 100 lines of test output:"
         tail -100 "$LOG_FILE"
@@ -57,9 +57,16 @@ MONITOR_PID=$!
 
 # Run tests with detailed logging
 set +e
+
+# Only exclude native build if it's NOT already skipped via environment variable
+# If SKIP_NATIVE_BUILD=true, the tasks won't exist and -x will fail
+EXCLUDE_NATIVE=""
+if [ "$SKIP_NATIVE_BUILD" != "true" ]; then
+  EXCLUDE_NATIVE="-x externalNativeBuildDebug -x externalNativeBuildRelease"
+fi
+
 ./gradlew testDebugUnitTest \
-  -x externalNativeBuildDebug \
-  -x externalNativeBuildRelease \
+  $EXCLUDE_NATIVE \
   --info --stacktrace 2>&1 | tee robolectric-test.log
 
 TEST_EXIT=$?
