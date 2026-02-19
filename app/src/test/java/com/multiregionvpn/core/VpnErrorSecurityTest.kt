@@ -21,7 +21,7 @@ class VpnErrorSecurityTest {
         assertFalse(details.contains(".kt:"), "Details should not contain Kotlin file line numbers")
         assertFalse(details.contains(".java:"), "Details should not contain Java file line numbers")
 
-        // AND: Details should match the error message (our new behavior)
-        assertEquals("Sensitive error message", details)
+        // AND: Details should be null (our new behavior)
+        assertNull(vpnError.details)
     }
 }

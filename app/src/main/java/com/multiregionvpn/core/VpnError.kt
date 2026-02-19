@@ -85,7 +85,7 @@ data class VpnError(
             val errorMsg = e.message ?: "Unknown error"
             // Don't leak full stack traces in production to avoid exposing internals.
             // In a production app, we'd log the full trace to a secure crash reporter instead.
-            val details = errorMsg
+            val details = null
             
             return when {
                 errorMsg.contains("auth", ignoreCase = true) ||
