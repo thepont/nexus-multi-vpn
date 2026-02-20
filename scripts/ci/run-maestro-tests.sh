@@ -28,12 +28,24 @@ if adb devices | grep -q "offline"; then
   adb wait-for-device || true
 fi
 
-echo "Settling emulator for 20s..."
-sleep 20
+echo "Settling emulator for 60s..."
+sleep 60
+
+# Wait for package manager service to be ready
+echo "Waiting for package manager service..."
+for i in $(seq 1 30); do
+  if adb -s emulator-5554 shell service check package | grep -q "Service package: found"; then
+    echo "Package manager service found."
+    break
+  fi
+  echo "Package manager service not ready yet (attempt $i)..."
+  sleep 5
+done
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
 
 echo "Running Maestro tests (with single retry on failure)..."
+export MAESTRO_CLI_NO_ANALYTICS=true
 set +e
 maestro test .maestro/*.yaml
 EXIT_CODE=$?
