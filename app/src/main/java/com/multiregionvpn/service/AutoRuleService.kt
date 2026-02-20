@@ -9,6 +9,7 @@ import com.multiregionvpn.network.GeoIpService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -23,15 +24,17 @@ import kotlinx.coroutines.launch
  * - If preset rule matches user's region:
  *   → Ensures no rule exists (defaults to Direct Internet)
  */
-class AutoRuleService(private val context: Context) {
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val database = AppDatabase.getDatabase(context)
-    private val vpnConfigDao = database.vpnConfigDao()
-    private val appRuleDao = database.appRuleDao()
-    private val credsDao = database.providerCredentialsDao()
-    private val presetRuleDao = database.presetRuleDao()
-    private val settingsRepository = SettingsRepository(vpnConfigDao, appRuleDao, credsDao, presetRuleDao)
-    private val geoIpService = GeoIpService()
+class AutoRuleService(
+    private val context: Context,
+    private val settingsRepository: SettingsRepository = SettingsRepository(
+        AppDatabase.getDatabase(context).vpnConfigDao(),
+        AppDatabase.getDatabase(context).appRuleDao(),
+        AppDatabase.getDatabase(context).providerCredentialsDao(),
+        AppDatabase.getDatabase(context).presetRuleDao()
+    ),
+    private val geoIpService: GeoIpService = GeoIpService(),
+    private val serviceScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+) {
     private val packageManager = context.packageManager
     
     fun runAutoSetup() {
@@ -44,20 +47,24 @@ class AutoRuleService(private val context: Context) {
                 }
                 
                 val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-                val presetRules = settingsRepository.getAllPresetRules()
+
+                // Fetch all data in batch to avoid N+1 queries
+                val presetRulesMap = settingsRepository.getAllPresetRules().associateBy { it.packageName }
+                val existingRulesMap = settingsRepository.appRuleDao.getAllRulesList().associateBy { it.packageName }
+                val vpnConfigsByRegion = settingsRepository.getAllVpnConfigs().first().associateBy { it.regionId }
                 
                 var rulesCreated = 0
                 var rulesRemoved = 0
                 
                 for (app in installedApps) {
-                    val presetRule = presetRules.find { it.packageName == app.packageName }
+                    val presetRule = presetRulesMap[app.packageName]
                     
                     if (presetRule != null) {
-                        val existingRule = settingsRepository.getAppRuleByPackageName(app.packageName)
+                        val existingRule = existingRulesMap[app.packageName]
                         
                         if (presetRule.targetRegionId != userRegion) {
                             // App should use VPN for a different region
-                            val userVpn = settingsRepository.findVpnForRegion(presetRule.targetRegionId)
+                            val userVpn = vpnConfigsByRegion[presetRule.targetRegionId]
                             if (userVpn != null) {
                                 // Check if rule already exists and points to correct VPN
                                 if (existingRule == null || existingRule.vpnConfigId != userVpn.id) {
