@@ -908,22 +908,6 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "📖 readPacketsFromTun() coroutine stopped (read $packetCount packets total)")
     }
     
-    private suspend fun startInboundLoop() {
-        // This loop is no longer needed - packets from tunnels are written
-        // directly via the packet receiver callback set in initializePacketRouter()
-        // We keep this as a placeholder for future enhancements
-        while (vpnInterface != null && serviceScope.isActive) {
-            try {
-                kotlinx.coroutines.delay(1000)
-            } catch (e: Exception) {
-                if (vpnInterface != null) {
-                    Log.e(TAG, "Error in inbound loop", e)
-                }
-                break
-            }
-        }
-    }
-    
     /**
      * Monitors app rules and manages VPN tunnels.
      * Creates tunnels for VPN configs referenced by app rules,
