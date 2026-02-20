@@ -33,6 +33,19 @@ sleep 20
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
 
+echo "Pre-approving VPN permissions..."
+adb shell appops set com.multiregionvpn ACTIVATE_VPN allow || echo "Failed to set appops"
+
+echo "Waiting for system services to be fully ready..."
+for i in $(seq 1 10); do
+  if adb shell service check package | grep -q "Service package: found"; then
+    echo "Package manager service is ready."
+    break
+  fi
+  echo "Waiting for package manager... ($i/10)"
+  sleep 5
+done
+
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
 maestro test .maestro/*.yaml
