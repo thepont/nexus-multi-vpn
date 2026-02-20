@@ -7,6 +7,9 @@ echo "Starting Instrumentation Tests"
 echo "========================================"
 echo "Timestamp: $(date)"
 
+echo "Waiting 30s for emulator to stabilize..."
+sleep 30
+
 # Run with monitoring
 set +e
 ./gradlew connectedDebugAndroidTest -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee instrumentation-test.log

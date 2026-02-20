@@ -28,12 +28,13 @@ if adb devices | grep -q "offline"; then
   adb wait-for-device || true
 fi
 
-echo "Settling emulator for 20s..."
-sleep 20
+echo "Settling emulator for 45s..."
+sleep 45
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
 
 echo "Running Maestro tests (with single retry on failure)..."
+export MAESTRO_CLI_NO_ANALYTICS=true
 set +e
 maestro test .maestro/*.yaml
 EXIT_CODE=$?
