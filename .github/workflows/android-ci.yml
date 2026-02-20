@@ -6,10 +6,15 @@ on:
       - master
       - main
       - 'claude/**'
+      - 'jules/**'
+      - '**'
   pull_request:
     branches:
       - master
       - main
+      - 'claude/**'
+      - 'jules/**'
+      - '**'
   workflow_dispatch:
 
 permissions:
