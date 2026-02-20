@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - main
+      - 'claude/**'
   pull_request:
     branches:
       - master
@@ -45,6 +46,19 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: |
+          # Bypass interactive prompts by creating license files directly
+          mkdir -p $ANDROID_HOME/licenses
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
+          echo "d975f751698a77b662f1254ddbeed3901e976f5a" > $ANDROID_HOME/licenses/intel-android-extra-license
+          echo "e9acab5b5fbb560a72cfaecce8946896ff6aab9d" > $ANDROID_HOME/licenses/google-gdk-license
+          echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $ANDROID_HOME/licenses/mips-android-sysimage-license
+          echo "d56a54d6bdbcc3c8c372b9d60b7f63f4e4c3a440" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_HOME/licenses/android-sdk-arm-dbt-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo "Licenses created successfully"
 
       - name: Install Build Dependencies
         run: ./scripts/ci/install-android-build-deps.sh
@@ -128,7 +142,7 @@ jobs:
   maestro:
     name: Maestro E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     needs: 
       - warm-cache
       - guard
@@ -140,6 +154,11 @@ jobs:
       TEST_VPN_HOSTNAME: ${{ secrets.TEST_VPN_HOSTNAME != '' && secrets.TEST_VPN_HOSTNAME || 'uk1234.nordvpn.com' }}
       TEST_VPN_REGION: ${{ secrets.TEST_VPN_REGION != '' && secrets.TEST_VPN_REGION || 'UK' }}
       TEST_APP_PACKAGE: ${{ secrets.TEST_APP_PACKAGE != '' && secrets.TEST_APP_PACKAGE || 'com.android.chrome' }}
+      # Increase Maestro driver startup timeout for CI environment without hardware acceleration
+      # Default is 120000ms (2 min), we increase to 600000ms (10 min) for slow emulators
+      # This timeout handles waiting for the daemon to start, including time for APK optimization
+      # See: https://docs.maestro.dev/advanced/configuring-maestro-driver-timeout
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: 600000
 
     steps:
       - name: Checkout repository
@@ -153,6 +172,19 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: |
+          # Bypass interactive prompts by creating license files directly
+          mkdir -p $ANDROID_HOME/licenses
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
+          echo "d975f751698a77b662f1254ddbeed3901e976f5a" > $ANDROID_HOME/licenses/intel-android-extra-license
+          echo "e9acab5b5fbb560a72cfaecce8946896ff6aab9d" > $ANDROID_HOME/licenses/google-gdk-license
+          echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $ANDROID_HOME/licenses/mips-android-sysimage-license
+          echo "d56a54d6bdbcc3c8c372b9d60b7f63f4e4c3a440" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_HOME/licenses/android-sdk-arm-dbt-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo "Licenses created successfully"
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
@@ -215,6 +247,11 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot -memory 4096
+          disable-animations: true
+          emulator-boot-timeout: 900
+          force-avd-creation: false
           script: ./scripts/ci/run-maestro-tests.sh
 
       - name: Upload Maestro artifacts
@@ -238,7 +275,7 @@ jobs:
     timeout-minutes: 60
     needs: maestro
     if: success()
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -251,6 +288,19 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: |
+          # Bypass interactive prompts by creating license files directly
+          mkdir -p $ANDROID_HOME/licenses
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
+          echo "d975f751698a77b662f1254ddbeed3901e976f5a" > $ANDROID_HOME/licenses/intel-android-extra-license
+          echo "e9acab5b5fbb560a72cfaecce8946896ff6aab9d" > $ANDROID_HOME/licenses/google-gdk-license
+          echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $ANDROID_HOME/licenses/mips-android-sysimage-license
+          echo "d56a54d6bdbcc3c8c372b9d60b7f63f4e4c3a440" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_HOME/licenses/android-sdk-arm-dbt-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo "Licenses created successfully"
 
       - name: Install Build Dependencies
         run: ./scripts/ci/install-android-build-deps.sh

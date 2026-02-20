@@ -9,7 +9,9 @@ echo "Timestamp: $(date)"
 
 # Run with monitoring
 set +e
-./gradlew connectedDebugAndroidTest -x externalNativeBuildDebug -x externalNativeBuildRelease --info --stacktrace 2>&1 | tee instrumentation-test.log
+# Native builds are NOT excluded here because instrumentation tests (E2E)
+# require native libraries to establish actual VPN connections.
+./gradlew connectedDebugAndroidTest --info --stacktrace 2>&1 | tee instrumentation-test.log
 
 TEST_EXIT=$?
 set -e

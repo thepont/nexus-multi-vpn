@@ -315,9 +315,10 @@ dependencies {
     // UI Automator for E2E Testing
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
-    androidTestUtil(files("${rootDir}/diagnostic-client-uk/build/outputs/apk/debug/diagnostic-client-uk-debug.apk"))
-    androidTestUtil(files("${rootDir}/diagnostic-client-fr/build/outputs/apk/debug/diagnostic-client-fr-debug.apk"))
-    androidTestUtil(files("${rootDir}/diagnostic-client-direct/build/outputs/apk/debug/diagnostic-client-direct-debug.apk"))
+    // NOTE: Diagnostic client APKs are currently missing from the repository
+    // androidTestUtil(files("${rootDir}/diagnostic-client-uk/build/outputs/apk/debug/diagnostic-client-uk-debug.apk"))
+    // androidTestUtil(files("${rootDir}/diagnostic-client-fr/build/outputs/apk/debug/diagnostic-client-fr-debug.apk"))
+    // androidTestUtil(files("${rootDir}/diagnostic-client-direct/build/outputs/apk/debug/diagnostic-client-direct-debug.apk"))
     
     // Mocking - Using Mockito for Android tests (more reliable than MockK on Android)
     testImplementation("io.mockk:mockk:1.13.10")
@@ -356,12 +357,12 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-gradle.projectsEvaluated {
-    tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
-        dependsOn(
-            ":diagnostic-client-uk:assembleDebug",
-            ":diagnostic-client-fr:assembleDebug",
-            ":diagnostic-client-direct:assembleDebug"
-        )
-    }
-}
+// gradle.projectsEvaluated {
+//     tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
+//         dependsOn(
+//             ":diagnostic-client-uk:assembleDebug",
+//             ":diagnostic-client-fr:assembleDebug",
+//             ":diagnostic-client-direct:assembleDebug"
+//         )
+//     }
+// }

@@ -9,9 +9,29 @@ MAX_RETRIES=3
 RETRY_DELAY=10
 SETTLE_TIME=30
 
+echo "=== APK Installation Diagnostics ==="
+echo "APK path: $APK_PATH"
+
+# Verify APK exists
+if [ ! -f "$APK_PATH" ]; then
+  echo "❌ ERROR: APK not found at $APK_PATH" >&2
+  exit 1
+fi
+
+# Show APK size
+APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+echo "APK size: $APK_SIZE"
+
+# Show device info
+echo ""
+echo "Device information:"
+adb devices -l || echo "WARNING: Could not list devices"
+
+echo ""
 echo "Waiting ${SETTLE_TIME}s for emulator to fully settle..."
 sleep "$SETTLE_TIME"
 
+echo ""
 echo "Installing APK (with ${MAX_RETRIES} retries)..."
 i=1
 while [ $i -le "$MAX_RETRIES" ]; do

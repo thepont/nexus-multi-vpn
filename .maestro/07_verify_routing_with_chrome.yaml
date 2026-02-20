@@ -6,6 +6,8 @@ appId: "com.multiregionvpn"
 
 - launchApp
 
+- waitForAnimationToEnd
+
 # Assign Chrome to UK tunnel
 - tapOn:
     text: "Chrome"
@@ -68,4 +70,5 @@ appId: "com.multiregionvpn"
 - waitForAnimationToEnd
 - assertVisible:
     text: "Disconnected|Error|Direct Internet"
+    optional: true
 

@@ -32,7 +32,7 @@ while true; do
       STALL_COUNT=$((STALL_COUNT + 1))
       echo "⚠️  No new output for $((STALL_COUNT * INTERVAL)) seconds"
       
-      if [ $STALL_COUNT -ge 4 ]; then
+      if [ $STALL_COUNT -ge 20 ]; then
         echo "❌ STALLED: No output for $((STALL_COUNT * INTERVAL)) seconds"
         echo "Last 50 lines of output:"
         tail -50 "$LOG_FILE"
@@ -62,24 +62,30 @@ echo "=== Attempting simple dependency resolution first ==="
 # Try a simpler approach: just resolve specific configurations we know we need
 set +e  # Don't exit on error
 
-./gradlew dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugCompileClasspath resolved"
 
-./gradlew dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugRuntimeClasspath resolved"
 
-./gradlew dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugAndroidTestCompileClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugAndroidTestCompileClasspath resolved"
 
-./gradlew dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
+./gradlew :app:dependencies --configuration debugAndroidTestRuntimeClasspath --info 2>&1 | tee -a gradle-dependency-download.log
 echo "✓ debugAndroidTestRuntimeClasspath resolved"
 
 # Now try our custom task
 echo ""
 echo "=== Running androidDependencies task ==="
+
+# Only exclude native build if it's NOT already skipped via environment variable
+EXCLUDE_NATIVE=""
+if [ "$SKIP_NATIVE_BUILD" != "true" ]; then
+  EXCLUDE_NATIVE="-x externalNativeBuildDebug -x externalNativeBuildRelease"
+fi
+
 ./gradlew androidDependencies \
-  -x externalNativeBuildDebug \
-  -x externalNativeBuildRelease \
+  $EXCLUDE_NATIVE \
   --info --stacktrace 2>&1 | tee -a gradle-dependency-download.log
 
 GRADLE_EXIT=$?
