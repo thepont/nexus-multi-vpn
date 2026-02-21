@@ -9,3 +9,8 @@
 **Vulnerability:** Setting `android:usesCleartextTraffic="false"` in `AndroidManifest.xml` can override or conflict with `domain-config` exceptions in `network_security_config.xml`, potentially breaking required legacy cleartext connections (like the free tier of `ip-api.com`).
 **Learning:** `network_security_config.xml` is the more modern and granular way to manage cleartext traffic. If a `base-config` with `cleartextTrafficPermitted="false"` is present in the config file, setting it to `false` in the manifest is redundant and can cause issues by ignoring specific domain exceptions.
 **Prevention:** Prefer using `network_security_config.xml` for cleartext traffic control. Ensure the manifest's `android:usesCleartextTraffic` does not block legitimate exceptions defined in the security config.
+
+## 2025-05-24 - [Plaintext Credentials in Cache]
+**Vulnerability:** Temporary files containing plaintext VPN credentials (username/password) were created in the app's cache directory and never deleted, leaving sensitive data on the filesystem.
+**Learning:** Even internal data passing via the filesystem is risky if cleanup is not guaranteed. While cache directories are private, rooted devices or backup exploits could expose this data.
+**Prevention:** Always delete temporary sensitive files as soon as they are no longer needed. Use in-memory data passing whenever possible.

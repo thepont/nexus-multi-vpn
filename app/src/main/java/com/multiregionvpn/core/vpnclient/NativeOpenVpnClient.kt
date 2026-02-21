@@ -164,6 +164,18 @@ class NativeOpenVpnClient(
                                 Log.e(TAG, "❌ Invalid UTF-8 encoding in credentials", e)
                                 return@withContext false
                             }
+
+                            // Sanitize: Delete the temporary auth file immediately after reading
+                            // to avoid leaving plaintext credentials on disk.
+                            try {
+                                if (authFile.delete()) {
+                                    Log.d(TAG, "✅ Temporary auth file deleted after reading credentials")
+                                } else {
+                                    Log.w(TAG, "⚠️ Failed to delete temporary auth file: ${authFile.absolutePath}")
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Error deleting temporary auth file: ${e.message}")
+                            }
                         } else {
                             Log.e(TAG, "❌ Auth file does not contain username/password (lines: ${lines.size})")
                             return@withContext false
