@@ -163,6 +163,16 @@ class NativeOpenVpnClient(
                             } catch (e: Exception) {
                                 Log.e(TAG, "❌ Invalid UTF-8 encoding in credentials", e)
                                 return@withContext false
+                            } finally {
+                                // SECURE: Delete the sensitive credential file immediately after reading
+                                try {
+                                    if (authFile.exists()) {
+                                        authFile.delete()
+                                        Log.d(TAG, "🔒 Deleted sensitive credential file")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Could not delete auth file: ${e.message}")
+                                }
                             }
                         } else {
                             Log.e(TAG, "❌ Auth file does not contain username/password (lines: ${lines.size})")
@@ -189,11 +199,9 @@ class NativeOpenVpnClient(
                         field.isAccessible = true
                         val parcelFileDescriptor = field.get(vpnService) as? android.os.ParcelFileDescriptor
                         if (parcelFileDescriptor != null) {
-                            // Try to get FD without detaching (we need it for both reading and writing)
-                            val fdField = parcelFileDescriptor.javaClass.getDeclaredField("mFd")
-                            fdField.isAccessible = true
-                            finalTunFd = fdField.getInt(parcelFileDescriptor)
-                            Log.d(TAG, "Got TUN FD via reflection from VpnService.mInterface: $finalTunFd")
+                            // Use public getFd() API instead of reflection for mFd
+                            finalTunFd = parcelFileDescriptor.fd
+                            Log.d(TAG, "Got TUN FD via VpnService.mInterface.getFd(): $finalTunFd")
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Could not get TUN file descriptor via reflection: ${e.message}")
