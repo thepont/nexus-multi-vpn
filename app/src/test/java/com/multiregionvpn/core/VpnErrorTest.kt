@@ -54,6 +54,33 @@ class VpnErrorTest {
     }
 
     @Test
+    fun `when exception message contains config keywords, then error type is CONFIG_ERROR`() {
+        val exceptions = listOf(
+            Exception("config failed to load"),
+            Exception("parse error in ovpn file")
+        )
+
+        exceptions.forEach { e ->
+            val vpnError = VpnError.fromException(e)
+            assertThat(vpnError.type).isEqualTo(VpnError.ErrorType.CONFIG_ERROR)
+        }
+    }
+
+    @Test
+    fun `when exception message contains interface keywords, then error type is INTERFACE_ERROR`() {
+        val exceptions = listOf(
+            Exception("vpn interface failure"),
+            Exception("permission denied for vpn"),
+            Exception("could not establish interface")
+        )
+
+        exceptions.forEach { e ->
+            val vpnError = VpnError.fromException(e)
+            assertThat(vpnError.type).isEqualTo(VpnError.ErrorType.INTERFACE_ERROR)
+        }
+    }
+
+    @Test
     fun `when exception has no message, then default message is used and details are sanitized`() {
         // GIVEN: An exception without a message
         val exception = Exception()

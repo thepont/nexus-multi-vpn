@@ -12,5 +12,5 @@
 
 ## 2025-05-24 - [Plaintext Credentials in Cache]
 **Vulnerability:** Temporary files containing plaintext VPN credentials (username/password) were created in the app's cache directory and never deleted, leaving sensitive data on the filesystem.
-**Learning:** Even internal data passing via the filesystem is risky if cleanup is not guaranteed. While cache directories are private, rooted devices or backup exploits could expose this data.
-**Prevention:** Always delete temporary sensitive files as soon as they are no longer needed. Use in-memory data passing whenever possible.
+**Learning:** Even internal data passing via the filesystem is risky if cleanup is not guaranteed. While cache directories are private, rooted devices or backup exploits could expose this data. HOWEVER, premature deletion (as implemented in v3) can cause regressions if the file is reused for reconnections or by other app components.
+**Prevention:** Use in-memory data passing whenever possible. If files are required, ensure cleanup happens at the appropriate lifecycle point (e.g., when the tunnel is destroyed) rather than immediately after the first read.
