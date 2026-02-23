@@ -163,16 +163,6 @@ class NativeOpenVpnClient(
                             } catch (e: Exception) {
                                 Log.e(TAG, "❌ Invalid UTF-8 encoding in credentials", e)
                                 return@withContext false
-                            } finally {
-                                // SECURE: Delete the sensitive credential file immediately after reading
-                                try {
-                                    if (authFile.exists()) {
-                                        authFile.delete()
-                                        Log.d(TAG, "🔒 Deleted sensitive credential file")
-                                    }
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "Could not delete auth file: ${e.message}")
-                                }
                             }
                         } else {
                             Log.e(TAG, "❌ Auth file does not contain username/password (lines: ${lines.size})")
@@ -247,6 +237,20 @@ class NativeOpenVpnClient(
                     e.printStackTrace()
                     lastError = "Exception during connection: ${e.message}"
                     return@withContext false
+                } finally {
+                    // SECURE: Delete the sensitive credential file after the native connect call
+                    // We wait until here to ensure the JNI layer has had a chance to read the config
+                    // which contains the file path (even though it eventually replaces it).
+                    // authFilePath is guaranteed to be non-null here due to earlier check and return.
+                    try {
+                        val authFile = java.io.File(authFilePath)
+                        if (authFile.exists()) {
+                            authFile.delete()
+                            Log.d(TAG, "🔒 Deleted sensitive credential file after native call")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not delete auth file: ${e.message}")
+                    }
                 }
                 
                 if (handle == 0L) {
