@@ -16,17 +16,5 @@
 
     <application
         tools:ignore="MissingLeanbackLauncher">
-        <receiver
-            android:name=".deviceowner.TestDeviceOwnerReceiver"
-            android:exported="true"
-            android:permission="android.permission.BIND_DEVICE_ADMIN"
-            tools:ignore="DeviceAdmin">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/test_device_owner_policies" />
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-            </intent-filter>
-        </receiver>
     </application>
 </manifest>

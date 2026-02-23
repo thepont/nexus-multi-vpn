@@ -189,11 +189,9 @@ class NativeOpenVpnClient(
                         field.isAccessible = true
                         val parcelFileDescriptor = field.get(vpnService) as? android.os.ParcelFileDescriptor
                         if (parcelFileDescriptor != null) {
-                            // Try to get FD without detaching (we need it for both reading and writing)
-                            val fdField = parcelFileDescriptor.javaClass.getDeclaredField("mFd")
-                            fdField.isAccessible = true
-                            finalTunFd = fdField.getInt(parcelFileDescriptor)
-                            Log.d(TAG, "Got TUN FD via reflection from VpnService.mInterface: $finalTunFd")
+                            // Use public getFd() API instead of reflection for mFd
+                            finalTunFd = parcelFileDescriptor.fd
+                            Log.d(TAG, "Got TUN FD via VpnService.mInterface.getFd(): $finalTunFd")
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Could not get TUN file descriptor via reflection: ${e.message}")
@@ -239,6 +237,20 @@ class NativeOpenVpnClient(
                     e.printStackTrace()
                     lastError = "Exception during connection: ${e.message}"
                     return@withContext false
+                } finally {
+                    // SECURE: Delete the sensitive credential file after the native connect call
+                    // We wait until here to ensure the JNI layer has had a chance to read the config
+                    // which contains the file path (even though it eventually replaces it).
+                    // authFilePath is guaranteed to be non-null here due to earlier check and return.
+                    try {
+                        val authFile = java.io.File(authFilePath)
+                        if (authFile.exists()) {
+                            authFile.delete()
+                            Log.d(TAG, "🔒 Deleted sensitive credential file after native call")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not delete auth file: ${e.message}")
+                    }
                 }
                 
                 if (handle == 0L) {
