@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext traffic for testing and local tools -->
+    <!-- Allow cleartext traffic for testing with ip-api.com -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">ip-api.com</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">127.0.0.1</domain>
     </domain-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
@@ -12,5 +10,3 @@
         </trust-anchors>
     </base-config>
 </network-security-config>
-
-
