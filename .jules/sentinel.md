@@ -10,5 +10,5 @@
 
 ## 2025-05-15 - [Redundant Protected Permission and Network Config for IP Addresses]
 **Vulnerability:** Redundant Permission Declaration and Incorrect Network Security Config for IP addresses.
-**Learning:** Declaring `<uses-permission android:name="android.permission.BIND_VPN_SERVICE" />` is unnecessary and causes Lint errors because it's a signature-level protected permission; a `VpnService` only needs to *require* this permission in its `<service>` declaration. Additionally, `network_security_config.xml` does not support `includeSubdomains="true"` for IP addresses and they should be listed directly.
+**Learning:** Declaring `<uses-permission android:name="android.permission.BIND_VPN_SERVICE" />` is unnecessary and causes Lint errors because it's a signature-level protected permission; a `VpnService` only needs to *require* this permission in its `<service>` declaration. Additionally, `network_security_config.xml` does not support `includeSubdomains="true"` for IP addresses.
 **Prevention:** Only declare permissions that the app actually needs to REQUEST from the user or system. Follow the strict format for `network-security-config` when specifying IP addresses.
