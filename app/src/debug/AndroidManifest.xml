@@ -15,9 +15,7 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
-        android:usesCleartextTraffic="true"
-        tools:ignore="MissingLeanbackLauncher"
-        tools:replace="android:usesCleartextTraffic">
+        tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
             android:exported="true"

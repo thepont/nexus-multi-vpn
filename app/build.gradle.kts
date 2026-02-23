@@ -150,6 +150,10 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        // Default security settings (overridden in build types)
+        manifestPlaceholders["allowBackup"] = "false"
+        manifestPlaceholders["usesCleartextTraffic"] = "false"
         
         testInstrumentationRunner = "com.multiregionvpn.HiltTestRunner"
         testInstrumentationRunnerArguments["useTestStorageService"] = "true"
@@ -198,8 +202,12 @@ android {
         debug {
             // Debug builds don't require vcpkg - use pre-built libraries or skip native build
             // This allows faster iteration during development
+            manifestPlaceholders["allowBackup"] = "true"
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
+            manifestPlaceholders["allowBackup"] = "false"
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
