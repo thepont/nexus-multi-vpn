@@ -73,6 +73,12 @@ class VpnTemplateService @Inject constructor(
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
             
+            // Set secure owner-only permissions for the credential file
+            authFile.setReadable(false, false) // Remove all read permissions
+            authFile.setReadable(true, true)  // Set owner-only read
+            authFile.setWritable(false, false) // Remove all write permissions
+            authFile.setWritable(true, true)  // Set owner-only write
+
             // Verify file was written correctly
             val writtenBytes = authFile.length()
             val expectedBytes = authContent.toByteArray(Charsets.UTF_8).size.toLong()
@@ -118,6 +124,13 @@ class VpnTemplateService @Inject constructor(
         withContext(Dispatchers.IO) {
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)
+
+            // Set secure owner-only permissions for the credential file
+            authFile.setReadable(false, false)
+            authFile.setReadable(true, true)
+            authFile.setWritable(false, false)
+            authFile.setWritable(true, true)
+
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
         }
         
