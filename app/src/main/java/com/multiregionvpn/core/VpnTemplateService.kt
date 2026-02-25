@@ -73,6 +73,13 @@ class VpnTemplateService @Inject constructor(
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
             
+            // Security: Set owner-only permissions (Defense in Depth)
+            // Even though cacheDir is private, we ensure the file itself is owner-only
+            authFile.setReadable(false, false) // Remove all read permissions
+            authFile.setReadable(true, true)  // Add read permission for owner only
+            authFile.setWritable(false, false) // Remove all write permissions
+            authFile.setWritable(true, true)  // Add write permission for owner only
+
             // Verify file was written correctly
             val writtenBytes = authFile.length()
             val expectedBytes = authContent.toByteArray(Charsets.UTF_8).size.toLong()
@@ -118,6 +125,13 @@ class VpnTemplateService @Inject constructor(
         withContext(Dispatchers.IO) {
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)
+
+            // Security: Set owner-only permissions
+            authFile.setReadable(false, false)
+            authFile.setReadable(true, true)
+            authFile.setWritable(false, false)
+            authFile.setWritable(true, true)
+
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
         }
         
@@ -157,5 +171,26 @@ class VpnTemplateService @Inject constructor(
             authFile = authFile
         )
     }
-}
 
+    /**
+     * Cleans up all temporary authentication files from the cache directory.
+     * Should be called when the VPN service starts or stops.
+     */
+    fun cleanupTemporaryFiles() {
+        try {
+            val files = context.cacheDir.listFiles { _, name ->
+                name.startsWith("nord_auth_") || name.startsWith("local_test_auth_")
+            }
+            files?.forEach { file ->
+                if (file.exists()) {
+                    val deleted = file.delete()
+                    if (deleted) {
+                        Log.d(TAG, "Cleaned up temporary auth file: ${file.name}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to cleanup temporary auth files: ${e.message}")
+        }
+    }
+}

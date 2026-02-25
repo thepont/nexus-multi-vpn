@@ -257,6 +257,8 @@ class VpnEngineService : VpnService() {
         when (intent?.action) {
             ACTION_START -> {
                 Log.i(TAG, "Received ACTION_START - starting VPN...")
+                // Security: Cleanup any orphaned auth files before starting
+                vpnTemplateService.cleanupTemporaryFiles()
                 startVpn()
             }
             ACTION_STOP -> {
@@ -639,6 +641,10 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         try {
+            // STEP 0: Cleanup temporary auth files
+            Log.i(TAG, "SHUTDOWN Step 0/4: Cleaning up temporary auth files...")
+            vpnTemplateService.cleanupTemporaryFiles()
+
             // STEP 1: Tell C++ to stop all tunnels and clean up
             // This stops it from reading/writing to the FD
             Log.i(TAG, "SHUTDOWN Step 1/4: Closing all tunnels...")
