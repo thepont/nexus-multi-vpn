@@ -33,6 +33,9 @@ sleep 20
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
 
+echo "Settling after APK installation for 15s..."
+sleep 15
+
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
 maestro test .maestro/*.yaml
