@@ -28,13 +28,13 @@ if adb devices | grep -q "offline"; then
   adb wait-for-device || true
 fi
 
-echo "Settling emulator for 20s..."
-sleep 20
+echo "Settling emulator for 40s..."
+sleep 40
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
 
-echo "Settling after APK installation for 15s..."
-sleep 15
+echo "Settling after APK installation for 30s..."
+sleep 30
 
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
