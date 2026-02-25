@@ -72,6 +72,7 @@ app/build/outputs/
 
 # OpenVPN 3 library (cloned, not committed)
 libs/openvpn3/
+libs/ics-openvpn/
 
 # vcpkg (external dependency, not committed)
 vcpkg_installed/
