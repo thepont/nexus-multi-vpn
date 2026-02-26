@@ -186,7 +186,6 @@ android {
             excludes += "/META-INF/LICENSE.md"
             excludes += "/META-INF/LICENSE.txt"
             excludes += "/META-INF/LICENSE-notice.md"
-            excludes += "/META-INF/**"
         }
         // Ensure MockK classes are included in test APK
         jniLibs {
@@ -237,11 +236,6 @@ android {
         }
     }
     
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
 }
 
 dependencies {
