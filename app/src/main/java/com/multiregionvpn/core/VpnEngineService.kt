@@ -80,6 +80,10 @@ class VpnEngineService : VpnService() {
         super.onCreate()
         runningInstance = this  // Set static reference for socket protection
         createNotificationChannel()
+
+        // SECURITY: Clean up any leaked credential files from previous sessions
+        vpnTemplateService.cleanupTemporaryFiles()
+
         // Initialize VpnConnectionManager early so it's available throughout service lifetime
         // This ensures getInstance() calls don't fail
         try {
@@ -638,6 +642,9 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "🛑 SHUTDOWN: Graceful VPN shutdown initiated...")
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
+        // SECURITY: Clean up plaintext credential files
+        vpnTemplateService.cleanupTemporaryFiles()
+
         try {
             // STEP 1: Tell C++ to stop all tunnels and clean up
             // This stops it from reading/writing to the FD
