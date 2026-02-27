@@ -73,6 +73,11 @@ class VpnTemplateService @Inject constructor(
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
             
+            // SECURITY: Set owner-only permissions for sensitive credential file
+            authFile.setReadable(true, true)
+            authFile.setWritable(true, true)
+            authFile.setExecutable(false)
+
             // Verify file was written correctly
             val writtenBytes = authFile.length()
             val expectedBytes = authContent.toByteArray(Charsets.UTF_8).size.toLong()
@@ -118,6 +123,12 @@ class VpnTemplateService @Inject constructor(
         withContext(Dispatchers.IO) {
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)
+
+            // SECURITY: Set owner-only permissions
+            authFile.setReadable(true, true)
+            authFile.setWritable(true, true)
+            authFile.setExecutable(false)
+
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
         }
         
@@ -156,6 +167,32 @@ class VpnTemplateService @Inject constructor(
             ovpnFileContent = ovpnConfig,
             authFile = authFile
         )
+    }
+
+    /**
+     * SECURITY: Clean up all temporary authentication files.
+     * Should be called when service starts or stops to ensure no plaintext
+     * credentials remain on disk longer than necessary.
+     */
+    fun cleanupTemporaryFiles() {
+        try {
+            val cacheDir = context.cacheDir
+            val authFiles = cacheDir.listFiles { _, name ->
+                name.startsWith("nord_auth_") || name.startsWith("local_test_auth_")
+            }
+            authFiles?.forEach { file ->
+                if (file.exists()) {
+                    val deleted = file.delete()
+                    if (deleted) {
+                        Log.d(TAG, "Successfully deleted temporary auth file: ${file.name}")
+                    } else {
+                        Log.w(TAG, "Failed to delete temporary auth file: ${file.name}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during temporary file cleanup", e)
+        }
     }
 }
 
