@@ -15,6 +15,9 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
+        android:usesCleartextTraffic="true"
+        tools:targetApi="23"
+        tools:replace="android:usesCleartextTraffic"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
