@@ -91,6 +91,9 @@ class VpnEngineService : VpnService() {
         
         // Register network change listener to detect Wi-Fi <-> 4G switches
         registerNetworkCallback()
+
+        // SECURITY: Clean up any stale authentication files from previous runs
+        vpnTemplateService.cleanupAuthFiles()
     }
     
     private fun initializePacketRouter() {
@@ -639,6 +642,9 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         try {
+            // SECURITY: Clean up temporary authentication files containing credentials
+            vpnTemplateService.cleanupAuthFiles()
+
             // STEP 1: Tell C++ to stop all tunnels and clean up
             // This stops it from reading/writing to the FD
             Log.i(TAG, "SHUTDOWN Step 1/4: Closing all tunnels...")
