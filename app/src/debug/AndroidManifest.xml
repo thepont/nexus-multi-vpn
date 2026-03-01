@@ -16,8 +16,9 @@
 
     <application
         android:usesCleartextTraffic="true"
+        android:allowBackup="true"
         tools:targetApi="23"
-        tools:replace="android:usesCleartextTraffic"
+        tools:replace="android:usesCleartextTraffic,android:allowBackup"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
