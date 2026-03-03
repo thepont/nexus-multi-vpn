@@ -11,8 +11,6 @@ class VpnErrorSecurityTest {
         val exception = RuntimeException("Sensitive error message")
         val vpnError = VpnError.fromException(exception)
 
-        // Currently this test will FAIL if the fix is not applied,
-        // as the current implementation uses e.stackTraceToString()
         val details = vpnError.details ?: ""
 
         // Stack traces usually contain class names and line numbers
