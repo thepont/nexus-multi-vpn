@@ -15,7 +15,12 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
-        tools:ignore="MissingLeanbackLauncher">
+        android:name=".MainApplication"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.MultiRegionVPN"
+        android:usesCleartextTraffic="true"
+        tools:ignore="MissingLeanbackLauncher"
+        tools:replace="android:theme,android:name,android:label,android:usesCleartextTraffic">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
             android:exported="true"
