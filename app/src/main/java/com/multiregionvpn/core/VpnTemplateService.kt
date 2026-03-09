@@ -73,13 +73,11 @@ class VpnTemplateService @Inject constructor(
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
             
-            // Verify file was written correctly
-            val writtenBytes = authFile.length()
-            val expectedBytes = authContent.toByteArray(Charsets.UTF_8).size.toLong()
-            if (writtenBytes != expectedBytes) {
-                Log.w(TAG, "Auth file size mismatch: written=$writtenBytes, expected=$expectedBytes")
+            // Verify file was written correctly without logging sensitive size info
+            if (authFile.length() == 0L && authContent.isNotEmpty()) {
+                Log.w(TAG, "Auth file is empty after write attempt")
             }
-            Log.d(TAG, "Auth file created: ${authFile.absolutePath}, size: $writtenBytes bytes (UTF-8)")
+            Log.d(TAG, "Auth file successfully created")
         }
         
         // 4. Modify the .ovpn config string

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext traffic for testing with ip-api.com -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">ip-api.com</domain>
+    </domain-config>
+    <!-- Maestro E2E tests require loopback (127.0.0.1) cleartext traffic
+         to communicate with the device agent on port 7001. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
