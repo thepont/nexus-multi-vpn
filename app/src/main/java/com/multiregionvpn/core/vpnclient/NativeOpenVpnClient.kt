@@ -143,7 +143,6 @@ class NativeOpenVpnClient(
                             // Verify credentials are not empty
                             if (username.isEmpty() || password.isEmpty()) {
                                 Log.e(TAG, "❌ Credentials are empty after reading from auth file")
-                                Log.e(TAG, "   Username length: ${username.length}, Password length: ${password.length}")
                                 return@withContext false
                             }
                             
