@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow all cleartext traffic for debug/testing purposes (Maestro, localhost, ip-api.com, etc.) -->
+    <!-- Allow all cleartext for debug/testing purposes (e.g. Maestro, local test servers) -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
