@@ -147,15 +147,10 @@ class NativeOpenVpnClient(
                                 return@withContext false
                             }
                             
-                            // Log encoding info (without exposing actual credentials)
-                            val usernameBytes = username.toByteArray(Charsets.UTF_8)
-                            val passwordBytes = password.toByteArray(Charsets.UTF_8)
-                            Log.d(TAG, "Credentials loaded from auth file (UTF-8):")
-                            Log.d(TAG, "   Username: ${username.length} chars, ${usernameBytes.size} UTF-8 bytes")
-                            Log.d(TAG, "   Password: ${password.length} chars, ${passwordBytes.size} UTF-8 bytes")
-                            
-                            // Verify UTF-8 encoding is valid
+                            // Verify UTF-8 encoding is valid without logging sensitive metadata
                             try {
+                                val usernameBytes = username.toByteArray(Charsets.UTF_8)
+                                val passwordBytes = password.toByteArray(Charsets.UTF_8)
                                 // Attempt to decode as UTF-8 to verify encoding
                                 String(usernameBytes, Charsets.UTF_8)
                                 String(passwordBytes, Charsets.UTF_8)
