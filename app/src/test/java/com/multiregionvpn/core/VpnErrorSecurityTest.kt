@@ -12,7 +12,7 @@ class VpnErrorSecurityTest {
         val vpnError = VpnError.fromException(exception)
 
         // The details should be the simple name of the class, not the stack trace
-        assertTrue("Details should be the exception class name", vpnError.details == "RuntimeException")
+        assertTrue("Details should be the exception class name, but was: ${vpnError.details}", vpnError.details == "RuntimeException")
 
         // Ensure stack trace markers are not present
         assertFalse("Details should not contain stack trace markers", vpnError.details?.contains("at ") == true)
