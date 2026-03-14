@@ -5,4 +5,9 @@
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">ip-api.com</domain>
     </domain-config>
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
 </network-security-config>
