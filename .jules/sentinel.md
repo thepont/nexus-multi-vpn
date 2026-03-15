@@ -1,0 +1,4 @@
+## 2025-11-07 - Stack Trace Exposure in VpnError
+**Vulnerability:** Information Exposure through Error Messages. The `VpnError.fromException()` method used `e.stackTraceToString()` to populate the `details` field, which was then displayed to the user in the UI. This leaked internal application logic, file paths, and potentially sensitive environment information.
+**Learning:** Defaulting to full stack traces for error "details" is dangerous in production-facing code, especially when those details are intended for user display. While helpful for development, it violates the principle of failing securely.
+**Prevention:** Always sanitize exception data before exposing it to the UI or logs. Use `e.javaClass.simpleName` or a generic error code instead of full stack traces. Implement a dedicated security test to verify that sensitive patterns (like "at com.package...") do not appear in user-facing error objects.
