@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        SECURITY RATIONALE (DEBUG ONLY):
+        Maestro E2E testing requires loopback (127.0.0.1) cleartext traffic on port 7001 for driver communication.
+        ip-api.com free tier is used for GeoIP detection and currently requires cleartext HTTP.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">ip-api.com</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
