@@ -67,5 +67,5 @@ appId: "com.multiregionvpn"
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
 - assertVisible:
-    text: "Disconnected|Error|Direct Internet"
+    text: "Disconnected|Error"
 

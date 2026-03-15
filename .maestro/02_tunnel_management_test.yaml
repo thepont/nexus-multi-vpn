@@ -36,7 +36,7 @@ appId: "com.multiregionvpn"
     text: "Fetch Server|Auto-Fetch|Auto Fetch"
     optional: true
 - assertVisible:
-    text: "Region Router"
+    text: "Multi-Region VPN"
 - tapOn:
     text: "Save"
     optional: true
