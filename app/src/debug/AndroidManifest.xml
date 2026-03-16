@@ -16,8 +16,11 @@
     <!--
         DEBUG CONFIGURATION:
         These overrides are required for Maestro E2E testing to communicate with the application
-        via loopback cleartext traffic, and to provide the necessary flexibility for automated
-        testing in CI environments.
+        via loopback cleartext traffic.
+
+        CRITICAL: Per project memory, explicit values for name, label, and theme must be provided
+        along with tools:replace to ensure correct application initialization and to avoid
+        merger conflicts that can destabilize the emulator.
     -->
     <application
         android:name=".MainApplication"
