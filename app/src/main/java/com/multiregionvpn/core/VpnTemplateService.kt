@@ -31,6 +31,22 @@ class VpnTemplateService @Inject constructor(
         private const val TAG = "VpnTemplateService"
     }
 
+    init {
+        // 🛡️ Sentinel: Cleanup any stale authentication files on initialization
+        try {
+            val cacheFiles = context.cacheDir.listFiles()
+            cacheFiles?.forEach { file ->
+                if (file.name.contains("_auth_") && file.name.endsWith(".txt")) {
+                    if (file.delete()) {
+                        Log.d(TAG, "🛡️ Cleaned up stale auth file: ${file.name}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "🛡️ Failed to cleanup stale auth files", e)
+        }
+    }
+
     /**
      * The main public function.
      * Takes a VpnConfig from our DB and returns a complete,
@@ -72,6 +88,12 @@ class VpnTemplateService @Inject constructor(
             // OpenVPN expects: username\npassword\n (with newline, no CRLF)
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
+
+            // 🛡️ Sentinel: Restrict permissions to owner-only for security
+            authFile.setReadable(false, false)
+            authFile.setReadable(true, true)
+            authFile.setWritable(false, false)
+            authFile.setWritable(true, true)
             
             // Verify file was written correctly
             val writtenBytes = authFile.length()
@@ -118,6 +140,13 @@ class VpnTemplateService @Inject constructor(
         withContext(Dispatchers.IO) {
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)
+
+            // 🛡️ Sentinel: Restrict permissions to owner-only for security
+            authFile.setReadable(false, false)
+            authFile.setReadable(true, true)
+            authFile.setWritable(false, false)
+            authFile.setWritable(true, true)
+
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
         }
         

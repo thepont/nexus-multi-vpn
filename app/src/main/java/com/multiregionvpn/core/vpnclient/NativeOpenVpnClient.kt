@@ -54,6 +54,7 @@ class NativeOpenVpnClient(
     private var packetReceiver: ((ByteArray) -> Unit)? = null
     private val connectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var lastError: String? = null
+    private var currentAuthFilePath: String? = null // 🛡️ Sentinel: Store auth file path for cleanup
     
     /**
      * OpenVPN error codes (matching C++ definitions)
@@ -160,6 +161,9 @@ class NativeOpenVpnClient(
                                 String(usernameBytes, Charsets.UTF_8)
                                 String(passwordBytes, Charsets.UTF_8)
                                 Log.d(TAG, "✅ Credentials are valid UTF-8 strings")
+
+                                // 🛡️ Sentinel: Store path for cleanup on disconnect
+                                currentAuthFilePath = authFilePath
                             } catch (e: Exception) {
                                 Log.e(TAG, "❌ Invalid UTF-8 encoding in credentials", e)
                                 return@withContext false
@@ -265,6 +269,9 @@ class NativeOpenVpnClient(
                                      lowerError.contains("username") ||
                                      lowerError.contains("invalid")
                     
+                    // 🛡️ Sentinel: Ensure cleanup on failure
+                    cleanupAuthFile()
+
                     if (isAuthError) {
                         Log.e(TAG, "❌ Authentication failed: $errorMsg")
                         lastError = "Authentication failed: $errorMsg"
@@ -350,6 +357,7 @@ class NativeOpenVpnClient(
                 Log.e(TAG, "❌ Authentication failed", e)
                 connected.set(false)
                 sessionHandle.set(0)
+                cleanupAuthFile() // 🛡️ Sentinel: Ensure cleanup on exception
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to connect to OpenVPN", e)
@@ -357,6 +365,7 @@ class NativeOpenVpnClient(
                 lastError = e.message ?: "Unknown error"
                 connected.set(false)
                 sessionHandle.set(0)
+                cleanupAuthFile() // 🛡️ Sentinel: Ensure cleanup on exception
                 false
             }
         }
@@ -403,6 +412,30 @@ class NativeOpenVpnClient(
                 }
                 sessionHandle.set(0)
             }
+
+            // 🛡️ Sentinel: Cleanup temporary auth file on disconnect
+            cleanupAuthFile()
+        }
+    }
+
+    /**
+     * 🛡️ Sentinel: Deletes the temporary authentication file if it exists.
+     */
+    private fun cleanupAuthFile() {
+        val path = currentAuthFilePath ?: return
+        try {
+            val authFile = java.io.File(path)
+            if (authFile.exists()) {
+                if (authFile.delete()) {
+                    Log.d(TAG, "🛡️ Temporary auth file deleted")
+                } else {
+                    Log.w(TAG, "🛡️ Failed to delete temporary auth file: $path")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "🛡️ Error cleaning up auth file", e)
+        } finally {
+            currentAuthFilePath = null
         }
     }
 
