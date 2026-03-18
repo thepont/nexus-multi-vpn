@@ -16,6 +16,7 @@
 
     <application
         android:name="com.multiregionvpn.MainApplication"
+        tools:node="merge"
         android:allowBackup="true"
         android:label="@string/app_name"
         android:theme="@style/Theme.MultiRegionVPN"
