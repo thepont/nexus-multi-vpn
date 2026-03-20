@@ -1,0 +1,4 @@
+## 2025-05-15 - [VpnError Stack Trace Information Leakage]
+**Vulnerability:** The `VpnError.fromException()` method was capturing and storing the full exception stack trace in its `details` field, which is eventually broadcast to the UI and could be displayed to users.
+**Learning:** General-purpose error handling utilities often default to capturing full error context for debugging, but in a production Android application, this data can expose internal implementation details (package names, file paths, library versions) if it reaches the presentation layer.
+**Prevention:** Avoid using `e.stackTraceToString()` in objects that are destined for the UI. Instead, use `e.javaClass.simpleName` to provide a safe "type" indicator or a sanitized message. Ensure centralized logging (like Logcat or a crash reporting tool) captures the full stack trace for developer use, while keeping the UI-bound error objects clean of sensitive internal data.
