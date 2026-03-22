@@ -596,8 +596,8 @@ class VpnConnectionManager(
         val error: VpnError? = null
     )
     
-    suspend fun createTunnel(tunnelId: String, ovpnConfig: String, authFilePath: String?): TunnelCreationResult {
-        Log.d(TAG, "createTunnel() called: tunnelId=$tunnelId, authFile=${authFilePath?.takeLast(20)}")
+    suspend fun createTunnel(tunnelId: String, ovpnConfig: String, username: String? = null, password: String? = null): TunnelCreationResult {
+        Log.d(TAG, "createTunnel() called: tunnelId=$tunnelId, username=${username?.take(3)}...")
         
         if (connections.containsKey(tunnelId)) {
             val isConnected = connections[tunnelId]?.isConnected() == true
@@ -644,7 +644,7 @@ class VpnConnectionManager(
         
         try {
             // Connect (this starts async connection - returns true immediately if started successfully)
-            connected = client.connect(ovpnConfig, authFilePath)
+            connected = client.connect(ovpnConfig, username, password)
             
             // NOTE: getAppFd() will be called AFTER connection is fully established
             // (see polling loop below where isConnected() becomes true)
