@@ -115,7 +115,8 @@ class WireGuardVpnClient(
      * PersistentKeepalive = 25
      * ```
      * 
-     * @param authFilePath Not used by WireGuard (authentication via cryptographic keys)
+     * @param username Not used by WireGuard (authentication via cryptographic keys)
+     * @param password Not used by WireGuard (authentication via cryptographic keys)
      * @return true if connection successful, false otherwise
      */
     override suspend fun connect(ovpnConfig: String, username: String?, password: String?): Boolean {
