@@ -110,18 +110,12 @@ class BasicConnectionTest {
         val preparedConfig = vpnTemplateService.prepareConfig(testConfig)
         
         assertThat(preparedConfig.ovpnFileContent).isNotEmpty()
-        assertThat(preparedConfig.authFile).isNotNull()
-        assertThat(preparedConfig.authFile?.exists()).isTrue()
+        assertThat(preparedConfig.username).isNotNull()
+        assertThat(preparedConfig.password).isNotNull()
         
         println("✓ OpenVPN config prepared")
         println("   Config size: ${preparedConfig.ovpnFileContent.length} bytes")
-        println("   Auth file: ${preparedConfig.authFile?.absolutePath}")
-        
-        // Verify auth file contents
-        val authLines = preparedConfig.authFile?.readLines()
-        assertThat(authLines).isNotNull()
-        assertThat(authLines!!.size).isAtLeast(2)
-        println("   Auth file has ${authLines.size} lines")
+        println("✓ PreparedConfig contains credentials")
         
         // Create NativeOpenVpnClient
         println("\n   Creating NativeOpenVpnClient...")
@@ -138,7 +132,8 @@ class BasicConnectionTest {
         val startTime = System.currentTimeMillis()
         val connected = client.connect(
             ovpnConfig = preparedConfig.ovpnFileContent,
-            authFilePath = preparedConfig.authFile?.absolutePath
+            username = preparedConfig.username,
+            password = preparedConfig.password
         )
         val elapsedTime = (System.currentTimeMillis() - startTime) / 1000
         
@@ -188,8 +183,6 @@ class BasicConnectionTest {
             println("   - Connection attempt: ❌")
         }
         
-        // Cleanup
-        preparedConfig.authFile?.delete()
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     }
 
