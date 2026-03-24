@@ -1,0 +1,4 @@
+## 2026-03-24 - Secure Handling of VPN Credentials in Memory
+**Vulnerability:** VPN credentials (username and password) were being written to temporary plaintext files (e.g., `nord_auth_*.txt`) in the application's cache directory. This exposed sensitive credentials to any entity with read access to the cache directory or via a compromised device.
+**Learning:** The application used OpenVPN's `auth-user-pass [file]` directive, requiring a physical file for authentication. However, modern VPN client implementations (including OpenVPN 3) can accept credentials directly in memory, eliminating the need for insecure disk storage.
+**Prevention:** Always prefer passing sensitive credentials directly in memory via secure interfaces instead of using temporary files. Eliminate disk footprints for any sensitive data used during authentication or session establishment.
