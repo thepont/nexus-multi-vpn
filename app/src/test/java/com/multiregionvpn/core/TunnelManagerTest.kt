@@ -136,8 +136,8 @@ class TunnelManagerTest {
         val tunnelIdUk = "nordvpn_UK"
         val tunnelIdFr = "nordvpn_FR"
         
-        mockConnectionManager.createTunnel(tunnelIdUk, preparedConfigUk.ovpnFileContent, null)
-        mockConnectionManager.createTunnel(tunnelIdFr, preparedConfigFr.ovpnFileContent, null)
+        mockConnectionManager.createTunnel(tunnelIdUk, preparedConfigUk.ovpnFileContent, null, null)
+        mockConnectionManager.createTunnel(tunnelIdFr, preparedConfigFr.ovpnFileContent, null, null)
         
         // THEN: Both tunnels are created
         val uniqueVpnConfigIds = rules
@@ -173,7 +173,7 @@ class TunnelManagerTest {
         )
         
         // Create tunnel first
-        mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, null)
+        mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, null, null)
         assertTrue(mockConnectionManager.isTunnelConnected(tunnelId))
         
         // WHEN: Processing rules again (tunnel already exists)
@@ -194,7 +194,7 @@ class TunnelManagerTest {
             authFile = null
         )
         
-        mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, null)
+        mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, null, null)
         assertTrue(mockConnectionManager.isTunnelConnected(tunnelId))
         
         // WHEN: All app rules are removed (no active VPN configs)
