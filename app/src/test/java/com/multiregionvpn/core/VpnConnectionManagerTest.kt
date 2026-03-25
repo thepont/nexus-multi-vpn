@@ -124,7 +124,7 @@ class VpnConnectionManagerTest {
         val tunnelId = "test_tunnel"
         val mockClient = MockOpenVpnClient()
         kotlinx.coroutines.runBlocking {
-            mockClient.connect("client\nremote test.com 1194\nproto udp", null)
+            mockClient.connect("client\nremote test.com 1194\nproto udp", null, null)
         }
         mockClient.setPacketReceiver { packet ->
             manager.setPacketReceiver { tid, pkt ->

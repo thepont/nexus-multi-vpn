@@ -67,7 +67,8 @@ class TunnelManagerTest {
             val result = mockConnectionManager.createTunnel(
                 tunnelId = tunnelId,
                 ovpnConfig = preparedConfig.ovpnFileContent,
-                authFilePath = preparedConfig.authFile?.absolutePath
+                username = preparedConfig.username,
+                password = preparedConfig.password
             )
             
             // THEN: Tunnel is created
