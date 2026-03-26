@@ -1,0 +1,4 @@
+## 2024-05-24 - HTTPS Migration for Free GeoIP Services
+**Vulnerability:** Cleartext HTTP traffic was used for GeoIP lookups via `ip-api.com` because its free tier does not support HTTPS. This exposed geographic location data and routing logic to potential Man-in-the-Middle (MITM) attacks.
+**Learning:** Hardening an app's network security policy (e.g., `android:usesCleartextTraffic="false"`) requires a verified compatible backend. If a primary provider doesn't support HTTPS for free, developers may inadvertently leave security holes open (like cleartext exceptions) to maintain functionality.
+**Prevention:** Prioritize service providers that support HTTPS by default, even on free tiers (e.g., `ipwho.is`). Use build-variant specific configurations (`debug` vs `release`) to maintain development flexibility while enforcing strict production security.

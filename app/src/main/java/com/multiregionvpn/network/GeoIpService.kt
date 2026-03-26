@@ -8,22 +8,22 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 
 data class GeoIpResponse(
-    val countryCode: String?,
+    val country_code: String?,
     val country: String?,
     val region: String?
 )
 
 interface GeoIpApi {
-    @GET("json")
+    @GET("/")
     suspend fun getCurrentLocation(): GeoIpResponse
 }
 
 /**
- * Service to get current geographic region using ip-api.com
+ * Service to get current geographic region using ipwho.is
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        .baseUrl("https://ipwho.is/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
@@ -31,7 +31,7 @@ class GeoIpService {
     suspend fun getCurrentRegion(): String? = withContext(Dispatchers.IO) {
         try {
             val response = api.getCurrentLocation()
-            val region = response.countryCode
+            val region = response.country_code
             Log.d(TAG, "Current region detected: $region")
             region
         } catch (e: Exception) {
