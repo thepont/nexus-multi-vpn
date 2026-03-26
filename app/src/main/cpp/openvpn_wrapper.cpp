@@ -1147,7 +1147,6 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
     
     LOGI("openvpn_wrapper_connect called");
     LOGI("Using OpenVPN 3 ClientAPI service");
-    LOGI("Username: %s", username);
     
 #ifdef OPENVPN3_AVAILABLE
     try {
