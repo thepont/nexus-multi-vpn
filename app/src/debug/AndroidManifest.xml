@@ -15,6 +15,7 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
+        android:name=".MainApplication"
         android:theme="@style/Theme.MultiRegionVPN"
         android:label="Region Router"
         android:allowBackup="true"
