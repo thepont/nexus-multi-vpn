@@ -1,14 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext traffic for testing with ip-api.com -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">ip-api.com</domain>
-    </domain-config>
+    <!-- Deny cleartext traffic for all domains (hardened for production) -->
+    <!-- The previous exception for ip-api.com was removed as we migrated to HTTPS via ipwho.is -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
 </network-security-config>
-
-
