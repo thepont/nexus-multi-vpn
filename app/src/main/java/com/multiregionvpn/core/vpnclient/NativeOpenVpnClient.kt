@@ -143,7 +143,6 @@ class NativeOpenVpnClient(
                             // Verify credentials are not empty
                             if (username.isEmpty() || password.isEmpty()) {
                                 Log.e(TAG, "❌ Credentials are empty after reading from auth file")
-                                Log.e(TAG, "   Username length: ${username.length}, Password length: ${password.length}")
                                 return@withContext false
                             }
                             
@@ -151,8 +150,6 @@ class NativeOpenVpnClient(
                             val usernameBytes = username.toByteArray(Charsets.UTF_8)
                             val passwordBytes = password.toByteArray(Charsets.UTF_8)
                             Log.d(TAG, "Credentials loaded from auth file (UTF-8):")
-                            Log.d(TAG, "   Username: ${username.length} chars, ${usernameBytes.size} UTF-8 bytes")
-                            Log.d(TAG, "   Password: ${password.length} chars, ${passwordBytes.size} UTF-8 bytes")
                             
                             // Verify UTF-8 encoding is valid
                             try {
