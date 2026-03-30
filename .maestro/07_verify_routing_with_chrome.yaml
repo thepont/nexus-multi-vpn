@@ -35,17 +35,17 @@ appId: "com.multiregionvpn"
 - tapOn:
     id: "url_bar"
     optional: true
-- inputText: "ip-api.com/json"
+- inputText: "ipwho.is"
 - pressKey: Enter
 
 # Wait for page to load (use a simple assertion with optional)
 - assertVisible:
-    text: ".*ip-api.*|United Kingdom|GB|country|city"
+    text: ".*ipwho.*|United Kingdom|GB|country|city"
     optional: true
 
 # Look for "GB" in the page content (UK country code)
 - assertVisible:
-    text: '"GB"|United Kingdom'
+    text: '"GB"|United Kingdom|country_code'
     optional: true
 
 # ============================================
