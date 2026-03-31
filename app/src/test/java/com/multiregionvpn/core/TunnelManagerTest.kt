@@ -51,8 +51,7 @@ class TunnelManagerTest {
         val preparedConfig = PreparedVpnConfig(
             vpnConfig = vpnConfig,
             ovpnFileContent = "client\nremote uk1234.nordvpn.com 1194\nproto udp",
-            username = "test_user",
-            password = "test_password"
+            authFile = null
         )
         
         coEvery { mockSettingsRepo.getVpnConfigById("vpn-uk-1") } returns vpnConfig
@@ -68,8 +67,7 @@ class TunnelManagerTest {
             val result = mockConnectionManager.createTunnel(
                 tunnelId = tunnelId,
                 ovpnConfig = preparedConfig.ovpnFileContent,
-                username = preparedConfig.username,
-                password = preparedConfig.password
+                authFilePath = preparedConfig.authFile?.absolutePath
             )
             
             // THEN: Tunnel is created
@@ -91,8 +89,7 @@ class TunnelManagerTest {
         val preparedConfig = PreparedVpnConfig(
             vpnConfig = vpnConfig,
             ovpnFileContent = "client\nremote uk1234.nordvpn.com 1194\nproto udp",
-            username = "test_user",
-            password = "test_password"
+            authFile = null
         )
         
         coEvery { mockSettingsRepo.getVpnConfigById("vpn-uk-1") } returns vpnConfig
@@ -122,14 +119,12 @@ class TunnelManagerTest {
         val preparedConfigUk = PreparedVpnConfig(
             vpnConfig = vpnConfigUk,
             ovpnFileContent = "client\nremote uk1234.nordvpn.com 1194\nproto udp",
-            username = "user_uk",
-            password = "pass_uk"
+            authFile = null
         )
         val preparedConfigFr = PreparedVpnConfig(
             vpnConfig = vpnConfigFr,
             ovpnFileContent = "client\nremote fr1234.nordvpn.com 1194\nproto udp",
-            username = "user_fr",
-            password = "pass_fr"
+            authFile = null
         )
         
         coEvery { mockSettingsRepo.getVpnConfigById("vpn-uk-1") } returns vpnConfigUk
@@ -174,12 +169,11 @@ class TunnelManagerTest {
         val preparedConfig = PreparedVpnConfig(
             vpnConfig = vpnConfig,
             ovpnFileContent = "client\nremote uk1234.nordvpn.com 1194\nproto udp",
-            username = "test_user",
-            password = "test_password"
+            authFile = null
         )
         
         // Create tunnel first
-        mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, preparedConfig.username, preparedConfig.password)
+        mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, null)
         assertTrue(mockConnectionManager.isTunnelConnected(tunnelId))
         
         // WHEN: Processing rules again (tunnel already exists)
@@ -197,11 +191,10 @@ class TunnelManagerTest {
         val preparedConfig = PreparedVpnConfig(
             vpnConfig = vpnConfig,
             ovpnFileContent = "client\nremote uk1234.nordvpn.com 1194\nproto udp",
-            username = "test_user",
-            password = "test_password"
+            authFile = null
         )
         
-        mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, preparedConfig.username, preparedConfig.password)
+        mockConnectionManager.createTunnel(tunnelId, preparedConfig.ovpnFileContent, null)
         assertTrue(mockConnectionManager.isTunnelConnected(tunnelId))
         
         // WHEN: All app rules are removed (no active VPN configs)

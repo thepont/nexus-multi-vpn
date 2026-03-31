@@ -61,13 +61,17 @@ class AuthErrorHandlingTest {
         val invalidUsername = "invalid_username"
         val invalidPassword = "invalid_password"
         
+        // Create temporary auth file
+        val authFile = java.io.File(appContext.cacheDir, "test_auth_invalid.txt")
+        authFile.writeText("$invalidUsername\n$invalidPassword")
+
         println("   Using invalid credentials:")
         println("   Username: $invalidUsername")
         println("   Password: ${invalidPassword.take(3)}***")
         println("   Config: ${testConfig.length} bytes")
         
         try {
-            val connected = client.connect(testConfig, invalidUsername, invalidPassword)
+            val connected = client.connect(testConfig, authFile.absolutePath)
             
             if (!connected) {
                 // Connection failed - check error message
@@ -102,7 +106,7 @@ class AuthErrorHandlingTest {
             // If connection failed for another reason, that's also valid
             // The key is that invalid credentials should not succeed
         } finally {
-            // Cleanup
+            authFile.delete()
         }
         
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -124,10 +128,14 @@ class AuthErrorHandlingTest {
             auth-user-pass
         """.trimIndent()
         
+        // Create auth file with empty credentials
+        val authFile = java.io.File(appContext.cacheDir, "test_auth_empty.txt")
+        authFile.writeText("\n")  // Empty username and password
+
         println("   Testing with empty credentials...")
         
         try {
-            val connected = client.connect(testConfig, "", "")
+            val connected = client.connect(testConfig, authFile.absolutePath)
             assertThat(connected).isFalse()
             println("   ✅ Connection correctly failed with empty credentials")
             
@@ -141,16 +149,16 @@ class AuthErrorHandlingTest {
         } catch (e: Exception) {
             println("   ✅ Exception thrown (expected): ${e.javaClass.simpleName}")
         } finally {
-            // Cleanup
+            authFile.delete()
         }
         
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     }
 
     @Test
-    fun test_missingCredentials_handledGracefully() = runBlocking {
+    fun test_missingAuthFile_handledGracefully() = runBlocking {
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        println("🧪 TEST: Missing Credentials Handling")
+        println("🧪 TEST: Missing Auth File Handling")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         val client = NativeOpenVpnClient(appContext, mockVpnService)
@@ -163,11 +171,14 @@ class AuthErrorHandlingTest {
             auth-user-pass
         """.trimIndent()
         
-        println("   Testing with missing credentials (null)...")
+        // Use non-existent auth file
+        val nonExistentFile = java.io.File(appContext.cacheDir, "nonexistent_auth_${System.currentTimeMillis()}.txt")
+
+        println("   Testing with non-existent auth file: ${nonExistentFile.name}")
         
-        val connected = client.connect(testConfig, null, null)
+        val connected = client.connect(testConfig, nonExistentFile.absolutePath)
         assertThat(connected).isFalse()
-        println("   ✅ Connection correctly failed with missing credentials")
+        println("   ✅ Connection correctly failed with missing auth file")
         
         val errorMsg = client.getLastError()
         if (errorMsg != null) {
@@ -196,13 +207,13 @@ class AuthErrorHandlingTest {
         """.trimIndent()
         
         // Use invalid credentials
-        val invalidUsername = "bad_user"
-        val invalidPassword = "bad_password"
+        val authFile = java.io.File(appContext.cacheDir, "test_auth_error_msg.txt")
+        authFile.writeText("bad_user\nbad_pass")
         
         println("   Testing error message preservation...")
         
         try {
-            val connected = client.connect(testConfig, invalidUsername, invalidPassword)
+            val connected = client.connect(testConfig, authFile.absolutePath)
             
             if (!connected) {
                 // Connection failed - error message should be available
@@ -228,7 +239,7 @@ class AuthErrorHandlingTest {
             assertThat(e.message).isNotNull()
             assertThat(e.message).isNotEmpty()
         } finally {
-            // Cleanup
+            authFile.delete()
         }
         
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

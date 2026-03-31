@@ -32,7 +32,7 @@ class VpnConnectionManagerTest {
         
         // WHEN: Creating a tunnel
         val config = "client\nremote test.com 1194\nproto udp"
-        val result = manager.createTunnel("test_tunnel", config, "user", "pass")
+        val result = manager.createTunnel("test_tunnel", config, null)
         
         // THEN: Tunnel is created
         assertTrue(result.success)
@@ -43,10 +43,10 @@ class VpnConnectionManagerTest {
     fun `given tunnel exists, when createTunnel is called again, then returns existing status`() = runTest {
         // GIVEN: A tunnel exists
         val tunnelId = "existing_tunnel"
-        manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", "user", "pass")
+        manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", null)
         
         // WHEN: Trying to create it again
-        val result = manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", "user", "pass")
+        val result = manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", null)
         
         // THEN: Returns true (tunnel already exists and is connected)
         assertTrue(result.success)
@@ -56,7 +56,7 @@ class VpnConnectionManagerTest {
     fun `given tunnel exists, when sendPacketToTunnel is called, then packet is forwarded`() = runTest {
         // GIVEN: A connected tunnel
         val tunnelId = "test_tunnel"
-        manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", "user", "pass")
+        manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", null)
         
         val testPacket = byteArrayOf(1, 2, 3, 4, 5)
         
@@ -86,7 +86,7 @@ class VpnConnectionManagerTest {
     fun `when closeTunnel is called, tunnel is disconnected and removed`() = runTest {
         // GIVEN: A connected tunnel
         val tunnelId = "test_tunnel"
-        manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", "user", "pass")
+        manager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", null)
         assertTrue(manager.isTunnelConnected(tunnelId))
         
         // WHEN: Closing the tunnel
@@ -99,8 +99,8 @@ class VpnConnectionManagerTest {
     @Test
     fun `when closeAll is called, all tunnels are closed`() = runTest {
         // GIVEN: Multiple tunnels
-        manager.createTunnel("tunnel1", "client\nremote test.com 1194\nproto udp", "user", "pass")
-        manager.createTunnel("tunnel2", "client\nremote test.com 1194\nproto udp", "user", "pass")
+        manager.createTunnel("tunnel1", "client\nremote test.com 1194\nproto udp", null)
+        manager.createTunnel("tunnel2", "client\nremote test.com 1194\nproto udp", null)
         
         // WHEN: Closing all tunnels
         manager.closeAll()
@@ -124,7 +124,7 @@ class VpnConnectionManagerTest {
         val tunnelId = "test_tunnel"
         val mockClient = MockOpenVpnClient()
         kotlinx.coroutines.runBlocking {
-            mockClient.connect("client\nremote test.com 1194\nproto udp", "user", "pass")
+            mockClient.connect("client\nremote test.com 1194\nproto udp", null)
         }
         mockClient.setPacketReceiver { packet ->
             manager.setPacketReceiver { tid, pkt ->
@@ -144,7 +144,7 @@ class VpnConnectionManagerTest {
         }
         
         kotlinx.coroutines.runBlocking {
-            customManager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", "user", "pass")
+            customManager.createTunnel(tunnelId, "client\nremote test.com 1194\nproto udp", null)
         }
         
         // WHEN: Simulating packet reception
