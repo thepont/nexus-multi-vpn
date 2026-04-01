@@ -132,7 +132,7 @@ class RealCredentialsTest {
         println("✓ OpenVPN config prepared")
         println("   Config size: ${preparedConfig.ovpnFileContent.length} bytes")
         println("   Auth file: ${preparedConfig.authFile?.name}")
-        
+
         // Verify auth file contents match what we saved
         val authLines = preparedConfig.authFile?.readLines()
         assertThat(authLines).isNotNull()

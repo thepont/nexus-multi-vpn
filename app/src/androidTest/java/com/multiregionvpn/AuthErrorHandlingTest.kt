@@ -64,7 +64,7 @@ class AuthErrorHandlingTest {
         // Create temporary auth file
         val authFile = java.io.File(appContext.cacheDir, "test_auth_invalid.txt")
         authFile.writeText("$invalidUsername\n$invalidPassword")
-        
+
         println("   Using invalid credentials:")
         println("   Username: $invalidUsername")
         println("   Password: ${invalidPassword.take(3)}***")
@@ -131,7 +131,7 @@ class AuthErrorHandlingTest {
         // Create auth file with empty credentials
         val authFile = java.io.File(appContext.cacheDir, "test_auth_empty.txt")
         authFile.writeText("\n")  // Empty username and password
-        
+
         println("   Testing with empty credentials...")
         
         try {
@@ -173,7 +173,7 @@ class AuthErrorHandlingTest {
         
         // Use non-existent auth file
         val nonExistentFile = java.io.File(appContext.cacheDir, "nonexistent_auth_${System.currentTimeMillis()}.txt")
-        
+
         println("   Testing with non-existent auth file: ${nonExistentFile.name}")
         
         val connected = client.connect(testConfig, nonExistentFile.absolutePath)

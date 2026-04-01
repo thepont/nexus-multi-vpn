@@ -72,7 +72,7 @@ class VpnTemplateService @Inject constructor(
             // OpenVPN expects: username\npassword\n (with newline, no CRLF)
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
-            
+
             // Verify file was written correctly
             val writtenBytes = authFile.length()
             val expectedBytes = authContent.toByteArray(Charsets.UTF_8).size.toLong()
@@ -120,7 +120,7 @@ class VpnTemplateService @Inject constructor(
             authFile.writeText(authContent, Charsets.UTF_8)
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
         }
-        
+
         // For local test servers using kylemanna/openvpn image:
         // The server uses ovpn_genconfig which generates a self-signed CA
         // Use verify-x509-name for all local tests - this works reliably with OpenVPN 3

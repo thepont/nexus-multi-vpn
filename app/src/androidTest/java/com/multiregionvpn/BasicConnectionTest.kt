@@ -116,7 +116,7 @@ class BasicConnectionTest {
         println("✓ OpenVPN config prepared")
         println("   Config size: ${preparedConfig.ovpnFileContent.length} bytes")
         println("   Auth file: ${preparedConfig.authFile?.absolutePath}")
-        
+
         // Verify auth file contents
         val authLines = preparedConfig.authFile?.readLines()
         assertThat(authLines).isNotNull()
