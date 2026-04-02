@@ -16,7 +16,7 @@ data class GeoIpResponse(
 )
 
 interface GeoIpApi {
-    @GET("json")
+    @GET("/")
     suspend fun getCurrentLocation(): GeoIpResponse
 }
 
