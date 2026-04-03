@@ -1,0 +1,4 @@
+## 2026-04-02 - HTTPS Hardening and Manifest Security
+**Vulnerability:** GeoIpService was using an insecure HTTP endpoint (`http://ip-api.com/`) which is vulnerable to Man-in-the-Middle (MitM) attacks. Additionally, `android:allowBackup` and `android:usesCleartextTraffic` were set to `true` in the main manifest, increasing the risk of data theft via ADB and unencrypted network communication.
+**Learning:** Production-ready applications must enforce HTTPS at the platform level (via `networkSecurityConfig`) and service level. However, developers must balance this with testing requirements (e.g., Maestro E2E tests often require cleartext loopback communication).
+**Prevention:** Use build-variant-specific manifests and network security configurations to apply strict security for production while maintaining development flexibility. Always prefer HTTPS APIs and use `@SerializedName` when switching providers to maintain data integrity.
