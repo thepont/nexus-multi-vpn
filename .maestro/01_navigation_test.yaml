@@ -5,7 +5,9 @@ appId: "com.multiregionvpn"
 
 - launchApp
 
-# Basic UI presence checks
+- waitForAnimationToEnd
+
+# Basic UI presence checks (matches text using piped regex in Maestro)
 - assertVisible:
-    text: "Region Router|App Routing Rules|Direct Internet"
+    text: "Region Router|Tunnels|Apps|Connections|Settings"
 
