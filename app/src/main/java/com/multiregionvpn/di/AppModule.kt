@@ -14,6 +14,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.converter.scalars.ScalarsConverterFactory
 import javax.inject.Singleton
 
@@ -107,6 +108,7 @@ object AppModule {
         val retrofit = Retrofit.Builder()
             .baseUrl("https://downloads.nordcdn.com/")
             .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
             .build()
         
         return retrofit.create(NordVpnApiService::class.java)
