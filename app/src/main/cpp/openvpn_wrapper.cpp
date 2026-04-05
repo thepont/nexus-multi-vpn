@@ -1353,8 +1353,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         
         // Verify credentials are not empty
         if (session->creds.username.empty() || session->creds.password.empty()) {
-            LOGE("Credentials are empty - username: %zu bytes, password: %zu bytes", 
-                 session->creds.username.length(), session->creds.password.length());
+            LOGE("Credentials are empty");
             session->last_error = "Credentials are empty";
             return OPENVPN_ERROR_INVALID_PARAMS;
         }
@@ -1371,8 +1370,6 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         LOGI("═══════════════════════════════════════════════════════");
         LOGI("Calling provide_creds() on client instance:");
         LOGI("Client pointer: %p", (void*)session->client);
-        LOGI("Username: %zu bytes", session->creds.username.length());
-        LOGI("Password: %zu bytes", session->creds.password.length());
         LOGI("═══════════════════════════════════════════════════════");
         
         Status credsStatus = session->client->provide_creds(session->creds);
@@ -1440,8 +1437,6 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         // This helps verify they weren't corrupted before being passed to provide_creds()
         LOGI("═══════════════════════════════════════════════════════");
         LOGI("Post-provide_creds() verification:");
-        LOGI("  session->creds.username length: %zu bytes", session->creds.username.length());
-        LOGI("  session->creds.password length: %zu bytes", session->creds.password.length());
         LOGI("  Client pointer still valid: %p", (void*)session->client);
         LOGI("═══════════════════════════════════════════════════════");
         
