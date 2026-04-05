@@ -110,7 +110,6 @@ public:
     void setStoredCredentials(const std::string& username, const std::string& password) {
         stored_username_ = username;
         stored_password_ = password;
-        LOGI("Stored credentials for client_auth() callback: username=%zu bytes", username.length());
     }
     
     // Set the Android VpnService instance (called from JNI)
@@ -1351,13 +1350,6 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         
         // Log credential info (without exposing password)
         LOGI("Providing credentials...");
-        LOGI("Username length: %zu bytes (UTF-8)", session->creds.username.length());
-        LOGI("Password length: %zu bytes (UTF-8)", session->creds.password.length());
-        
-        // Verify UTF-8 encoding by checking first byte
-        if (!session->creds.username.empty()) {
-            LOGI("Username first byte: 0x%02x (UTF-8)", (unsigned char)session->creds.username[0]);
-        }
         
         // Verify credentials are not empty
         if (session->creds.username.empty() || session->creds.password.empty()) {
@@ -1472,11 +1464,6 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
                 // Log credential status to verify they weren't cleared
                 LOGI("═══════════════════════════════════════════════════════");
                 LOGI("About to call connect() - verifying credentials:");
-                LOGI("Username length: %zu bytes", session->creds.username.length());
-                LOGI("Password length: %zu bytes", session->creds.password.length());
-                if (!session->creds.username.empty()) {
-                    LOGI("Username first byte: 0x%02x", (unsigned char)session->creds.username[0]);
-                }
                 LOGI("Client instance: %p", (void*)session->client);
                 LOGI("═══════════════════════════════════════════════════════");
                 
