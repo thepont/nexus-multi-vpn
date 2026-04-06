@@ -1567,7 +1567,6 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
 #else
     // OpenVPN 3 not available - this should not happen in production
     LOGE("OpenVPN 3 not available - build must include OpenVPN 3 library");
-    LOGE("Config length: %zu bytes", strlen(config_str));
     session->last_error = "OpenVPN 3 library not compiled into this build. Rebuild with OpenVPN 3 enabled.";
     session->connected = false;
     return OPENVPN_ERROR_UNKNOWN;

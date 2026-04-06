@@ -158,7 +158,7 @@ class NativeOpenVpnClient(
                     return@withContext false
                 }
 
-                Log.d(TAG, "Calling native connect() - config length: ${ovpnConfig.length} bytes")
+                Log.d(TAG, "Calling native connect()...")
                 
                 // Get the TUN file descriptor - try multiple methods
                 var finalTunFd = tunFd  // Use provided FD if available
