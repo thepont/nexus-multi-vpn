@@ -120,14 +120,9 @@ Java_com_multiregionvpn_core_vpnclient_NativeOpenVpnClient_nativeConnect(
         LOGI("Tunnel ID: (not provided)");
     }
     
-    // Verify UTF-8 encoding and log credential info (without logging actual password)
-    jsize usernameLen = env->GetStringUTFLength(username);
-    jsize passwordLen = env->GetStringUTFLength(password);
-    LOGI("Credential encoding: username=%d UTF-8 bytes, password=%d UTF-8 bytes", usernameLen, passwordLen);
-    
-    // Verify strings are valid UTF-8 (GetStringUTFChars ensures this, but log for debugging)
+    // Verify strings are valid UTF-8 (GetStringUTFChars ensures this)
     if (usernameStr && strlen(usernameStr) > 0) {
-        LOGI("Username first char: 0x%02x (valid UTF-8)", (unsigned char)usernameStr[0]);
+        LOGI("Username provided (valid UTF-8)");
     }
     
     // Create OpenVPN session using wrapper
