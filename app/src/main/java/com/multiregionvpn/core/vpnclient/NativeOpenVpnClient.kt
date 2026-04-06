@@ -143,25 +143,6 @@ class NativeOpenVpnClient(
                             // Verify credentials are not empty
                             if (username.isEmpty() || password.isEmpty()) {
                                 Log.e(TAG, "❌ Credentials are empty after reading from auth file")
-                                Log.e(TAG, "   Username length: ${username.length}, Password length: ${password.length}")
-                                return@withContext false
-                            }
-                            
-                            // Log encoding info (without exposing actual credentials)
-                            val usernameBytes = username.toByteArray(Charsets.UTF_8)
-                            val passwordBytes = password.toByteArray(Charsets.UTF_8)
-                            Log.d(TAG, "Credentials loaded from auth file (UTF-8):")
-                            Log.d(TAG, "   Username: ${username.length} chars, ${usernameBytes.size} UTF-8 bytes")
-                            Log.d(TAG, "   Password: ${password.length} chars, ${passwordBytes.size} UTF-8 bytes")
-                            
-                            // Verify UTF-8 encoding is valid
-                            try {
-                                // Attempt to decode as UTF-8 to verify encoding
-                                String(usernameBytes, Charsets.UTF_8)
-                                String(passwordBytes, Charsets.UTF_8)
-                                Log.d(TAG, "✅ Credentials are valid UTF-8 strings")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "❌ Invalid UTF-8 encoding in credentials", e)
                                 return@withContext false
                             }
                         } else {
@@ -177,7 +158,7 @@ class NativeOpenVpnClient(
                     return@withContext false
                 }
 
-                Log.d(TAG, "Calling native connect() - config length: ${ovpnConfig.length} bytes")
+                Log.d(TAG, "Calling native connect()...")
                 
                 // Get the TUN file descriptor - try multiple methods
                 var finalTunFd = tunFd  // Use provided FD if available
