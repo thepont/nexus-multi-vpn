@@ -81,9 +81,18 @@ data class VpnError(
     }
     
     companion object {
+        private const val TAG = "VpnError"
+
         fun fromException(e: Throwable, tunnelId: String? = null): VpnError {
             val errorMsg = e.message ?: "Unknown error"
-            val details = e.stackTraceToString()
+
+            // Log the full stack trace for developer debugging, but do NOT include it
+            // in the VpnError object that may be displayed in the UI to prevent
+            // leaking internal implementation details (Information Exposure).
+            android.util.Log.e(TAG, "VPN Exception occurred: $errorMsg", e)
+
+            // Use only the message for details to provide some context without leaking internals
+            val details = errorMsg
             
             return when {
                 errorMsg.contains("auth", ignoreCase = true) ||
