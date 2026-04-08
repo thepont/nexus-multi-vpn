@@ -23,6 +23,12 @@
         android:usesCleartextTraffic="true"
         tools:replace="android:allowBackup,android:networkSecurityConfig,android:usesCleartextTraffic,android:theme,android:name,android:label"
         tools:ignore="MissingLeanbackLauncher">
+
+        <!--
+          Test Device Admin:
+          Note: TestDeviceOwnerReceiver class is assumed to be provided
+          by the test runner or added in relevant test source sets.
+        -->
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
             android:exported="true"
