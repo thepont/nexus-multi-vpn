@@ -4,6 +4,7 @@ appId: "com.multiregionvpn"
 # Validates region list is visible
 
 - launchApp
+- delay: 5000
 
 # Basic UI presence checks
 - assertVisible:
