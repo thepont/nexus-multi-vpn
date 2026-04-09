@@ -110,7 +110,7 @@ public:
     void setStoredCredentials(const std::string& username, const std::string& password) {
         stored_username_ = username;
         stored_password_ = password;
-        LOGI("Stored credentials for client_auth() callback: username=%zu bytes", username.length());
+        LOGI("Stored credentials for client_auth() callback");
     }
     
     // Set the Android VpnService instance (called from JNI)
@@ -1351,8 +1351,6 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         
         // Log credential info (without exposing password)
         LOGI("Providing credentials...");
-        LOGI("Username length: %zu bytes (UTF-8)", session->creds.username.length());
-        LOGI("Password length: %zu bytes (UTF-8)", session->creds.password.length());
         
         // Verify UTF-8 encoding by checking first byte
         if (!session->creds.username.empty()) {
@@ -1361,8 +1359,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         
         // Verify credentials are not empty
         if (session->creds.username.empty() || session->creds.password.empty()) {
-            LOGE("Credentials are empty - username: %zu bytes, password: %zu bytes", 
-                 session->creds.username.length(), session->creds.password.length());
+            LOGE("Credentials are empty");
             session->last_error = "Credentials are empty";
             return OPENVPN_ERROR_INVALID_PARAMS;
         }
@@ -1377,10 +1374,8 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         // - Then connect_setup() calls submit_creds(state->creds) to update with our credentials
         // - If creds_locked is true, submit_creds() won't update credentials (but this only happens for autologin/embedded)
         LOGI("═══════════════════════════════════════════════════════");
-        LOGI("Calling provide_creds() on client instance:");
+        LOGI("Calling provide_creds() on client instance");
         LOGI("Client pointer: %p", (void*)session->client);
-        LOGI("Username: %zu bytes", session->creds.username.length());
-        LOGI("Password: %zu bytes", session->creds.password.length());
         LOGI("═══════════════════════════════════════════════════════");
         
         Status credsStatus = session->client->provide_creds(session->creds);
@@ -1447,9 +1442,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         // CRITICAL: Add explicit verification that credentials are still in our session struct
         // This helps verify they weren't corrupted before being passed to provide_creds()
         LOGI("═══════════════════════════════════════════════════════");
-        LOGI("Post-provide_creds() verification:");
-        LOGI("  session->creds.username length: %zu bytes", session->creds.username.length());
-        LOGI("  session->creds.password length: %zu bytes", session->creds.password.length());
+        LOGI("Post-provide_creds() verification");
         LOGI("  Client pointer still valid: %p", (void*)session->client);
         LOGI("═══════════════════════════════════════════════════════");
         
@@ -1471,9 +1464,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
                 // CRITICAL: Verify credentials are still valid before connect()
                 // Log credential status to verify they weren't cleared
                 LOGI("═══════════════════════════════════════════════════════");
-                LOGI("About to call connect() - verifying credentials:");
-                LOGI("Username length: %zu bytes", session->creds.username.length());
-                LOGI("Password length: %zu bytes", session->creds.password.length());
+                LOGI("About to call connect() - verifying credentials");
                 if (!session->creds.username.empty()) {
                     LOGI("Username first byte: 0x%02x", (unsigned char)session->creds.username[0]);
                 }
