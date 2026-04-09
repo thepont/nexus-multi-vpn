@@ -4,9 +4,10 @@ appId: "com.multiregionvpn"
 # Validates region list is visible
 
 - launchApp
-- sleep: 5000
+- waitForAnimationToEnd
 
 # Basic UI presence checks
 - assertVisible:
     text: "Region Router|App Routing Rules|Direct Internet"
+    timeout: 10000
 
