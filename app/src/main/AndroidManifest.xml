@@ -32,7 +32,7 @@
         
         <!-- Mobile Activity -->
         <activity
-            android:name=".ui.MainActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.MultiRegionVPN">
             <intent-filter>
