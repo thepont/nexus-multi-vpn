@@ -78,7 +78,7 @@ class VpnTemplateService @Inject constructor(
             val writtenBytes = authFile.length()
             val expectedBytes = authContent.toByteArray(Charsets.UTF_8).size.toLong()
             if (writtenBytes != expectedBytes) {
-                Log.w(TAG, "Auth file size mismatch: written=$writtenBytes, expected=$expectedBytes")
+                Log.w(TAG, "Auth file size mismatch during auth file creation")
             }
         }
         
