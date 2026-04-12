@@ -43,8 +43,9 @@ class RealUserCanDoTest {
     private lateinit var uiDevice: UiDevice
 
     // Real NordVPN credentials from .env
-    private val NORD_USERNAME = "nACm5TMU8vDQhBA9K8xsPARo"
-    private val NORD_PASSWORD = "WBu4meMLw6BPMWxoZpAruMa7"
+    // SECURITY: Use placeholders and pass via test arguments instead of hardcoding (CWE-798)
+    private val NORD_USERNAME = "YOUR_NORDVPN_USERNAME"
+    private val NORD_PASSWORD = "YOUR_NORDVPN_PASSWORD"
 
     @Before
     fun setup() {
