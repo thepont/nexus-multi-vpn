@@ -14,16 +14,17 @@ data class GeoIpResponse(
 )
 
 interface GeoIpApi {
-    @GET("json")
+    @GET("/")
     suspend fun getCurrentLocation(): GeoIpResponse
 }
 
 /**
- * Service to get current geographic region using ip-api.com
+ * Service to get current geographic region using ipwho.is (HTTPS)
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        // SECURITY: Using HTTPS instead of insecure HTTP to prevent MITM (CWE-311)
+        .baseUrl("https://ipwho.is/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
