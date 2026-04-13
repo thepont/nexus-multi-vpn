@@ -12,8 +12,6 @@ class VpnErrorTest {
         val vpnError = VpnError.fromException(exception)
 
         // details should NOT contain the stack trace
-        // In our implementation, details = e.cause?.message ?: errorMsg
-        // Since cause is null, details should be "Sensitive error"
         assertEquals("Sensitive error", vpnError.details)
 
         val stackTrace = exception.stackTraceToString()
