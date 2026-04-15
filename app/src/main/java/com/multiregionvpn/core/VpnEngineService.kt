@@ -16,7 +16,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.util.Log
-import com.multiregionvpn.ui.MainActivity
+import com.multiregionvpn.MainActivity
 import com.multiregionvpn.data.database.AppDatabase
 import com.multiregionvpn.data.repository.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
