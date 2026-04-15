@@ -68,6 +68,9 @@ class VpnTemplateService @Inject constructor(
         // writeText() uses UTF-8 encoding by default, which is correct for OpenVPN
         val authFile = File(context.cacheDir, "nord_auth_${config.id}.txt")
         withContext(Dispatchers.IO) {
+            // SECURITY: Ensure temporary credential file is deleted when the JVM exits
+            authFile.deleteOnExit()
+
             // Ensure proper UTF-8 encoding and line endings
             // OpenVPN expects: username\npassword\n (with newline, no CRLF)
             val authContent = "${creds.username}\n${creds.password}\n"
@@ -116,6 +119,9 @@ class VpnTemplateService @Inject constructor(
         // Create auth file
         val authFile = File(context.cacheDir, "local_test_auth_${config.id}.txt")
         withContext(Dispatchers.IO) {
+            // SECURITY: Ensure temporary credential file is deleted when the JVM exits
+            authFile.deleteOnExit()
+
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
