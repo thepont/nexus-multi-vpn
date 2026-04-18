@@ -9,12 +9,12 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.GET
 
 /**
- * Data class for the ip-api.com response
+ * Data class for the ipwho.is response
  */
 @JsonClass(generateAdapter = true)
 data class IpInfo(
-    @Json(name = "countryCode") val countryCode: String?,
-    @Json(name = "query") val ipAddress: String?,
+    @Json(name = "country_code") val countryCode: String?,
+    @Json(name = "ip") val ipAddress: String?,
     @Json(name = "country") val country: String?,
     @Json(name = "city") val city: String?
 ) {
@@ -41,10 +41,9 @@ object IpCheckService {
         .add(KotlinJsonAdapterFactory())
         .build()
 
-    // Use ip-api.com with HTTP (requires cleartext traffic enabled)
-    // The test manifest has android:usesCleartextTraffic="true"
+    // Use ipwho.is with HTTPS
     private val retrofit = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        .baseUrl("https://ipwho.is/")
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
 
