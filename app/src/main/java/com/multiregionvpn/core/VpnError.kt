@@ -84,6 +84,7 @@ data class VpnError(
         fun fromException(e: Throwable, tunnelId: String? = null): VpnError {
             val errorMsg = e.message ?: "Unknown error"
             // SECURITY: Sanitize error details to avoid leaking stack traces (CWE-209)
+            // We only show the error message to the user, never the internal stack trace.
             val details = errorMsg
             
             return when {
