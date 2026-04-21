@@ -155,7 +155,7 @@ maestro test .maestro/07_verify_routing_with_chrome.yaml
 - Assign Chrome to UK tunnel
 - Start VPN
 - Launch Chrome
-- Navigate to ip-api.com
+- Navigate to ipwho.is
 - Verify UK IP (manual verification)
 
 **Duration:** ~45 seconds
