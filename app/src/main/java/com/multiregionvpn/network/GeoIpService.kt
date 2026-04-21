@@ -23,12 +23,13 @@ interface GeoIpApi {
 /**
  * Service to get current geographic region using ipwho.is (HTTPS)
  */
-class GeoIpService {
-    private val api = Retrofit.Builder()
+class GeoIpService(
+    private val api: GeoIpApi = Retrofit.Builder()
         .baseUrl("https://ipwho.is/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
+) {
     
     suspend fun getCurrentRegion(): String? = withContext(Dispatchers.IO) {
         try {

@@ -22,7 +22,7 @@ Despite implementing proper split tunneling with `addAllowedApplication()`, test
 17:32:45 - addAllowedApplication(com.multiregionvpn.test) called 3x ✅
 17:32:48 - VPN reading packets #1-22 (other system traffic) ✅
 17:32:54 - Tunnel ready (connected + IP + DNS) ✅
-17:32:59 - HTTP request made to ip-api.com
+17:32:59 - HTTP request made to ipwho.is
 17:32:59 - HTTP response: AU (BYPASSED VPN!) ❌
 17:32:59 - Packet reader stopped
 ```
