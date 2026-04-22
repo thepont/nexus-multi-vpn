@@ -83,7 +83,9 @@ data class VpnError(
     companion object {
         fun fromException(e: Throwable, tunnelId: String? = null): VpnError {
             val errorMsg = e.message ?: "Unknown error"
-            val details = e.stackTraceToString()
+            // SECURITY: Sanitize details to exclude stack traces which can leak implementation details.
+            // Only include the exception message for the UI.
+            val details = e.message ?: e.javaClass.simpleName
             
             return when {
                 errorMsg.contains("auth", ignoreCase = true) ||
