@@ -9,3 +9,8 @@
 **Vulnerability:** Production app allowed backups and cleartext traffic.
 **Learning:** Hardening `AndroidManifest.xml` (setting `allowBackup="false"` and `usesCleartextTraffic="false"`) can break E2E testing (like Maestro) which often requires loopback cleartext or specific debug overrides. Using `tools:replace` in BOTH main and debug manifests is necessary to allow debug-only overrides while maintaining production security.
 **Prevention:** Always provide actual values for all attributes listed in `tools:replace` in the debug manifest to avoid merger errors. Ensure debug network configs explicitly allow necessary test traffic (e.g., 127.0.0.1 for Maestro).
+
+## 2025-05-15 - HTTPS for External GeoIP Services
+**Vulnerability:** Usage of insecure HTTP for GeoIP lookups.
+**Learning:** Using HTTP for secondary services like GeoIP lookups is a significant risk in VPN applications as it enables MITM attacks and compromises user anonymity.
+**Prevention:** All external service calls must be migrated to HTTPS.

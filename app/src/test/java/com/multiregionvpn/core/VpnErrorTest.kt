@@ -13,9 +13,6 @@ class VpnErrorTest {
         val vpnError = VpnError.fromException(exception)
 
         assertNotNull(vpnError.details)
-        // Currently, it includes the stack trace, so this assertion will fail if we want it SECURE.
-        // For now, I will write the test to FAIL if it contains typical stack trace markers.
-        // This confirms the vulnerability.
 
         val stackTraceMarker = "at com.multiregionvpn.core.VpnErrorTest"
         assertFalse("Details should not contain stack trace information",
