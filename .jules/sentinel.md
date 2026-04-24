@@ -1,0 +1,4 @@
+## 2026-04-24 - [CRITICAL] Hardcoded Credentials in Instrumentation Tests
+**Vulnerability:** Real NordVPN service credentials (username and password) were hardcoded directly in `app/src/androidTest/java/com/multiregionvpn/RealUserCanDoTest.kt`.
+**Learning:** Integration tests often require real credentials to verify end-to-end functionality. In the rush to verify UI behavior with real backends, developers may bypass secure credential management (like environment variables) and hardcode strings for immediate "works on my machine" results.
+**Prevention:** Always use `InstrumentationRegistry.getArguments()` or `BuildConfig` to inject test secrets at runtime. CI/CD pipelines should provide these via protected environment variables. Add linting or pre-commit hooks to scan for high-entropy strings in test source sets.
