@@ -6,7 +6,6 @@ appId: "com.multiregionvpn"
 - waitForAnimationToEnd
 - assertVisible:
     text: "Region Router"
-    timeout: 30000
 
 # Start VPN if not already connected
 - runFlow:

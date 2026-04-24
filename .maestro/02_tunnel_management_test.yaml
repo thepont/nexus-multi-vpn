@@ -32,9 +32,9 @@ appId: "com.multiregionvpn"
 - tapOn:
     text: "Fetch Server"
     optional: true
+ - waitForAnimationToEnd
 - assertVisible:
     text: "Region Router"
-    timeout: 30000
 - tapOn:
     text: "Save"
     optional: true

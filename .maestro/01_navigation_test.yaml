@@ -6,9 +6,9 @@ appId: "com.multiregionvpn"
 - launchApp
 
 # Basic UI presence checks
+- waitForAnimationToEnd
 - assertVisible:
     text: "Region Router"
-    timeout: 30000
 - assertVisible:
     text: "App Routing Rules"
 - assertVisible:
