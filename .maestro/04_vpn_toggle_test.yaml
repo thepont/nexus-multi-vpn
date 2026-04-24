@@ -6,13 +6,14 @@ appId: "com.multiregionvpn"
 - launchApp
 
 # Verify initial state (any of these)
+- waitForAnimationToEnd
 - assertVisible:
-    text: "Direct Internet|Region Router|App Routing Rules|Protected|Disconnected"
+    text: "Region Router"
 
 # If not connected, turn ON
 - runFlow:
     when:
-      visible: "Direct Internet|Disconnected"
+      visible: "Disconnected"
     commands:
       - tapOn:
           point: "90%,8%"
