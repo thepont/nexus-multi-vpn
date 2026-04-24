@@ -27,16 +27,14 @@ appId: "com.multiregionvpn"
     text: "UK"
     optional: true
 - tapOn:
-    text: "Provider|Template"
-    optional: true
-- tapOn:
     text: "NordVPN|local-test"
     optional: true
 - tapOn:
-    text: "Fetch Server|Auto-Fetch|Auto Fetch"
+    text: "Fetch Server"
     optional: true
 - assertVisible:
     text: "Region Router"
+    timeout: 30000
 - tapOn:
     text: "Save"
     optional: true

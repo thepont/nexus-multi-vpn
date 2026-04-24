@@ -7,5 +7,10 @@ appId: "com.multiregionvpn"
 
 # Basic UI presence checks
 - assertVisible:
-    text: "Region Router|App Routing Rules|Direct Internet"
+    text: "Region Router"
+    timeout: 30000
+- assertVisible:
+    text: "App Routing Rules"
+- assertVisible:
+    text: "Direct Internet"
 
