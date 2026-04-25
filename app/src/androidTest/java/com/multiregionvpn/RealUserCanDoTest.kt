@@ -42,7 +42,7 @@ class RealUserCanDoTest {
     private lateinit var context: Context
     private lateinit var uiDevice: UiDevice
 
-    // Real NordVPN credentials retrieved from instrumentation arguments
+    // Real NordVPN credentials from .env
     private val NORD_USERNAME get() = InstrumentationRegistry.getArguments().getString("NORDVPN_USERNAME") ?: ""
     private val NORD_PASSWORD get() = InstrumentationRegistry.getArguments().getString("NORDVPN_PASSWORD") ?: ""
 
