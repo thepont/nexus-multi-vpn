@@ -9,23 +9,24 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 
 data class GeoIpResponse(
-    @SerializedName("country_code")
     val countryCode: String?,
+    @SerializedName("countryName")
     val country: String?,
+    @SerializedName("regionName")
     val region: String?
 )
 
 interface GeoIpApi {
-    @GET(".")
+    @GET("api/json")
     suspend fun getCurrentLocation(): GeoIpResponse
 }
 
 /**
- * Service to get current geographic region using ipwho.is (HTTPS)
+ * Service to get current geographic region using freeipapi.com (HTTPS)
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("https://ipwho.is/")
+        .baseUrl("https://freeipapi.com/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
