@@ -1,0 +1,4 @@
+## 2026-04-25 - Insecure Credential Storage in Cache
+**Vulnerability:** VPN credentials (username/password) were being written to temporary plaintext files in the application's cache directory to be read by the OpenVPN client. These files were not explicitly deleted after use, posing a risk of sensitive data exposure on rooted devices or via forensic analysis.
+**Learning:** Even though the files were stored in the app's private `cacheDir`, any persistence of plaintext secrets on disk is a security risk. The underlying OpenVPN 3 C++ wrapper already supported in-memory credential passing via `provide_creds()`, making the file-based bridge redundant.
+**Prevention:** Always prioritize in-memory passing of sensitive data between components. Avoid using the file system as a temporary communication channel for secrets. Ensure that any necessary temporary sensitive data is explicitly wiped or use secure OS-level primitives for secret management.

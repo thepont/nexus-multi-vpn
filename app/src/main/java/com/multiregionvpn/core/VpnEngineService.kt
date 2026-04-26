@@ -1137,14 +1137,15 @@ class VpnEngineService : VpnService() {
                         continue
                     }
                     
-                    Log.d(TAG, "VPN config prepared successfully. Auth file: ${preparedConfig.authFile?.absolutePath}")
+                    Log.d(TAG, "VPN config prepared successfully. Username: ${preparedConfig.username?.take(3)}...")
                     
                     // Create tunnel
                     Log.d(TAG, "Attempting to create tunnel $tunnelId...")
                     val result = connectionManager.createTunnel(
                         tunnelId = tunnelId,
                         ovpnConfig = preparedConfig.ovpnFileContent,
-                        authFilePath = preparedConfig.authFile?.absolutePath
+                        username = preparedConfig.username,
+                        password = preparedConfig.password
                     )
                     
                     if (result.success) {
