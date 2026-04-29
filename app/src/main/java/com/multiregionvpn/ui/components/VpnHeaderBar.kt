@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.multiregionvpn.ui.shared.VpnStatus
 
 /**
  * Professional VPN Header Bar (NOC Style)
@@ -39,6 +40,7 @@ fun VpnHeaderBar(
             VpnStatus.CONNECTING -> Color(0xFF2196F3) // Blue
             VpnStatus.DISCONNECTED -> Color(0xFF9E9E9E) // Gray
             VpnStatus.ERROR -> Color(0xFFF44336) // Red
+            else -> Color(0xFF9E9E9E) // Default
         },
         label = "statusColor"
     )
@@ -124,14 +126,3 @@ fun VpnHeaderBar(
         )
     )
 }
-
-/**
- * VPN Status States
- */
-enum class VpnStatus(val displayText: String) {
-    PROTECTED("Protected"),
-    CONNECTING("Connecting"),
-    DISCONNECTED("Disconnected"),
-    ERROR("Error")
-}
-

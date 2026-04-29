@@ -19,7 +19,7 @@
         android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:theme="@style/Theme.MultiRegionVPN"
-        android:name=".MainApplication"
+        android:name="com.multiregionvpn.MainApplication"
         android:label="@string/app_name"
         tools:replace="android:networkSecurityConfig,android:usesCleartextTraffic,android:allowBackup,android:theme,android:name,android:label"
         tools:ignore="MissingLeanbackLauncher">
