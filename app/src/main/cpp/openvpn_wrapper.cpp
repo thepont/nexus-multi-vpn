@@ -1328,7 +1328,7 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         }
         
         LOGI("Config evaluated successfully. Profile: %s", eval.profileName.c_str());
-        LOGI("EvalConfig: autologin=%s, externalPki=%s, userlockedUsername=%s", 
+        LOGI("EvalConfig: autologin=%s, externalPki=%s, userlockedUsername=(redacted)",
              eval.autologin ? "true" : "false",
              eval.externalPki ? "true" : "false",
              eval.userlockedUsername.c_str());

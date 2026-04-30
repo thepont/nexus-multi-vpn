@@ -13,13 +13,13 @@ import retrofit2.http.GET
  */
 @JsonClass(generateAdapter = true)
 data class IpInfo(
-    @Json(name = "country_code") val countryCode: String?,
+    @Json(name = "country_code") val country_code: String?,
     @Json(name = "ip") val ipAddress: String?,
     @Json(name = "country") val country: String?,
     @Json(name = "city") val city: String?
 ) {
     val normalizedCountryCode: String?
-        get() = countryCode
+        get() = country_code
     
     val normalizedIpAddress: String?
         get() = ipAddress

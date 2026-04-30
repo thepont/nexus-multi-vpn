@@ -10,6 +10,7 @@ import retrofit2.http.GET
 
 data class GeoIpResponse(
     @SerializedName("country_code")
+     @SerializedName("country_code")
     val countryCode: String?,
     val country: String?,
     val region: String?
