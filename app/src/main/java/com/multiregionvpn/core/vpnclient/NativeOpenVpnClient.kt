@@ -115,7 +115,7 @@ class NativeOpenVpnClient(
     @JvmName("getAppFd")
     external fun getAppFd(tunnelId: String): Int  // Get app FD from External TUN Factory
 
-    override suspend fun connect(ovpnConfig: String, authFilePath: String?): Boolean {
+    override suspend fun connect(ovpnConfig: String, username: String?, password: String?): Boolean {
         // NOTE: We don't need to call protect() here anymore
         // OpenVPN 3 will call tun_builder_protect() for each socket it creates
         // This is handled in the native C++ wrapper (AndroidOpenVPNClient::tun_builder_protect())
@@ -126,58 +126,29 @@ class NativeOpenVpnClient(
                 Log.i(TAG, "🔌 Connecting using OpenVPN 3 ClientAPI service...")
                 Log.i(TAG, "═══════════════════════════════════════════════════════")
 
-                // Read credentials from auth file if provided
-                val username: String
-                val password: String
-                
-                if (authFilePath != null) {
-                    val authFile = java.io.File(authFilePath)
-                    if (authFile.exists()) {
-                        // Read file as UTF-8 (OpenVPN expects UTF-8)
-                        // readLines() uses UTF-8 by default, which is correct
-                        val lines = authFile.readLines(Charsets.UTF_8)
-                        if (lines.size >= 2) {
-                            username = lines[0].trim()
-                            password = lines[1].trim()
-                            
-                            // Verify credentials are not empty
-                            if (username.isEmpty() || password.isEmpty()) {
-                                Log.e(TAG, "❌ Credentials are empty after reading from auth file")
-                                Log.e(TAG, "   Username length: ${username.length}, Password length: ${password.length}")
-                                return@withContext false
-                            }
-                            
-                            // Log encoding info (without exposing actual credentials)
-                            val usernameBytes = username.toByteArray(Charsets.UTF_8)
-                            val passwordBytes = password.toByteArray(Charsets.UTF_8)
-                            Log.d(TAG, "Credentials loaded from auth file (UTF-8):")
-                            Log.d(TAG, "   Username: ${username.length} chars, ${usernameBytes.size} UTF-8 bytes")
-                            Log.d(TAG, "   Password: ${password.length} chars, ${passwordBytes.size} UTF-8 bytes")
-                            
-                            // Verify UTF-8 encoding is valid
-                            try {
-                                // Attempt to decode as UTF-8 to verify encoding
-                                String(usernameBytes, Charsets.UTF_8)
-                                String(passwordBytes, Charsets.UTF_8)
-                                Log.d(TAG, "✅ Credentials are valid UTF-8 strings")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "❌ Invalid UTF-8 encoding in credentials", e)
-                                return@withContext false
-                            }
-                        } else {
-                            Log.e(TAG, "❌ Auth file does not contain username/password (lines: ${lines.size})")
-                            return@withContext false
-                        }
-                    } else {
-                        Log.e(TAG, "❌ Auth file does not exist: $authFilePath")
-                        return@withContext false
-                    }
-                } else {
-                    Log.e(TAG, "❌ No auth file provided")
+                // Verify credentials are provided
+                if (username == null || password == null) {
+                    Log.e(TAG, "❌ Credentials not provided")
                     return@withContext false
                 }
 
-                Log.d(TAG, "Calling native connect() - config length: ${ovpnConfig.length} bytes")
+                // Verify credentials are not empty
+                if (username.isEmpty() || password.isEmpty()) {
+                    Log.e(TAG, "❌ Credentials are empty")
+                    return@withContext false
+                }
+                
+                // Verify UTF-8 encoding is valid
+                try {
+                    username.toByteArray(Charsets.UTF_8)
+                    password.toByteArray(Charsets.UTF_8)
+                    Log.d(TAG, "✅ Credentials are valid UTF-8 strings")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Invalid UTF-8 encoding in credentials", e)
+                    return@withContext false
+                }
+
+                Log.d(TAG, "Calling native connect()...")
                 
                 // Get the TUN file descriptor - try multiple methods
                 var finalTunFd = tunFd  // Use provided FD if available
@@ -229,7 +200,7 @@ class NativeOpenVpnClient(
                 
                 // Call native connect with VpnService.Builder, TUN FD, VpnService, and tunnel ID
                 val handle = try {
-                    nativeConnect(ovpnConfig, username, password, builder, finalTunFd, vpnService, tunnelIdForConnect)
+                    nativeConnect(ovpnConfig, username!!, password!!, builder, finalTunFd, vpnService, tunnelIdForConnect)
                 } catch (e: UnsatisfiedLinkError) {
                     Log.e(TAG, "❌ UnsatisfiedLinkError - native library not loaded properly", e)
                     lastError = "Native library not loaded: ${e.message}"

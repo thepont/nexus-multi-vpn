@@ -151,8 +151,7 @@ class VpnStartupSequenceTest {
                     }
                 }
                 
-                if (logOutput.contains("VPN config prepared successfully") ||
-                    logOutput.contains("Auth file created")) {
+                if (logOutput.contains("VPN config prepared successfully")) {
                     configDownloadSuccess = true
                     println("✅ Config downloaded successfully!")
                     println("   Socket protection IS working!")
