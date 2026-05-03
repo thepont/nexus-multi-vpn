@@ -42,10 +42,6 @@ class RealUserCanDoTest {
     private lateinit var context: Context
     private lateinit var uiDevice: UiDevice
 
-    // Real NordVPN credentials from .env
-    private val NORD_USERNAME = "nACm5TMU8vDQhBA9K8xsPARo"
-    private val NORD_PASSWORD = "WBu4meMLw6BPMWxoZpAruMa7"
-
     @Before
     fun setup() {
         hiltRule.inject()
@@ -60,6 +56,14 @@ class RealUserCanDoTest {
 
     @Test
     fun mobile_canNavigateToCredentialsAndSave() {
+        val username = getTestArgument("NORDVPN_USERNAME")
+        val password = getTestArgument("NORDVPN_PASSWORD")
+
+        if (username == null || password == null) {
+            log("⚠️ Skipping mobile_canNavigateToCredentialsAndSave - credentials not provided")
+            return
+        }
+
         val rule = createAndroidComposeRule<MainActivity>()
         
         log("🧪 MOBILE: Can user navigate to credentials and save?")
@@ -89,11 +93,11 @@ class RealUserCanDoTest {
         // Enter credentials
         rule.onNodeWithTag("nord_username_textfield")
             .performClick()
-            .performTextReplacement(NORD_USERNAME)
+            .performTextReplacement(username)
         
         rule.onNodeWithTag("nord_password_textfield")
             .performClick()
-            .performTextReplacement(NORD_PASSWORD)
+            .performTextReplacement(password)
         
         log("  ✓ Entered credentials")
         
@@ -464,6 +468,15 @@ class RealUserCanDoTest {
 
     private fun pressKey(keyCode: Int) {
         uiDevice.pressKeyCode(keyCode)
+    }
+
+    private fun getTestArgument(key: String): String? {
+        return try {
+            val bundle = InstrumentationRegistry.getArguments()
+            bundle.getString(key)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun log(message: String) {
