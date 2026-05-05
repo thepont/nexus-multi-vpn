@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.multiregionvpn.ui.shared.VpnStatus
 
 /**
  * Foreground Service that extends VpnService.
@@ -300,6 +301,8 @@ class VpnEngineService : VpnService() {
         }
         
         try {
+            VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTING)
+
             // Get all app rules to determine which apps should use VPN
             // This implements proper split tunneling - only apps with rules use VPN
             // CRITICAL: Use direct database query (not Flow.first()) to ensure we get
@@ -415,6 +418,7 @@ class VpnEngineService : VpnService() {
                 manageTunnels(configsPrepared)
             }
             
+            VpnServiceStateTracker.updateStatus(VpnStatus.PROTECTED)
             Log.i(TAG, "✅ VPN engine started successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error starting VPN", e)
@@ -636,6 +640,7 @@ class VpnEngineService : VpnService() {
     private fun stopVpn() {
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Log.i(TAG, "🛑 SHUTDOWN: Graceful VPN shutdown initiated...")
+        VpnServiceStateTracker.reset()
         Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         try {
