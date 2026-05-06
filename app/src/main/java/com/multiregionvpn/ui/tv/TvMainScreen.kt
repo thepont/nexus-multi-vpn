@@ -110,7 +110,7 @@ fun TvHeaderBar(
             ) {
                 // TODO: Add app icon
                 Text(
-                    text = "Multi-Region VPN",
+                    text = "Region Router",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -128,7 +128,7 @@ fun TvHeaderBar(
                         .size(12.dp)
                         .background(
                             color = when (vpnStatus) {
-                                VpnStatus.CONNECTED -> Color(0xFF4CAF50) // Green
+                                VpnStatus.PROTECTED -> Color(0xFF4CAF50) // Green
                                 VpnStatus.CONNECTING -> Color(0xFF2196F3) // Blue
                                 VpnStatus.DISCONNECTED -> Color(0xFF9E9E9E) // Gray
                                 VpnStatus.ERROR -> Color(0xFFF44336) // Red
@@ -140,7 +140,7 @@ fun TvHeaderBar(
                 // Status text
                 Text(
                     text = when (vpnStatus) {
-                        VpnStatus.CONNECTED -> {
+                        VpnStatus.PROTECTED -> {
                             val dataRateMbps = (liveStats.bytesReceived / 1_000_000.0).toFloat()
                             "Protected ${String.format("%.1f", dataRateMbps)} MB/s"
                         }
@@ -151,7 +151,7 @@ fun TvHeaderBar(
                     fontSize = 20.sp,
                     fontFamily = FontFamily.Monospace, // Monospace for technical feel
                     color = when (vpnStatus) {
-                        VpnStatus.CONNECTED -> Color(0xFF4CAF50)
+                        VpnStatus.PROTECTED -> Color(0xFF4CAF50)
                         VpnStatus.CONNECTING -> Color(0xFF2196F3)
                         VpnStatus.DISCONNECTED -> Color(0xFF9E9E9E)
                         VpnStatus.ERROR -> Color(0xFFF44336)
@@ -161,7 +161,7 @@ fun TvHeaderBar(
             
             // Right: Toggle switch
             Switch(
-                checked = vpnStatus == VpnStatus.CONNECTED || vpnStatus == VpnStatus.CONNECTING,
+                checked = vpnStatus == VpnStatus.PROTECTED || vpnStatus == VpnStatus.CONNECTING,
                 onCheckedChange = onToggleVpn,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color(0xFF4CAF50),
