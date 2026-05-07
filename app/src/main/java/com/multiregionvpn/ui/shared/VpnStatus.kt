@@ -1,11 +1,11 @@
 package com.multiregionvpn.ui.shared
 
 /**
- * Shared VPN status enum used by both Mobile and TV UIs.
+ * Shared VPN status enum used by both Mobile and TV UIs
  */
-enum class VpnStatus(val displayText: String) {
-    PROTECTED("Protected"),
-    CONNECTING("Connecting"),
-    DISCONNECTED("Disconnected"),
-    ERROR("Error")
+enum class VpnStatus {
+    CONNECTED,
+    DISCONNECTED,
+    CONNECTING,
+    ERROR
 }

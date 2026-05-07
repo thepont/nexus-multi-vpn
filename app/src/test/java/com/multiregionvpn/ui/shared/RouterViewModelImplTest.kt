@@ -330,11 +330,11 @@ class RouterViewModelImplTest {
         assertThat(viewModel.vpnStatus.value).isEqualTo(VpnStatus.DISCONNECTED)
         
         // WHEN: Service starts
-        VpnServiceStateTracker.updateStatus(VpnStatus.PROTECTED)
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTED)
         runCurrent()
         
         // THEN: Status is updated to CONNECTED
-        assertThat(viewModel.vpnStatus.value).isEqualTo(VpnStatus.PROTECTED)
+        assertThat(viewModel.vpnStatus.value).isEqualTo(VpnStatus.CONNECTED)
     }
 
     @Test
