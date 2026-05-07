@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Professional VPN Header Bar (NOC Style)
- * 
+ *
  * Persistent header showing VPN status, data rate, and quick toggle.
  * Designed for "Network Operations Center" aesthetics.
  */
@@ -57,7 +57,7 @@ fun VpnHeaderBar(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(28.dp)
                 )
-                
+
                 // App name
                 Text(
                     text = "Region Router",
@@ -86,7 +86,7 @@ fun VpnHeaderBar(
                         ),
                         color = statusColor
                     )
-                    
+
                     // Data rate (only show when protected)
                     if (status == VpnStatus.PROTECTED && dataRateMbps > 0.0) {
                         Text(
@@ -107,7 +107,7 @@ fun VpnHeaderBar(
                         )
                     }
                 }
-                
+
                 // Compact toggle switch
                 Switch(
                     checked = isVpnRunning,
@@ -134,4 +134,3 @@ enum class VpnStatus(val displayText: String) {
     DISCONNECTED("Disconnected"),
     ERROR("Error")
 }
-

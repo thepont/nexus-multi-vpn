@@ -107,4 +107,3 @@ enum class NavTab(
     CONNECTIONS("Connections", Icons.Filled.Timeline),
     SETTINGS("Settings", Icons.Filled.Settings)
 }
-
