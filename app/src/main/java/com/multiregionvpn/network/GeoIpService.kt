@@ -19,9 +19,6 @@ interface GeoIpApi {
     suspend fun getCurrentLocation(): GeoIpResponse
 }
 
-/**
- * Service to get current geographic region using secure ipwho.is API.
- */
 class GeoIpService {
     private val api = Retrofit.Builder()
         .baseUrl("https://ipwho.is/")

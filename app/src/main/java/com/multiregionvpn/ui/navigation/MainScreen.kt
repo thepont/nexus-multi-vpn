@@ -103,8 +103,7 @@ enum class NavTab(
     val icon: ImageVector
 ) {
     TUNNELS("Tunnels", Icons.Filled.VpnKey),
-    APP_RULES("Apps", Icons.Filled.Apps),
+    APP_RULES("App Rules", Icons.Filled.Apps),
     CONNECTIONS("Connections", Icons.Filled.Timeline),
     SETTINGS("Settings", Icons.Filled.Settings)
 }
-
