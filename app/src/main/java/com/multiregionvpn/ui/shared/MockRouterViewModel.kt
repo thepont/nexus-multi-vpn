@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.multiregionvpn.ui.shared.model.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStats
+import com.multiregionvpn.ui.shared.model.ServerGroup
+import com.multiregionvpn.ui.shared.model.AppRule
 
 /**
  * Mock implementation of RouterViewModel for UI development and testing

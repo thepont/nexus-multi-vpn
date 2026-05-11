@@ -16,7 +16,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.multiregionvpn.ui.shared.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStatus
 
 /**
  * Professional VPN Header Bar (NOC Style)

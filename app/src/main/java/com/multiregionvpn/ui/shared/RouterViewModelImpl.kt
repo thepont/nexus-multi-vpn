@@ -8,6 +8,10 @@ import androidx.lifecycle.viewModelScope
 import com.multiregionvpn.core.ConnectionTracker
 import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.core.VpnServiceStateTracker
+import com.multiregionvpn.ui.shared.model.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStats
+import com.multiregionvpn.ui.shared.model.ServerGroup
+import com.multiregionvpn.ui.shared.model.AppRule
 import com.multiregionvpn.data.GeoBlockedApps
 import com.multiregionvpn.data.database.AppRule as DbAppRule
 import com.multiregionvpn.data.database.VpnConfig
@@ -74,14 +78,12 @@ class RouterViewModelImpl @Inject constructor(
         Log.i(TAG, "📱 RouterViewModelImpl initializing...")
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         
-        // Initialize state from backend
-        viewModelScope.launch(exceptionHandler) {
-            loadServerGroups()
-            loadAppRules()
-            loadInstalledApps()
-            observeVpnStatus()
-            observeLiveStats()
-        }
+        // Initialize state from backend in separate coroutines to avoid blocking
+        viewModelScope.launch(exceptionHandler) { loadServerGroups() }
+        viewModelScope.launch(exceptionHandler) { loadAppRules() }
+        viewModelScope.launch(exceptionHandler) { loadInstalledApps() }
+        viewModelScope.launch(exceptionHandler) { observeVpnStatus() }
+        viewModelScope.launch(exceptionHandler) { observeLiveStats() }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════

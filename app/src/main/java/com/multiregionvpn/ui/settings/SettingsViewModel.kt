@@ -26,7 +26,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.core.VpnEngineService
 import com.multiregionvpn.core.VpnServiceStateTracker
-import com.multiregionvpn.ui.shared.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStatus
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(

@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.multiregionvpn.ui.shared.RouterViewModel
-import com.multiregionvpn.ui.shared.ServerGroup
+import com.multiregionvpn.ui.shared.model.ServerGroup
 
 /**
  * TV Tunnels Screen - Provider-first tunnel list

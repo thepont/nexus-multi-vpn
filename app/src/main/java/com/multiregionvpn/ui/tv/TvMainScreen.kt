@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.multiregionvpn.ui.shared.RouterViewModel
 import com.multiregionvpn.ui.shared.RouterViewModelImpl
-import com.multiregionvpn.ui.shared.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStatus
 
 /**
  * TV Main Screen - "Network Operations Center" (NOC) Design

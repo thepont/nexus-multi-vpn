@@ -7,7 +7,7 @@ import com.multiregionvpn.core.vpnclient.OpenVpnClient
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
 import com.multiregionvpn.core.vpnclient.WireGuardVpnClient
 import com.multiregionvpn.core.vpnclient.AuthenticationException
-import com.multiregionvpn.ui.shared.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStatus
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.GlobalScope

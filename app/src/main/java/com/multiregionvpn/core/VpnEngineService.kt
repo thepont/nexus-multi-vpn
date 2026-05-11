@@ -32,7 +32,7 @@ import kotlinx.coroutines.flow.first
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.multiregionvpn.ui.shared.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStatus
 
 /**
  * Foreground Service that extends VpnService.
