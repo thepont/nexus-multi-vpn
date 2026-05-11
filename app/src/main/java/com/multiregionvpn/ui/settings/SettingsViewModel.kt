@@ -25,7 +25,7 @@ import android.content.IntentFilter
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.core.VpnEngineService
-import com.multiregionvpn.ui.components.VpnStatus
+import com.multiregionvpn.ui.shared.VpnStatus
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -230,13 +230,7 @@ class SettingsViewModel @Inject constructor(
             context.startService(intent)
         }
         
-        // After a short delay, assume connected (will be updated by service callbacks)
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(3000)
-            if (_uiState.value.isVpnRunning) {
-                _uiState.update { it.copy(vpnStatus = VpnStatus.PROTECTED) }
-            }
-        }
+        // Note: Status will be updated via VpnEngineService callbacks in production
         
         android.util.Log.d("SettingsViewModel", "startVpn() completed - status set to CONNECTING")
     }
