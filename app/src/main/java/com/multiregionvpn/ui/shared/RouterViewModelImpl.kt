@@ -7,6 +7,11 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.multiregionvpn.core.ConnectionTracker
 import com.multiregionvpn.core.VpnEngineService
+import com.multiregionvpn.core.VpnServiceStateTracker
+import com.multiregionvpn.ui.shared.model.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStats
+import com.multiregionvpn.ui.shared.model.ServerGroup
+import com.multiregionvpn.ui.shared.model.AppRule
 import com.multiregionvpn.data.GeoBlockedApps
 import com.multiregionvpn.data.database.AppRule as DbAppRule
 import com.multiregionvpn.data.database.VpnConfig
@@ -73,14 +78,12 @@ class RouterViewModelImpl @Inject constructor(
         Log.i(TAG, "📱 RouterViewModelImpl initializing...")
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         
-        // Initialize state from backend
-        viewModelScope.launch(exceptionHandler) {
-            loadServerGroups()
-            loadAppRules()
-            loadInstalledApps()
-            observeVpnStatus()
-            observeLiveStats()
-        }
+        // Initialize state from backend in separate coroutines to avoid blocking
+        viewModelScope.launch(exceptionHandler) { loadServerGroups() }
+        viewModelScope.launch(exceptionHandler) { loadAppRules() }
+        viewModelScope.launch(exceptionHandler) { loadInstalledApps() }
+        viewModelScope.launch(exceptionHandler) { observeVpnStatus() }
+        viewModelScope.launch(exceptionHandler) { observeLiveStats() }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -301,28 +304,16 @@ class RouterViewModelImpl @Inject constructor(
     }
     
     /**
-     * Monitor VPN engine service status.
-     * 
-     * Polls VpnEngineService.isRunning() every second to update UI status.
-     * In a future refactor, this could be replaced with a StateFlow from the service.
+     * Monitor VPN engine service status from shared tracker.
      */
     private suspend fun observeVpnStatus() {
         viewModelScope.launch {
-            Log.d(TAG, "🔍 Starting VPN status observation...")
-            while (true) {
-                val isRunning = VpnEngineService.isRunning()
-                val newStatus = when {
-                    isRunning -> VpnStatus.CONNECTED
-                    else -> VpnStatus.DISCONNECTED
+            Log.d(TAG, "🔍 Starting VPN status observation from shared tracker...")
+            VpnServiceStateTracker.status.collect { status ->
+                if (_vpnStatus.value != status) {
+                    Log.d(TAG, "   Status changed: ${_vpnStatus.value} → $status")
+                    _vpnStatus.value = status
                 }
-                
-                // Only update if status changed (reduces UI churn)
-                if (_vpnStatus.value != newStatus) {
-                    Log.d(TAG, "   Status changed: ${_vpnStatus.value} → $newStatus")
-                    _vpnStatus.value = newStatus
-                }
-                
-                kotlinx.coroutines.delay(1000)
             }
         }
     }

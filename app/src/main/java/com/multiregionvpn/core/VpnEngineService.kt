@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.multiregionvpn.ui.shared.model.VpnStatus
 
 /**
  * Foreground Service that extends VpnService.
@@ -79,6 +80,7 @@ class VpnEngineService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         runningInstance = this  // Set static reference for socket protection
+        VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
         createNotificationChannel()
         // Initialize VpnConnectionManager early so it's available throughout service lifetime
         // This ensures getInstance() calls don't fail
@@ -277,6 +279,8 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "🚀 startVpn() called")
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         
+        VpnServiceStateTracker.updateStatus(VpnStatus.CONNECTING)
+
         if (vpnInterface != null) {
             Log.w(TAG, "VPN already started")
             return
@@ -696,6 +700,8 @@ class VpnEngineService : VpnService() {
             Log.i(TAG, "SHUTDOWN Final Step: Calling stopSelf()...")
             stopSelf()
             
+            VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
+
             Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             Log.i(TAG, "✅ SHUTDOWN COMPLETE: VPN gracefully stopped, internet restored")
             Log.i(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -810,6 +816,8 @@ class VpnEngineService : VpnService() {
         Log.i(TAG, "🛑 onDestroy() called - VPN service shutting down")
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         
+        VpnServiceStateTracker.updateStatus(VpnStatus.DISCONNECTED)
+
         // Unregister network callback
         unregisterNetworkCallback()
         

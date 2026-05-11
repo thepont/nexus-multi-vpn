@@ -25,7 +25,8 @@ import android.content.IntentFilter
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.core.VpnEngineService
-import com.multiregionvpn.ui.components.VpnStatus
+import com.multiregionvpn.core.VpnServiceStateTracker
+import com.multiregionvpn.ui.shared.model.VpnStatus
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -90,6 +91,13 @@ class SettingsViewModel @Inject constructor(
     private fun loadAllData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
+
+            // Observe VPN status from shared tracker
+            launch {
+                VpnServiceStateTracker.status.collect { status ->
+                    _uiState.update { it.copy(vpnStatus = status) }
+                }
+            }
 
             // 1. Get Nord Credentials (UPDATED)
             val nordCreds = settingsRepo.getProviderCredentials("nordvpn")
@@ -215,11 +223,7 @@ class SettingsViewModel @Inject constructor(
     fun startVpn(context: android.content.Context) {
         android.util.Log.d("SettingsViewModel", "startVpn() called - sending ACTION_START")
         
-        // Set status to CONNECTING immediately
-        _uiState.update { it.copy(
-            isVpnRunning = true,
-            vpnStatus = VpnStatus.CONNECTING
-        ) }
+        _uiState.update { it.copy(isVpnRunning = true) }
         
         val intent = android.content.Intent(context, com.multiregionvpn.core.VpnEngineService::class.java).apply {
             action = com.multiregionvpn.core.VpnEngineService.ACTION_START
@@ -230,13 +234,7 @@ class SettingsViewModel @Inject constructor(
             context.startService(intent)
         }
         
-        // After a short delay, assume connected (will be updated by service callbacks)
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(3000)
-            if (_uiState.value.isVpnRunning) {
-                _uiState.update { it.copy(vpnStatus = VpnStatus.PROTECTED) }
-            }
-        }
+        // Note: Status will be updated via VpnEngineService callbacks in production
         
         android.util.Log.d("SettingsViewModel", "startVpn() completed - status set to CONNECTING")
     }
@@ -249,10 +247,9 @@ class SettingsViewModel @Inject constructor(
         context.startService(intent)
         _uiState.update { it.copy(
             isVpnRunning = false,
-            vpnStatus = VpnStatus.DISCONNECTED,
             dataRateMbps = 0.0
         ) }
-        android.util.Log.d("SettingsViewModel", "stopVpn() completed - status set to DISCONNECTED")
+        android.util.Log.d("SettingsViewModel", "stopVpn() completed")
     }
     
     fun fetchNordVpnServer(regionId: String, callback: (String?) -> Unit) {

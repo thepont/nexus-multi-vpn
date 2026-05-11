@@ -7,6 +7,7 @@ import com.multiregionvpn.core.vpnclient.OpenVpnClient
 import com.multiregionvpn.core.vpnclient.NativeOpenVpnClient
 import com.multiregionvpn.core.vpnclient.WireGuardVpnClient
 import com.multiregionvpn.core.vpnclient.AuthenticationException
+import com.multiregionvpn.ui.shared.model.VpnStatus
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.GlobalScope
@@ -548,11 +549,21 @@ class VpnConnectionManager(
             val connected = client.isConnected()
             "$id=${if (connected) "✅" else "⏳"}"
         }
+        val anyConnected = connections.values.any { it.isConnected() }
         val hasConnecting = connections.values.any { client ->
             // Check if client is not connected (this includes connecting state)
             // Note: isConnected() might return true for connecting=true, but we check anyway
             !client.isConnected()
         }
+
+        // Update shared tracker status
+        val newStatus = when {
+            anyConnected -> VpnStatus.PROTECTED
+            hasConnecting -> VpnStatus.CONNECTING
+            else -> VpnStatus.DISCONNECTED
+        }
+        VpnServiceStateTracker.updateStatus(newStatus)
+
         val totalConnections = connections.size
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         Log.i(TAG, "📢 notifyConnectionStateChanged() called")

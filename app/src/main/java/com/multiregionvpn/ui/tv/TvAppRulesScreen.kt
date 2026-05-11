@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import com.multiregionvpn.ui.shared.AppRule
+import com.multiregionvpn.ui.shared.model.AppRule
 import com.multiregionvpn.ui.shared.RouterViewModel
 
 /**
@@ -116,7 +116,7 @@ fun TvAppRulesScreen(
 @Composable
 fun TvAppRuleCard(
     app: AppRule,
-    serverGroups: List<com.multiregionvpn.ui.shared.ServerGroup>,
+    serverGroups: List<com.multiregionvpn.ui.shared.model.ServerGroup>,
     onClick: () -> Unit,
     onRuleChange: (String?) -> Unit
 ) {
@@ -244,7 +244,7 @@ fun TvAppRuleCard(
 @Composable
 fun TvRoutingMenu(
     app: AppRule,
-    serverGroups: List<com.multiregionvpn.ui.shared.ServerGroup>,
+    serverGroups: List<com.multiregionvpn.ui.shared.model.ServerGroup>,
     onDismiss: () -> Unit,
     onSelectGroup: (String?) -> Unit
 ) {

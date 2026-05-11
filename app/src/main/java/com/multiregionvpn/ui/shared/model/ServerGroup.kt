@@ -1,4 +1,4 @@
-package com.multiregionvpn.ui.shared
+package com.multiregionvpn.ui.shared.model
 
 /**
  * Represents a logical group of VPN servers

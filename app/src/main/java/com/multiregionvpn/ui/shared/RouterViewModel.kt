@@ -2,6 +2,10 @@ package com.multiregionvpn.ui.shared
 
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.StateFlow
+import com.multiregionvpn.ui.shared.model.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStats
+import com.multiregionvpn.ui.shared.model.ServerGroup
+import com.multiregionvpn.ui.shared.model.AppRule
 
 /**
  * Shared ViewModel interface for both Mobile and TV UIs
@@ -88,13 +92,4 @@ abstract class RouterViewModel : ViewModel() {
     abstract fun onRemoveServerGroup(group: ServerGroup)
 }
 
-/**
- * Live VPN statistics
- */
-data class VpnStats(
-    val bytesSent: Long = 0L,
-    val bytesReceived: Long = 0L,
-    val connectionTimeSeconds: Long = 0L,
-    val activeConnections: Int = 0
-)
 

@@ -1,4 +1,4 @@
-package com.multiregionvpn.ui.shared
+package com.multiregionvpn.ui.shared.model
 
 import android.graphics.drawable.Drawable
 

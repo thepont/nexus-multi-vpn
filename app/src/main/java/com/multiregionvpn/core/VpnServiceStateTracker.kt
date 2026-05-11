@@ -1,7 +1,7 @@
 package com.multiregionvpn.core
 
-import com.multiregionvpn.ui.shared.VpnStats
-import com.multiregionvpn.ui.shared.VpnStatus
+import com.multiregionvpn.ui.shared.model.VpnStats
+import com.multiregionvpn.ui.shared.model.VpnStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
