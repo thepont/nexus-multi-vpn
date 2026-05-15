@@ -18,7 +18,7 @@ class VpnStatusTest {
         assertEquals(4, allStates.size, "VpnStatus should have 4 states")
         
         // AND: Should contain all expected states
-        assertTrue(allStates.contains(VpnStatus.PROTECTED), "Should have CONNECTED state")
+        assertTrue(allStates.contains(VpnStatus.PROTECTED), "Should have PROTECTED state")
         assertTrue(allStates.contains(VpnStatus.DISCONNECTED), "Should have DISCONNECTED state")
         assertTrue(allStates.contains(VpnStatus.CONNECTING), "Should have CONNECTING state")
         assertTrue(allStates.contains(VpnStatus.ERROR), "Should have ERROR state")
@@ -33,9 +33,9 @@ class VpnStatusTest {
         val error = VpnStatus.ERROR
         
         // THEN: All should be different
-        assertTrue(connected != disconnected, "CONNECTED != DISCONNECTED")
-        assertTrue(connected != connecting, "CONNECTED != CONNECTING")
-        assertTrue(connected != error, "CONNECTED != ERROR")
+        assertTrue(connected != disconnected, "PROTECTED != DISCONNECTED")
+        assertTrue(connected != connecting, "PROTECTED != CONNECTING")
+        assertTrue(connected != error, "PROTECTED != ERROR")
         assertTrue(disconnected != connecting, "DISCONNECTED != CONNECTING")
         assertTrue(disconnected != error, "DISCONNECTED != ERROR")
         assertTrue(connecting != error, "CONNECTING != ERROR")
@@ -46,7 +46,7 @@ class VpnStatusTest {
         // GIVEN: VpnStatus values
         // WHEN: Converting to string
         // THEN: Should match enum name
-        assertEquals("CONNECTED", VpnStatus.PROTECTED.name)
+        assertEquals("PROTECTED", VpnStatus.PROTECTED.name)
         assertEquals("DISCONNECTED", VpnStatus.DISCONNECTED.name)
         assertEquals("CONNECTING", VpnStatus.CONNECTING.name)
         assertEquals("ERROR", VpnStatus.ERROR.name)
