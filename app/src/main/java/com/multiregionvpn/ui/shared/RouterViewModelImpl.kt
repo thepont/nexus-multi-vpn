@@ -74,13 +74,12 @@ class RouterViewModelImpl @Inject constructor(
         Log.i(TAG, "═══════════════════════════════════════════════════════")
         
         // Initialize state from backend
-        viewModelScope.launch(exceptionHandler) {
-            loadServerGroups()
-            loadAppRules()
-            loadInstalledApps()
-            observeVpnStatus()
-            observeLiveStats()
-        }
+        // Each call is launched in its own coroutine because some contain non-terminating Flow collectors
+        viewModelScope.launch(exceptionHandler) { loadServerGroups() }
+        viewModelScope.launch(exceptionHandler) { loadAppRules() }
+        viewModelScope.launch(exceptionHandler) { loadInstalledApps() }
+        viewModelScope.launch(exceptionHandler) { observeVpnStatus() }
+        viewModelScope.launch(exceptionHandler) { observeLiveStats() }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
