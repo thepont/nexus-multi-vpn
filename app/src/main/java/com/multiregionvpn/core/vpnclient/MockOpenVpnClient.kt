@@ -15,7 +15,7 @@ class MockOpenVpnClient : OpenVpnClient {
     var sentPackets = mutableListOf<ByteArray>()
     var receivedPackets = mutableListOf<ByteArray>()
     
-    override suspend fun connect(ovpnConfig: String, authFilePath: String?): Boolean {
+    override suspend fun connect(ovpnConfig: String, username: String?, password: String?): Boolean {
         connectionAttempts++
         
         // Validate config has required elements
