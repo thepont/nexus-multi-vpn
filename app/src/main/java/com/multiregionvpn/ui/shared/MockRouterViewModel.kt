@@ -166,7 +166,7 @@ class MockRouterViewModel : RouterViewModel() {
             // Simulate async connection (would be real in production)
             CoroutineScope(Dispatchers.Default).launch {
                 delay(2000) // 2 second connection time
-                _vpnStatus.value = VpnStatus.CONNECTED
+                _vpnStatus.value = VpnStatus.PROTECTED
                 
                 // Start simulating stats
                 simulateLiveStats()
@@ -250,7 +250,7 @@ class MockRouterViewModel : RouterViewModel() {
         var bytesReceived = 0L
         var connectionTime = 0L
         
-        while (_vpnStatus.value == VpnStatus.CONNECTED) {
+        while (_vpnStatus.value == VpnStatus.PROTECTED) {
             // Simulate traffic (random increase)
             bytesSent += (100..1000).random().toLong()
             bytesReceived += (500..5000).random().toLong()
