@@ -8,10 +8,11 @@ interface OpenVpnClient {
     /**
      * Connects to the VPN using the provided OpenVPN configuration.
      * @param ovpnConfig The complete .ovpn configuration file content
-     * @param authFilePath Path to file containing username and password (one per line)
+     * @param username The VPN username
+     * @param password The VPN password
      * @return true if connection was initiated successfully, false otherwise
      */
-    suspend fun connect(ovpnConfig: String, authFilePath: String?): Boolean
+    suspend fun connect(ovpnConfig: String, username: String?, password: String?): Boolean
     
     /**
      * Sends a packet to the VPN tunnel.

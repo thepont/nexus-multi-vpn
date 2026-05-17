@@ -28,7 +28,7 @@ class MockOpenVpnClientTest {
         """.trimIndent()
         
         // WHEN: Connecting
-        val result = client.connect(validConfig, null)
+        val result = client.connect(validConfig, null, null)
         
         // THEN: Connection succeeds
         assertThat(result).isTrue()
@@ -42,7 +42,7 @@ class MockOpenVpnClientTest {
         val invalidConfig = "client"
         
         // WHEN: Connecting
-        val result = client.connect(invalidConfig, null)
+        val result = client.connect(invalidConfig, null, null)
         
         // THEN: Connection fails
         assertThat(result).isFalse()
@@ -57,7 +57,7 @@ class MockOpenVpnClientTest {
             remote uk1234.nordvpn.com 1194
             proto udp
         """.trimIndent()
-        client.connect(validConfig, null)
+        client.connect(validConfig, null, null)
         
         val testPacket = byteArrayOf(1, 2, 3, 4, 5)
         
@@ -89,7 +89,7 @@ class MockOpenVpnClientTest {
             remote uk1234.nordvpn.com 1194
             proto udp
         """.trimIndent()
-        client.connect(validConfig, null)
+        client.connect(validConfig, null, null)
         assertThat(client.isConnected()).isTrue()
         
         // WHEN: Disconnecting

@@ -17,5 +17,8 @@ echo "=== Installed versions ==="
 cmake --version
 ninja --version
 
+echo "=== Accepting Android SDK Licenses ==="
+yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
 echo "=== Android SDK Components ==="
 $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed

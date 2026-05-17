@@ -126,20 +126,12 @@ class RealCredentialsTest {
         }
         
         assertThat(preparedConfig.ovpnFileContent).isNotEmpty()
-        assertThat(preparedConfig.authFile).isNotNull()
-        assertThat(preparedConfig.authFile?.exists()).isTrue()
+        assertThat(preparedConfig.username).isEqualTo(username)
+        assertThat(preparedConfig.password).isEqualTo(password)
         
         println("✓ OpenVPN config prepared")
         println("   Config size: ${preparedConfig.ovpnFileContent.length} bytes")
-        println("   Auth file: ${preparedConfig.authFile?.name}")
-        
-        // Verify auth file contents match what we saved
-        val authLines = preparedConfig.authFile?.readLines()
-        assertThat(authLines).isNotNull()
-        assertThat(authLines!!.size).isAtLeast(2)
-        assertThat(authLines[0].trim()).isEqualTo(username)
-        assertThat(authLines[1].trim()).isEqualTo(password)
-        println("✓ Auth file contains correct credentials")
+        println("   Credentials in memory: ✅")
         
         // Create NativeOpenVpnClient
         println("\n   Creating NativeOpenVpnClient...")
@@ -159,7 +151,8 @@ class RealCredentialsTest {
         try {
             val connected = client.connect(
                 ovpnConfig = preparedConfig.ovpnFileContent,
-                authFilePath = preparedConfig.authFile?.absolutePath
+                username = preparedConfig.username,
+                password = preparedConfig.password
             )
             val elapsedTime = (System.currentTimeMillis() - startTime) / 1000
             
@@ -217,8 +210,7 @@ class RealCredentialsTest {
                 
                 println("\n   Diagnostics:")
                 println("   - Config prepared: ✅")
-                println("   - Auth file exists: ✅")
-                println("   - Credentials in file: ✅")
+                println("   - Credentials in memory: ✅")
                 println("   - Connection attempt: ❌")
             }
             
@@ -235,9 +227,6 @@ class RealCredentialsTest {
             println("\n   ❌ Exception during connection: ${e.javaClass.simpleName}")
             println("   Error: ${e.message}")
             e.printStackTrace()
-        } finally {
-            // Cleanup
-            preparedConfig.authFile?.delete()
         }
         
         println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
