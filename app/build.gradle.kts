@@ -38,9 +38,8 @@ android {
         buildConfig = true
     }
     
-    // Android NDK version - will auto-detect if not specified
-    // Uncomment and set if auto-detection fails:
-    // ndkVersion = "26.1.10909125"
+    // Android NDK version - explicitly set to match CI requirements
+    ndkVersion = "25.1.8937393"
     
     defaultConfig {
         externalNativeBuild {

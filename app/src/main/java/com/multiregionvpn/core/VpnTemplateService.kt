@@ -70,8 +70,8 @@ class VpnTemplateService @Inject constructor(
         return PreparedVpnConfig(
             vpnConfig = config,
             ovpnFileContent = baseConfig, // Use original config, native layer handles auth-user-pass
-            username = creds.username,
-            password = creds.password
+            username = creds.username.trim(),
+            password = creds.password.trim()
         )
     }
     
@@ -92,7 +92,15 @@ class VpnTemplateService @Inject constructor(
         
         // SECURITY: We no longer write credentials to a file.
         
-        // For local test servers using kylemanna/openvpn image:
+        return PreparedVpnConfig(
+            vpnConfig = config,
+            ovpnFileContent = generateLocalTestOvpn(serverHost, serverPort),
+            username = creds.username.trim(),
+            password = creds.password.trim()
+        )
+    }
+
+    private fun generateLocalTestOvpn(serverHost: String, serverPort: String): String {
         // The server uses ovpn_genconfig which generates a self-signed CA
         // Use verify-x509-name for all local tests - this works reliably with OpenVPN 3
         // The server certificate CN is "server", so we verify against that
@@ -101,9 +109,7 @@ class VpnTemplateService @Inject constructor(
         // verify-x509-name is the only method that works consistently with OpenVPN 3
         
         // Local test servers don't use compression (matching server configs)
-        val compressionLine = ""
-        
-        val ovpnConfig = """
+        return """
             client
             dev tun
             proto udp
@@ -114,20 +120,9 @@ class VpnTemplateService @Inject constructor(
             persist-tun
             auth-user-pass
             verb 3
-            $compressionLine
             verify-x509-name server name
             remote-cert-tls server
         """.trimIndent()
-        
-        Log.d(TAG, "Generated OpenVPN config for ${config.name}: ${ovpnConfig.length} bytes")
-        Log.d(TAG, "Using verify-x509-name server name (matching working routing tests)")
-        
-        return PreparedVpnConfig(
-            vpnConfig = config,
-            ovpnFileContent = ovpnConfig,
-            username = creds.username,
-            password = creds.password
-        )
     }
 }
 
