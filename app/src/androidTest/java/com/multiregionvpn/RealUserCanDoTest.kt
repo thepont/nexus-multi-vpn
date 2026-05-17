@@ -43,8 +43,8 @@ class RealUserCanDoTest {
     private lateinit var uiDevice: UiDevice
 
     // Real NordVPN credentials from .env
-    private val NORD_USERNAME = "nACm5TMU8vDQhBA9K8xsPARo"
-    private val NORD_PASSWORD = "WBu4meMLw6BPMWxoZpAruMa7"
+    private val NORD_USERNAME = getTestArgument("NORDVPN_USERNAME") ?: "unknown"
+    private val NORD_PASSWORD = getTestArgument("NORDVPN_PASSWORD") ?: "unknown"
 
     @Before
     fun setup() {
@@ -464,6 +464,15 @@ class RealUserCanDoTest {
 
     private fun pressKey(keyCode: Int) {
         uiDevice.pressKeyCode(keyCode)
+    }
+
+    private fun getTestArgument(key: String): String? {
+        return try {
+            val bundle = InstrumentationRegistry.getArguments()
+            bundle.getString(key)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun log(message: String) {
