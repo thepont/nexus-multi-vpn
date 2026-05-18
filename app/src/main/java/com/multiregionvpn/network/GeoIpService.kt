@@ -1,6 +1,7 @@
 package com.multiregionvpn.network
 
 import android.util.Log
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.Retrofit
@@ -8,22 +9,26 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 
 data class GeoIpResponse(
+    @SerializedName("country_code")
     val countryCode: String?,
+    @SerializedName("country")
     val country: String?,
+    @SerializedName("region")
     val region: String?
 )
 
 interface GeoIpApi {
-    @GET("json")
+    @GET("/")
     suspend fun getCurrentLocation(): GeoIpResponse
 }
 
 /**
- * Service to get current geographic region using ip-api.com
+ * Service to get current geographic region using ipwho.is (HTTPS)
+ * Migrated from insecure http://ip-api.com/
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        .baseUrl("https://ipwho.is/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
@@ -32,10 +37,10 @@ class GeoIpService {
         try {
             val response = api.getCurrentLocation()
             val region = response.countryCode
-            Log.d(TAG, "Current region detected: $region")
+            Log.d(TAG, "Current region detected via secure API: $region")
             region
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting current region", e)
+            Log.e(TAG, "Error getting current region from secure API", e)
             null
         }
     }

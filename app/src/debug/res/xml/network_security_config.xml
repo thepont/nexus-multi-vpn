@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <!--
-        Hardened network security: Cleartext traffic is disabled globally.
-        All network services (GeoIP, NordVPN API) now use HTTPS.
+        Debug network security configuration.
+        Allows cleartext traffic for E2E diagnostic tests (local mock servers).
     -->
-    <base-config cleartextTrafficPermitted="false">
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
+            <certificates src="user" />
         </trust-anchors>
     </base-config>
 </network-security-config>
