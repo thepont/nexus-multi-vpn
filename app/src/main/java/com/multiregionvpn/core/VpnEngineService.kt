@@ -996,10 +996,8 @@ class VpnEngineService : VpnService() {
                 } else {
                     currentAllowedPackages = emptySet()
                 }
-            }
-            
-            // If VPN interface is not established but we have rules, establish it now
-            if (vpnInterface == null && packagesWithRules.isNotEmpty()) {
+            } else if (vpnInterface == null && packagesWithRules.isNotEmpty()) {
+                // If VPN interface is not established but we have rules, establish it now
                 Log.i(TAG, "App rules detected - establishing VPN interface for split tunneling")
                 try {
                     establishVpnInterface(packagesWithRules.toList())
@@ -1018,10 +1016,8 @@ class VpnEngineService : VpnService() {
                     Log.e(TAG, "Failed to establish VPN interface when rules detected", e)
                     return@collect
                 }
-            }
-            
-            // If VPN interface is established but no rules exist, close it (proper split tunneling)
-            if (vpnInterface != null && packagesWithRules.isEmpty()) {
+            } else if (vpnInterface != null && packagesWithRules.isEmpty()) {
+                // If VPN interface is established but no rules exist, close it (proper split tunneling)
                 Log.i(TAG, "No app rules found - closing VPN interface (proper split tunneling)")
                 try {
                     vpnInterface?.close()
