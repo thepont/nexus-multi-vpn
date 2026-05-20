@@ -428,10 +428,10 @@ class VpnEngineService : VpnService() {
      * If packagesWithRules is empty, the interface is NOT established (proper split tunneling).
      */
     private fun establishVpnInterface(packagesWithRules: List<String>) {
-        // TEMPORARY: Use global VPN mode to fix test failures
-        // Test packages bypass split tunneling due to Android framework limitation
-        // All traffic enters VPN, PacketRouter handles per-app routing
-        val useGlobalMode = true  // TODO: Set to false once we can test with production apps
+        // PERMANENT: Use split tunneling mode (useGlobalMode = false)
+        // This ensures that only specified apps use the VPN, and others have direct internet.
+        // If set to true, all apps without rules would have their internet blocked by the TUN.
+        val useGlobalMode = false
         
         if (packagesWithRules.isEmpty() && !useGlobalMode) {
             Log.w(TAG, "⚠️  No app rules found - NOT establishing VPN interface")
@@ -996,40 +996,8 @@ class VpnEngineService : VpnService() {
                 } else {
                     currentAllowedPackages = emptySet()
                 }
-            }
-            
-            // If VPN interface is not established but we have rules, establish it now
-            if (vpnInterface == null && packagesWithRules.isNotEmpty()) {
-                Log.i(TAG, "App rules detected - establishing VPN interface for split tunneling")
-                try {
-                    establishVpnInterface(packagesWithRules.toList())
-                    currentAllowedPackages = packagesWithRules
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to establish VPN interface when rules detected", e)
-                    return@collect
-                }
-            }
-            
-            // If VPN interface is established but no rules exist, close it (proper split tunneling)
-            if (vpnInterface != null && packagesWithRules.isEmpty()) {
-                Log.i(TAG, "No app rules found - closing VPN interface (proper split tunneling)")
-                try {
-                    vpnInterface?.close()
-                    vpnInterface = null
-                    vpnOutput?.close()
-                    vpnOutput = null
-                    currentAllowedPackages = emptySet()
-                    // Re-initialize packet router (will handle null interface)
-                    initializePacketRouter()
-                    Log.i(TAG, "✅ VPN interface closed (no apps need VPN routing)")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error closing VPN interface", e)
-                }
-                return@collect
-            }
-            
-            // If VPN interface is not established but we have rules, establish it now
-            if (vpnInterface == null && packagesWithRules.isNotEmpty()) {
+            } else if (vpnInterface == null && packagesWithRules.isNotEmpty()) {
+                // If VPN interface is not established but we have rules, establish it now
                 Log.i(TAG, "App rules detected - establishing VPN interface for split tunneling")
                 try {
                     establishVpnInterface(packagesWithRules.toList())
@@ -1048,6 +1016,22 @@ class VpnEngineService : VpnService() {
                     Log.e(TAG, "Failed to establish VPN interface when rules detected", e)
                     return@collect
                 }
+            } else if (vpnInterface != null && packagesWithRules.isEmpty()) {
+                // If VPN interface is established but no rules exist, close it (proper split tunneling)
+                Log.i(TAG, "No app rules found - closing VPN interface (proper split tunneling)")
+                try {
+                    vpnInterface?.close()
+                    vpnInterface = null
+                    vpnOutput?.close()
+                    vpnOutput = null
+                    currentAllowedPackages = emptySet()
+                    // Re-initialize packet router (will handle null interface)
+                    initializePacketRouter()
+                    Log.i(TAG, "✅ VPN interface closed (no apps need VPN routing)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error closing VPN interface", e)
+                }
+                return@collect
             }
             
             if (vpnInterface == null) {
