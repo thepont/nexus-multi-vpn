@@ -185,7 +185,7 @@ class ProductionAppRoutingTest {
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("1. Open Chrome on your device")
         println("2. Navigate to: https://ipwho.is/")
-        println("3. Check the 'countryCode' field")
+        println("3. Check the 'country_code' field")
         println("   ✅ Expected: \"GB\" (United Kingdom)")
         println("   ❌ If you see your local country, routing failed")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

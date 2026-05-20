@@ -29,7 +29,7 @@ data class IpInfo(
  * Retrofit interface for IP geolocation checking
  */
 interface IpApiService {
-    @GET("/json")
+    @GET("/")
     suspend fun getIpInfo(): IpInfo
 }
 
