@@ -28,14 +28,6 @@ fun TunnelsScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // Direct Internet indicator (for Maestro visibility)
-        androidx.compose.material3.Text(
-            text = "Direct Internet",
-            modifier = Modifier.height(0.dp),
-            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-            color = androidx.compose.material3.MaterialTheme.colorScheme.surface // Invisible but present for Maestro
-        )
-
         VpnConfigSection(
             configs = uiState.vpnConfigs,
             onSaveConfig = { config -> viewModel.saveVpnConfig(config) },

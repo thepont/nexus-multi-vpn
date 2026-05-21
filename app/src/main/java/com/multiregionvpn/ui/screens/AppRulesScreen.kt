@@ -1,7 +1,6 @@
 package com.multiregionvpn.ui.screens
 
 import androidx.compose.foundation.Image
-import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -79,18 +78,8 @@ fun AppRulesScreen(
     }
     
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("app_rules_screen")
+        modifier = Modifier.fillMaxSize()
     ) {
-        // App Rules Title (for Maestro visibility)
-        Text(
-            text = "App Routing Rules",
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-
         // Search bar
         OutlinedTextField(
             value = searchQuery,
