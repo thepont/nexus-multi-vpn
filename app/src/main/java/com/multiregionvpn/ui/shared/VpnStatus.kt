@@ -9,4 +9,3 @@ enum class VpnStatus {
     CONNECTING,
     ERROR
 }
-
