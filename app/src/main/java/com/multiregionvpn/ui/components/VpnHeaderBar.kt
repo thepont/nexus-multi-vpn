@@ -1,5 +1,6 @@
 package com.multiregionvpn.ui.components
 
+import com.multiregionvpn.ui.shared.VpnStatus
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -35,7 +36,7 @@ fun VpnHeaderBar(
     // Animate status color
     val statusColor by animateColorAsState(
         targetValue = when (status) {
-            VpnStatus.PROTECTED -> Color(0xFF4CAF50)  // Green
+            VpnStatus.CONNECTED -> Color(0xFF4CAF50)  // Green
             VpnStatus.CONNECTING -> Color(0xFF2196F3) // Blue
             VpnStatus.DISCONNECTED -> Color(0xFF9E9E9E) // Gray
             VpnStatus.ERROR -> Color(0xFFF44336) // Red
@@ -88,7 +89,7 @@ fun VpnHeaderBar(
                     )
                     
                     // Data rate (only show when protected)
-                    if (status == VpnStatus.PROTECTED && dataRateMbps > 0.0) {
+                    if (status == VpnStatus.CONNECTED && dataRateMbps > 0.0) {
                         Text(
                             text = String.format("%.1f MB/s", dataRateMbps),
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -125,13 +126,4 @@ fun VpnHeaderBar(
     )
 }
 
-/**
- * VPN Status States
- */
-enum class VpnStatus(val displayText: String) {
-    PROTECTED("Protected"),
-    CONNECTING("Connecting"),
-    DISCONNECTED("Disconnected"),
-    ERROR("Error")
-}
 

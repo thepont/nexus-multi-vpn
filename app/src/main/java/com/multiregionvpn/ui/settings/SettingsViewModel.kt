@@ -25,7 +25,7 @@ import android.content.IntentFilter
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.core.VpnEngineService
-import com.multiregionvpn.ui.components.VpnStatus
+import com.multiregionvpn.ui.shared.VpnStatus
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -234,7 +234,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             kotlinx.coroutines.delay(3000)
             if (_uiState.value.isVpnRunning) {
-                _uiState.update { it.copy(vpnStatus = VpnStatus.PROTECTED) }
+                _uiState.update { it.copy(vpnStatus = VpnStatus.CONNECTED) }
             }
         }
         

@@ -51,6 +51,16 @@ class VpnStatusTest {
         assertEquals("CONNECTING", VpnStatus.CONNECTING.name)
         assertEquals("ERROR", VpnStatus.ERROR.name)
     }
+
+    @Test
+    fun `VpnStatus should have correct display text`() {
+        // GIVEN: VpnStatus values
+        // THEN: Should have correct display text
+        assertEquals("Protected", VpnStatus.CONNECTED.displayText)
+        assertEquals("Disconnected", VpnStatus.DISCONNECTED.displayText)
+        assertEquals("Connecting", VpnStatus.CONNECTING.displayText)
+        assertEquals("Error", VpnStatus.ERROR.displayText)
+    }
     
     @Test
     fun `VpnStatus should support when expressions`() {
@@ -69,4 +79,3 @@ class VpnStatusTest {
         assertEquals("Connection failed", getStatusMessage(VpnStatus.ERROR))
     }
 }
-
