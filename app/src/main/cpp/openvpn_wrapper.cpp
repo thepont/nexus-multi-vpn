@@ -1147,7 +1147,12 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
     
     LOGI("openvpn_wrapper_connect called");
     LOGI("Using OpenVPN 3 ClientAPI service");
-    LOGI("Username: %s", username);
+    // Redact username from logs to prevent PII exposure
+    if (username && strlen(username) > 0) {
+        LOGI("Username: %c... (%zu bytes)", username[0], strlen(username));
+    } else {
+        LOGI("Username: (empty)");
+    }
     
 #ifdef OPENVPN3_AVAILABLE
     try {
@@ -1349,9 +1354,11 @@ int openvpn_wrapper_connect(OpenVpnSession* session,
         session->creds.username = std::string(username);
         session->creds.password = std::string(password);
         
-        // Log credential info (without exposing password)
+        // Log credential info (without exposing actual credentials)
         LOGI("Providing credentials...");
-        LOGI("Username length: %zu bytes (UTF-8)", session->creds.username.length());
+        LOGI("Username: %c... (%zu bytes UTF-8)",
+             !session->creds.username.empty() ? session->creds.username[0] : '?',
+             session->creds.username.length());
         LOGI("Password length: %zu bytes (UTF-8)", session->creds.password.length());
         
         // Verify UTF-8 encoding by checking first byte
