@@ -1,6 +1,7 @@
 package com.multiregionvpn.ui.settings.composables
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +57,24 @@ fun VpnConfigSection(
             }
         }
         
+        // Suggested Regions (for quick-add and E2E test support)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("UK", "FR", "AU", "US").forEach { regionId ->
+                FilterChip(
+                    selected = false,
+                    onClick = {
+                        editingConfig = null
+                        showDialog = true
+                        // The dialog will use this region as default
+                    },
+                    label = { Text(regionId) }
+                )
+            }
+        }
+
         if (configs.isEmpty()) {
             Text("No tunnels configured.", style = MaterialTheme.typography.bodyMedium)
         } else {

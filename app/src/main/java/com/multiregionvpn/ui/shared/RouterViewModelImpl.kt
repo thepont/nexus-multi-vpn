@@ -312,7 +312,7 @@ class RouterViewModelImpl @Inject constructor(
             while (true) {
                 val isRunning = VpnEngineService.isRunning()
                 val newStatus = when {
-                    isRunning -> VpnStatus.CONNECTED
+                    isRunning -> VpnStatus.PROTECTED
                     else -> VpnStatus.DISCONNECTED
                 }
                 
