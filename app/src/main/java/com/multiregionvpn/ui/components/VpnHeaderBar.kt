@@ -1,4 +1,5 @@
 package com.multiregionvpn.ui.components
+import com.multiregionvpn.ui.shared.VpnStatus
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -123,15 +124,5 @@ fun VpnHeaderBar(
             titleContentColor = MaterialTheme.colorScheme.onSurface
         )
     )
-}
-
-/**
- * VPN Status States
- */
-enum class VpnStatus(val displayText: String) {
-    PROTECTED("Protected"),
-    CONNECTING("Connecting"),
-    DISCONNECTED("Disconnected"),
-    ERROR("Error")
 }
 
