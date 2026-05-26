@@ -7,23 +7,17 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 
-data class GeoIpResponse(
-    val countryCode: String?,
-    val country: String?,
-    val region: String?
-)
-
 interface GeoIpApi {
     @GET("json")
     suspend fun getCurrentLocation(): GeoIpResponse
 }
 
 /**
- * Service to get current geographic region using ip-api.com
+ * Service to get current geographic region using ipwho.is (HTTPS)
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        .baseUrl("https://ipwho.is/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
