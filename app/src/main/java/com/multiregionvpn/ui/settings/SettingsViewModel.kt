@@ -52,13 +52,12 @@ class SettingsViewModel @Inject constructor(
                     VpnError.ErrorType.UNKNOWN
                 }
                 
-                val error = VpnError(
+                val error = VpnError.create(
                     type = errorType,
                     message = errorMessage,
                     details = errorDetails,
-                    tunnelId = tunnelId,
-                    timestamp = timestamp
-                )
+                    tunnelId = tunnelId
+                ).copy(timestamp = timestamp)
                 
                 android.util.Log.e("SettingsViewModel", "Received VPN error: ${error.type} - ${error.message}")
                 _uiState.update { it.copy(

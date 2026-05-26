@@ -81,63 +81,81 @@ data class VpnError(
     }
     
     companion object {
+        /**
+         * Redacts sensitive information from error messages and details.
+         */
+        fun sanitize(input: String): String {
+            // Regex to find sensitive keywords followed by values
+            // Handles cases like "password: mysecret", "password = mysecret", "password is mysecret"
+            // Case-insensitive match for keywords.
+            // Negative lookahead to avoid re-redacting [REDACTED]
+            val patterns = listOf(
+                "(?i)(password|token|key|secret|credential|username)(\\s*[:= ]\\s*)(?!\\[REDACTED\\])([^\\s,;\\n]+)",
+                "(?i)(nord_auth_)[^\\s,;\\n]+"
+            )
+
+            var sanitized = input
+            patterns.forEach { pattern ->
+                val regex = Regex(pattern)
+                sanitized = regex.replace(sanitized) { result ->
+                    val label = result.groups[1]?.value ?: ""
+                    val separator = result.groups[2]?.value ?: ""
+                    "$label$separator[REDACTED]"
+                }
+            }
+            return sanitized
+        }
+
+        /**
+         * Factory method to create a sanitized VpnError.
+         */
+        fun create(
+            type: ErrorType,
+            message: String,
+            details: String? = null,
+            tunnelId: String? = null
+        ): VpnError {
+            return VpnError(
+                type = type,
+                message = sanitize(message),
+                details = details?.let { sanitize(it) },
+                tunnelId = tunnelId
+            )
+        }
+
         fun fromException(e: Throwable, tunnelId: String? = null): VpnError {
             val errorMsg = e.message ?: "Unknown error"
-            val details = e.stackTraceToString()
+            // SECURITY: Use e.toString() instead of e.stackTraceToString() to prevent stack trace leakage
+            val details = e.toString()
             
-            return when {
+            val type = when {
                 errorMsg.contains("auth", ignoreCase = true) ||
                 errorMsg.contains("credential", ignoreCase = true) ||
                 errorMsg.contains("password", ignoreCase = true) ||
                 errorMsg.contains("username", ignoreCase = true) ||
                 errorMsg.contains("invalid", ignoreCase = true) -> {
-                    VpnError(
-                        type = ErrorType.AUTHENTICATION_FAILED,
-                        message = errorMsg,
-                        details = details,
-                        tunnelId = tunnelId
-                    )
+                    ErrorType.AUTHENTICATION_FAILED
                 }
                 errorMsg.contains("connection", ignoreCase = true) ||
                 errorMsg.contains("timeout", ignoreCase = true) ||
                 errorMsg.contains("unreachable", ignoreCase = true) -> {
-                    VpnError(
-                        type = ErrorType.CONNECTION_FAILED,
-                        message = errorMsg,
-                        details = details,
-                        tunnelId = tunnelId
-                    )
+                    ErrorType.CONNECTION_FAILED
                 }
                 errorMsg.contains("config", ignoreCase = true) ||
                 errorMsg.contains("parse", ignoreCase = true) -> {
-                    VpnError(
-                        type = ErrorType.CONFIG_ERROR,
-                        message = errorMsg,
-                        details = details,
-                        tunnelId = tunnelId
-                    )
+                    ErrorType.CONFIG_ERROR
                 }
                 errorMsg.contains("interface", ignoreCase = true) ||
                 errorMsg.contains("permission", ignoreCase = true) ||
                 errorMsg.contains("vpn", ignoreCase = true) -> {
-                    VpnError(
-                        type = ErrorType.INTERFACE_ERROR,
-                        message = errorMsg,
-                        details = details,
-                        tunnelId = tunnelId
-                    )
+                    ErrorType.INTERFACE_ERROR
                 }
                 else -> {
-                    VpnError(
-                        type = ErrorType.UNKNOWN,
-                        message = errorMsg,
-                        details = details,
-                        tunnelId = tunnelId
-                    )
+                    ErrorType.UNKNOWN
                 }
             }
+
+            return create(type, errorMsg, details, tunnelId)
         }
     }
 }
-
-

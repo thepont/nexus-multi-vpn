@@ -1152,7 +1152,7 @@ class VpnEngineService : VpnService() {
                         Log.i(TAG, "✅ Successfully created tunnel $tunnelId for VPN config ${vpnConfig.name}")
                     } else {
                         // Broadcast error to UI
-                        val error = result.error ?: VpnError(
+                        val error = result.error ?: VpnError.create(
                             type = VpnError.ErrorType.TUNNEL_ERROR,
                             message = "Failed to create tunnel",
                             tunnelId = tunnelId
