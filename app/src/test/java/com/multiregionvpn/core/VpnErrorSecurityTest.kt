@@ -13,9 +13,7 @@ class VpnErrorSecurityTest {
 
         val details = vpnError.details ?: ""
 
-        // Currently this fails because it DOES include the full stack trace
-        // We want it to only include e.toString() which is "java.lang.RuntimeException: Test exception"
-        // and NOT the stack trace lines starting with "at "
+        // Verify that it only includes e.toString() and NOT the stack trace lines starting with "at "
         assertFalse(details.contains("at com.multiregionvpn"), "Details should not contain stack trace")
     }
 
@@ -25,7 +23,7 @@ class VpnErrorSecurityTest {
         val exception = RuntimeException(sensitiveMessage)
         val vpnError = VpnError.fromException(exception)
 
-        // Currently this fails because it does NOT redact "mysecret123"
+        // Verify that "mysecret123" is redacted
         assertFalse(vpnError.message.contains("mysecret123"), "Message should redact password")
         assertFalse(vpnError.details?.contains("mysecret123") == true, "Details should redact password")
 

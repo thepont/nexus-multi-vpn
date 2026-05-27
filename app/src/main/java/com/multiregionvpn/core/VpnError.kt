@@ -81,22 +81,21 @@ data class VpnError(
     }
     
     companion object {
+        // Regex to find sensitive keywords followed by values
+        // Handles cases like "password: mysecret", "password = mysecret", "password is mysecret"
+        // Case-insensitive match for keywords.
+        // Negative lookahead to avoid re-redacting [REDACTED]
+        private val SENSITIVE_PATTERNS = listOf(
+            Regex("(?i)(password|token|key|secret|credential|username)(\\s*[:= ]\\s*)(?!\\[REDACTED\\])([^\\s,;\\n]+)"),
+            Regex("(?i)(nord_auth_)[^\\s,;\\n]+")
+        )
+
         /**
          * Redacts sensitive information from error messages and details.
          */
         fun sanitize(input: String): String {
-            // Regex to find sensitive keywords followed by values
-            // Handles cases like "password: mysecret", "password = mysecret", "password is mysecret"
-            // Case-insensitive match for keywords.
-            // Negative lookahead to avoid re-redacting [REDACTED]
-            val patterns = listOf(
-                "(?i)(password|token|key|secret|credential|username)(\\s*[:= ]\\s*)(?!\\[REDACTED\\])([^\\s,;\\n]+)",
-                "(?i)(nord_auth_)[^\\s,;\\n]+"
-            )
-
             var sanitized = input
-            patterns.forEach { pattern ->
-                val regex = Regex(pattern)
+            SENSITIVE_PATTERNS.forEach { regex ->
                 sanitized = regex.replace(sanitized) { result ->
                     val label = result.groups[1]?.value ?: ""
                     val separator = result.groups[2]?.value ?: ""
