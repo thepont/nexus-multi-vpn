@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -119,38 +120,50 @@ fun SettingsScreen(
             )
         }
     ) { padding ->
-        Column(
+        // PERFORMANCE: Using LazyColumn for the entire screen to handle 300+ app items efficiently.
+        // This prevents UI hangs and Maestro timeouts compared to Column + verticalScroll.
+        LazyColumn(
             modifier = Modifier
                 .testTag("settings_screen")
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Section 1: Provider Credentials
-            ProviderCredentialsSection(
-                credentials = uiState.nordCredentials,
-                onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
-            )
+            item {
+                // Section 1: Provider Credentials
+                ProviderCredentialsSection(
+                    credentials = uiState.nordCredentials,
+                    onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
+                )
+            }
             
-            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            item {
+                Divider(modifier = Modifier.padding(vertical = 16.dp))
+            }
 
-            // Section 2: My VPN Servers (CRUD)
-            VpnConfigSection(
-                configs = uiState.vpnConfigs,
-                onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
-                onDeleteConfig = { id -> viewModel.deleteVpnConfig(id) },
-                onFetchNordVpnServer = { regionId, callback -> viewModel.fetchNordVpnServer(regionId, callback) }
-            )
+            item {
+                // Section 2: My VPN Servers (CRUD)
+                VpnConfigSection(
+                    configs = uiState.vpnConfigs,
+                    onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
+                    onDeleteConfig = { id -> viewModel.deleteVpnConfig(id) },
+                    onFetchNordVpnServer = { regionId, callback -> viewModel.fetchNordVpnServer(regionId, callback) }
+                )
+            }
 
-            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            item {
+                Divider(modifier = Modifier.padding(vertical = 16.dp))
+            }
 
-            // Section 3: App Routing Rules
-            AppRuleSection(
-                installedApps = uiState.installedApps,
-                appRules = uiState.appRules,
-                vpnConfigs = uiState.vpnConfigs,
-                onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
-            )
+            item {
+                // Section 3: App Routing Rules
+                AppRuleSection(
+                    installedApps = uiState.installedApps,
+                    appRules = uiState.appRules,
+                    vpnConfigs = uiState.vpnConfigs,
+                    onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
+                )
+            }
         }
         
         // Error Detail Dialog

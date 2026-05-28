@@ -52,7 +52,7 @@ class SettingsViewModel @Inject constructor(
                     VpnError.ErrorType.UNKNOWN
                 }
                 
-                val error = VpnError(
+                val error = VpnError.create(
                     type = errorType,
                     message = errorMessage,
                     details = errorDetails,

@@ -43,8 +43,8 @@ fun AppRuleSection(
     Column {
         Text("App Routing Rules", style = MaterialTheme.typography.titleLarge)
         
-        // Using standard Column instead of LazyColumn to ensure all items are visible to Maestro
-        // and to avoid nested scrolling issues when inside a parent verticalScroll container.
+        // PERFORMANCE: Using standard Column here because it's now wrapped in a parent LazyColumn
+        // in SettingsScreen. This keeps all items visible to Maestro while maintaining performance.
         Column(
             modifier = Modifier.fillMaxWidth()
         ) {

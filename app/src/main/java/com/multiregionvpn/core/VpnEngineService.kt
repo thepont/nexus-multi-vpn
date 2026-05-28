@@ -428,10 +428,9 @@ class VpnEngineService : VpnService() {
      * If packagesWithRules is empty, the interface is NOT established (proper split tunneling).
      */
     private fun establishVpnInterface(packagesWithRules: List<String>) {
-        // TEMPORARY: Use global VPN mode to fix test failures
-        // Test packages bypass split tunneling due to Android framework limitation
-        // All traffic enters VPN, PacketRouter handles per-app routing
-        val useGlobalMode = true  // TODO: Set to false once we can test with production apps
+        // PRODUCTION: Use split tunneling mode. Only apps with rules route traffic through the TUN.
+        // This is more efficient and avoids issues with local/system traffic.
+        val useGlobalMode = false
         
         if (packagesWithRules.isEmpty() && !useGlobalMode) {
             Log.w(TAG, "⚠️  No app rules found - NOT establishing VPN interface")
@@ -1152,7 +1151,7 @@ class VpnEngineService : VpnService() {
                         Log.i(TAG, "✅ Successfully created tunnel $tunnelId for VPN config ${vpnConfig.name}")
                     } else {
                         // Broadcast error to UI
-                        val error = result.error ?: VpnError(
+                        val error = result.error ?: VpnError.create(
                             type = VpnError.ErrorType.TUNNEL_ERROR,
                             message = "Failed to create tunnel",
                             tunnelId = tunnelId
