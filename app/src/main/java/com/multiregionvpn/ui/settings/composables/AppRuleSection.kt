@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
@@ -19,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -44,10 +43,13 @@ fun AppRuleSection(
     Column {
         Text("App Routing Rules", style = MaterialTheme.typography.titleLarge)
         
-        LazyColumn(
-            modifier = Modifier.height(400.dp) // Give it a fixed height in a scrolling screen
+        // PERFORMANCE: Using standard Column here because it's now wrapped in a parent LazyColumn
+        // in SettingsScreen. This keeps all items visible to Maestro while maintaining performance.
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            items(installedApps, key = { it.packageName }) { app ->
+            installedApps.forEach { app ->
+                key(app.packageName) {
                 var selectedConfigId by remember(appRules) { 
                     mutableStateOf(appRules[app.packageName]) 
                 }
@@ -118,6 +120,7 @@ fun AppRuleSection(
                             }
                         }
                     )
+                }
                 }
             }
         }

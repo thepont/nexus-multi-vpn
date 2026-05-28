@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -38,6 +39,37 @@ fun VpnConfigSection(
     var editingConfig by remember { mutableStateOf<VpnConfig?>(null) }
     
     Column {
+        // Suggested Regions Quick-Add (CRITICAL for Maestro tests)
+        Text(
+            text = "Suggested Regions",
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("UK", "FR", "AU", "US").forEach { regionId ->
+                FilterChip(
+                    selected = false,
+                    onClick = {
+                        onFetchNordVpnServer?.invoke(regionId) { hostname ->
+                            if (hostname != null) {
+                                onSaveConfig(VpnConfig(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    name = "NordVPN $regionId",
+                                    regionId = regionId,
+                                    templateId = "nordvpn",
+                                    serverHostname = hostname
+                                ))
+                            }
+                        }
+                    },
+                    label = { Text(regionId) }
+                )
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween

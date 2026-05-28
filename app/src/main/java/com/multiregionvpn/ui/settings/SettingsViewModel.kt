@@ -25,7 +25,7 @@ import android.content.IntentFilter
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.multiregionvpn.core.VpnError
 import com.multiregionvpn.core.VpnEngineService
-import com.multiregionvpn.ui.components.VpnStatus
+import com.multiregionvpn.ui.shared.VpnStatus
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -52,7 +52,7 @@ class SettingsViewModel @Inject constructor(
                     VpnError.ErrorType.UNKNOWN
                 }
                 
-                val error = VpnError(
+                val error = VpnError.create(
                     type = errorType,
                     message = errorMessage,
                     details = errorDetails,
