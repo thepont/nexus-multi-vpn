@@ -1111,7 +1111,7 @@ class VpnEngineService : VpnService() {
                             } catch (e: Exception) {
                                 Log.e(TAG, "❌ Failed to prepare VPN config for tunnel $tunnelId", e)
                                 // Create and broadcast config error
-                                val configError = VpnError.fromException(e, tunnelId).copy(
+                                val configError = VpnError.create(
                                     type = when {
                                         e.message?.contains("credential", ignoreCase = true) == true ||
                                         e.message?.contains("auth", ignoreCase = true) == true -> {
@@ -1124,8 +1124,10 @@ class VpnEngineService : VpnService() {
                                         }
                                         else -> VpnError.ErrorType.CONFIG_ERROR
                                     },
+                                    message = e.message ?: "Failed to prepare config",
                                     details = "Failed to fetch or prepare OpenVPN configuration file. " +
-                                            "The server hostname may be incorrect or the server may be unavailable."
+                                            "The server hostname may be incorrect or the server may be unavailable.",
+                                    tunnelId = tunnelId
                                 )
                                 broadcastError(configError)
                                 continue // Skip to next tunnel
@@ -1152,7 +1154,7 @@ class VpnEngineService : VpnService() {
                         Log.i(TAG, "✅ Successfully created tunnel $tunnelId for VPN config ${vpnConfig.name}")
                     } else {
                         // Broadcast error to UI
-                        val error = result.error ?: VpnError(
+                        val error = result.error ?: VpnError.create(
                             type = VpnError.ErrorType.TUNNEL_ERROR,
                             message = "Failed to create tunnel",
                             tunnelId = tunnelId

@@ -671,7 +671,7 @@ class VpnConnectionManager(
                     errorMessage.contains("password", ignoreCase = true) ||
                     errorMessage.contains("username", ignoreCase = true) ||
                     errorMessage.contains("invalid", ignoreCase = true) -> {
-                        VpnError(
+                        VpnError.create(
                             type = VpnError.ErrorType.AUTHENTICATION_FAILED,
                             message = errorMessage,
                             details = "OpenVPN connection failed. Check credentials in settings.",
@@ -681,7 +681,7 @@ class VpnConnectionManager(
                     errorMessage.contains("connection", ignoreCase = true) ||
                     errorMessage.contains("timeout", ignoreCase = true) ||
                     errorMessage.contains("unreachable", ignoreCase = true) -> {
-                        VpnError(
+                        VpnError.create(
                             type = VpnError.ErrorType.CONNECTION_FAILED,
                             message = errorMessage,
                             details = "Could not reach VPN server. Check internet connection.",
@@ -690,7 +690,7 @@ class VpnConnectionManager(
                     }
                     errorMessage.contains("config", ignoreCase = true) ||
                     errorMessage.contains("parse", ignoreCase = true) -> {
-                        VpnError(
+                        VpnError.create(
                             type = VpnError.ErrorType.CONFIG_ERROR,
                             message = errorMessage,
                             details = "Invalid VPN configuration. Try re-adding the server.",
@@ -698,7 +698,7 @@ class VpnConnectionManager(
                         )
                     }
                     else -> {
-                        VpnError(
+                        VpnError.create(
                             type = VpnError.ErrorType.TUNNEL_ERROR,
                             message = errorMessage,
                             details = "Tunnel creation failed.",
@@ -719,7 +719,7 @@ class VpnConnectionManager(
         } catch (e: com.multiregionvpn.core.vpnclient.AuthenticationException) {
             // Authentication exception - provide clear error
             connected = false
-            connectionError = VpnError(
+            connectionError = VpnError.create(
                 type = VpnError.ErrorType.AUTHENTICATION_FAILED,
                 message = e.message ?: "Authentication failed",
                 details = "OpenVPN authentication failed. Please check your NordVPN Service Credentials in settings.",
