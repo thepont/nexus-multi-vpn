@@ -69,4 +69,3 @@ class VpnStatusTest {
         assertEquals("Connection failed", getStatusMessage(VpnStatus.ERROR))
     }
 }
-

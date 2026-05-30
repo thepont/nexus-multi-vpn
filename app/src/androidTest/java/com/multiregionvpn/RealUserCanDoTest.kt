@@ -42,9 +42,13 @@ class RealUserCanDoTest {
     private lateinit var context: Context
     private lateinit var uiDevice: UiDevice
 
-    // Real NordVPN credentials from .env
-    private val NORD_USERNAME = "nACm5TMU8vDQhBA9K8xsPARo"
-    private val NORD_PASSWORD = "WBu4meMLw6BPMWxoZpAruMa7"
+    // NordVPN credentials (retrieved from instrumentation arguments)
+    private val NORD_USERNAME by lazy {
+        InstrumentationRegistry.getArguments().getString("NORDVPN_USERNAME") ?: "test_user"
+    }
+    private val NORD_PASSWORD by lazy {
+        InstrumentationRegistry.getArguments().getString("NORDVPN_PASSWORD") ?: "test_password"
+    }
 
     @Before
     fun setup() {

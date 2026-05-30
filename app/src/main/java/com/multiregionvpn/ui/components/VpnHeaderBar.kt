@@ -134,4 +134,3 @@ enum class VpnStatus(val displayText: String) {
     DISCONNECTED("Disconnected"),
     ERROR("Error")
 }
-

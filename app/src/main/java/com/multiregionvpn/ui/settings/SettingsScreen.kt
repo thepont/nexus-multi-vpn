@@ -131,7 +131,7 @@ fun SettingsScreen(
                 credentials = uiState.nordCredentials,
                 onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
             )
-            
+
             Divider(modifier = Modifier.padding(vertical = 16.dp))
 
             // Section 2: My VPN Servers (CRUD)

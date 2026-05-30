@@ -48,8 +48,8 @@ fun AppRuleSection(
             modifier = Modifier.height(400.dp) // Give it a fixed height in a scrolling screen
         ) {
             items(installedApps, key = { it.packageName }) { app ->
-                var selectedConfigId by remember(appRules) { 
-                    mutableStateOf(appRules[app.packageName]) 
+                var selectedConfigId by remember(appRules) {
+                    mutableStateOf(appRules[app.packageName])
                 }
                 var isDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -78,7 +78,7 @@ fun AppRuleSection(
                                 onExpandedChange = { isDropdownExpanded = !isDropdownExpanded }
                             ) {
                                 val selectedText = vpnConfigs.firstOrNull { it.id == selectedConfigId }?.name ?: "Direct Internet"
-                                
+
                                 OutlinedTextField(
                                     value = selectedText,
                                     onValueChange = {},
@@ -89,7 +89,7 @@ fun AppRuleSection(
                                         .menuAnchor()
                                         .testTag("app_rule_dropdown_${app.packageName}")
                                 )
-                                
+
                                 DropdownMenu(
                                     expanded = isDropdownExpanded,
                                     onDismissRequest = { isDropdownExpanded = false }
