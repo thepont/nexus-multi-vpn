@@ -1111,7 +1111,7 @@ class VpnEngineService : VpnService() {
                             } catch (e: Exception) {
                                 Log.e(TAG, "❌ Failed to prepare VPN config for tunnel $tunnelId", e)
                                 // Create and broadcast config error
-                                val configError = VpnError.create(
+                                val configError = VpnError.fromException(e, tunnelId).copy(
                                     type = when {
                                         e.message?.contains("credential", ignoreCase = true) == true ||
                                         e.message?.contains("auth", ignoreCase = true) == true -> {
@@ -1124,10 +1124,8 @@ class VpnEngineService : VpnService() {
                                         }
                                         else -> VpnError.ErrorType.CONFIG_ERROR
                                     },
-                                    message = e.message ?: "Failed to prepare config",
                                     details = "Failed to fetch or prepare OpenVPN configuration file. " +
-                                            "The server hostname may be incorrect or the server may be unavailable.",
-                                    tunnelId = tunnelId
+                                            "The server hostname may be incorrect or the server may be unavailable."
                                 )
                                 broadcastError(configError)
                                 continue // Skip to next tunnel

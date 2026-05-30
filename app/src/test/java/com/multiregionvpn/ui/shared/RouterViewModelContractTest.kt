@@ -215,10 +215,10 @@ class RouterViewModelContractTest {
         assertEquals(VpnStatus.DISCONNECTED, mockViewModel.vpnStatus.value)
         
         // WHEN: Implementation updates state
-        mockViewModel.vpnStatus.value = VpnStatus.PROTECTED
+        mockViewModel.vpnStatus.value = VpnStatus.CONNECTED
         
         // THEN: State should change
-        assertEquals(VpnStatus.PROTECTED, mockViewModel.vpnStatus.value)
+        assertEquals(VpnStatus.CONNECTED, mockViewModel.vpnStatus.value)
     }
     
     @Test
