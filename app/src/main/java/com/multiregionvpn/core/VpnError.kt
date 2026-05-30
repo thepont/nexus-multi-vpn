@@ -81,7 +81,7 @@ data class VpnError private constructor(
     }
     
     companion object {
-        private val SENSITIVE_PATTERN = Regex("(?i)(password|token|secret|key|credential|username)[=:\\s]+[^\\s,;]+", RegexOption.IGNORE_CASE)
+        private val SENSITIVE_PATTERN = Regex("(password|token|secret|key|credential|username)[=:\\s]+[^\\s,;]+", RegexOption.IGNORE_CASE)
 
         /**
          * Sanitizes a string by redacting sensitive keywords.

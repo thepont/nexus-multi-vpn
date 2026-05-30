@@ -1,16 +1,14 @@
 package com.multiregionvpn.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -19,10 +17,8 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,8 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.Row
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -119,38 +113,43 @@ fun SettingsScreen(
             )
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .testTag("settings_screen")
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Section 1: Provider Credentials
-            ProviderCredentialsSection(
-                credentials = uiState.nordCredentials,
-                onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
-            )
-            
-            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            item {
+                // Section 1: Provider Credentials
+                ProviderCredentialsSection(
+                    credentials = uiState.nordCredentials,
+                    onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
+                )
 
-            // Section 2: My VPN Servers (CRUD)
-            VpnConfigSection(
-                configs = uiState.vpnConfigs,
-                onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
-                onDeleteConfig = { id -> viewModel.deleteVpnConfig(id) },
-                onFetchNordVpnServer = { regionId, callback -> viewModel.fetchNordVpnServer(regionId, callback) }
-            )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
 
-            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            item {
+                // Section 2: My VPN Servers (CRUD)
+                VpnConfigSection(
+                    configs = uiState.vpnConfigs,
+                    onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
+                    onDeleteConfig = { id -> viewModel.deleteVpnConfig(id) },
+                    onFetchNordVpnServer = { regionId, callback -> viewModel.fetchNordVpnServer(regionId, callback) }
+                )
 
-            // Section 3: App Routing Rules
-            AppRuleSection(
-                installedApps = uiState.installedApps,
-                appRules = uiState.appRules,
-                vpnConfigs = uiState.vpnConfigs,
-                onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
-            )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
+
+            item {
+                // Section 3: App Routing Rules
+                AppRuleSection(
+                    installedApps = uiState.installedApps,
+                    appRules = uiState.appRules,
+                    vpnConfigs = uiState.vpnConfigs,
+                    onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
+                )
+            }
         }
         
         // Error Detail Dialog
@@ -177,7 +176,6 @@ fun SettingsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
                     ) {
                         Text(
                             text = error.getUserMessage(),
