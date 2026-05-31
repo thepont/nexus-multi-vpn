@@ -79,8 +79,8 @@ class RouterViewModelContractTest {
     fun `RouterViewModel should expose vpnStatus StateFlow`() {
         // GIVEN: RouterViewModel implementation
         // THEN: Should have vpnStatus StateFlow
-        assertNotNull(mockViewModel.vpnStatus, "vpnStatus should not be null")
-        assertEquals(VpnStatus.DISCONNECTED, mockViewModel.vpnStatus.value)
+        mockViewModel.vpnStatus.value = VpnStatus.PROTECTED
+        assertEquals(VpnStatus.PROTECTED, mockViewModel.vpnStatus.value)
     }
     
     @Test
@@ -215,10 +215,10 @@ class RouterViewModelContractTest {
         assertEquals(VpnStatus.DISCONNECTED, mockViewModel.vpnStatus.value)
         
         // WHEN: Implementation updates state
-        mockViewModel.vpnStatus.value = VpnStatus.CONNECTED
+        mockViewModel.vpnStatus.value = VpnStatus.PROTECTED
         
         // THEN: State should change
-        assertEquals(VpnStatus.CONNECTED, mockViewModel.vpnStatus.value)
+        assertEquals(VpnStatus.PROTECTED, mockViewModel.vpnStatus.value)
     }
     
     @Test
