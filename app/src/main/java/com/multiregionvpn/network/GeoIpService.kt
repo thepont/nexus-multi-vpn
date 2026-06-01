@@ -12,6 +12,7 @@ data class GeoIpResponse(
     @SerializedName("country_code")
     val countryCode: String?,
     val country: String?,
+    @SerializedName("region_code")
     val region: String?
 )
 
