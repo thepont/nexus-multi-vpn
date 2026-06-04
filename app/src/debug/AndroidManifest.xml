@@ -18,7 +18,7 @@
         android:allowBackup="true"
         android:usesCleartextTraffic="true"
         tools:ignore="MissingLeanbackLauncher"
-        tools:replace="android:allowBackup,android:usesCleartextTraffic">
+        tools:replace="android:allowBackup,android:usesCleartextTraffic,android:theme,android:name,android:label">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
             android:exported="true"
