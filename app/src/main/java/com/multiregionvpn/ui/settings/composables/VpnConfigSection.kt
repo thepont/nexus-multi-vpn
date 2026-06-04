@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -53,6 +54,36 @@ fun VpnConfigSection(
                 modifier = Modifier.testTag("add_vpn_config_button")
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Tunnel")
+            }
+        }
+
+        // Suggested regions for quick adding (essential for Maestro flows)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("UK", "FR", "AU", "US").forEach { regionId ->
+                Surface(
+                    onClick = {
+                        editingConfig = VpnConfig(
+                            id = java.util.UUID.randomUUID().toString(),
+                            name = "",
+                            regionId = regionId,
+                            templateId = "nordvpn",
+                            serverHostname = ""
+                        )
+                        showDialog = true
+                    },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.testTag("suggested_region_$regionId")
+                ) {
+                    Text(
+                        text = regionId,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
         }
         
