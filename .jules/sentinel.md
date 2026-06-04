@@ -14,3 +14,8 @@
 **Issue:** Legacy Git submodule references (like `libs/ics-openvpn`) without corresponding `.gitmodules` entries cause CI checkout and cleanup failures (exit code 128).
 **Learning:** Incomplete submodule removal leaves orphaned entries in the Git index that break automated workflows.
 **Prevention:** Use `git rm --cached <path>` to explicitly remove orphaned submodule references from the index. Ensure `.gitmodules` and the actual directory are also cleaned up.
+
+## 2024-06-04 - [UI-Test Synchronization and Enum Unification]
+**Issue:** Fragmented `VpnStatus` enums and inconsistent UI state labels (CONNECTED vs. PROTECTED) caused Maestro E2E test failures and potential UI logic bugs.
+**Learning:** Ensuring a single source of truth for critical application states is essential for both security logic and automated testing reliability.
+**Prevention:** Centralize core state enums in shared modules. Include display metadata (like `displayText`) within the enum to ensure UI and test assertions stay synchronized.
