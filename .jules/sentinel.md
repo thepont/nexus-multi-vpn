@@ -9,3 +9,8 @@
 **Vulnerability:** `VpnError.fromException` was leaking internal stack traces via the `details` field when converting exceptions.
 **Learning:** Returning full stack traces to the UI or logging them in production can expose internal implementation details, library versions, and potentially sensitive memory addresses or data, aiding an attacker in footprinting the application.
 **Prevention:** Explicitly sanitize error details by only including the exception message or a high-level summary. Avoid `Throwable.stackTraceToString()` in production-facing error models.
+
+## 2024-06-04 - [Orphaned Submodule References in CI]
+**Issue:** Legacy Git submodule references (like `libs/ics-openvpn`) without corresponding `.gitmodules` entries cause CI checkout and cleanup failures (exit code 128).
+**Learning:** Incomplete submodule removal leaves orphaned entries in the Git index that break automated workflows.
+**Prevention:** Use `git rm --cached <path>` to explicitly remove orphaned submodule references from the index. Ensure `.gitmodules` and the actual directory are also cleaned up.
