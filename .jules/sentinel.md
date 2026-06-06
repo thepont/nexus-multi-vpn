@@ -1,0 +1,4 @@
+## 2025-05-15 - [Hardening Production Manifests and Migrating to HTTPS]
+**Vulnerability:** Cleartext traffic was enabled for the entire application and specifically for `ip-api.com`. Additionally, application backups were enabled, potentially leaking sensitive VPN configurations and credentials.
+**Learning:** Hardening production manifests while maintaining testability requires a careful balance between `main` and `debug` manifest overrides. Switching to HTTPS-only services sometimes requires changing API providers if the existing one does not support HTTPS on the free tier.
+**Prevention:** Always default to `android:usesCleartextTraffic="false"` and `android:allowBackup="false"` in the main manifest. Use `debug` manifest overrides to re-enable them specifically for testing environments that require it (e.g., local mock servers).
