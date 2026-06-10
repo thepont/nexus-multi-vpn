@@ -35,12 +35,12 @@ appId: "com.multiregionvpn"
 - tapOn:
     id: "url_bar"
     optional: true
-- inputText: "ip-api.com/json"
+- inputText: "ipwho.is"
 - pressKey: Enter
 
 # Wait for page to load (use a simple assertion with optional)
 - assertVisible:
-    text: ".*ip-api.*|United Kingdom|GB|country|city"
+    text: ".*ipwho.*|United Kingdom|GB|country|city"
     optional: true
 
 # Look for "GB" in the page content (UK country code)
@@ -53,7 +53,7 @@ appId: "com.multiregionvpn"
 # ============================================
 # This test can only PARTIALLY verify routing automatically.
 # Manual steps:
-# 1. Check if page shows "countryCode":"GB"
+# 1. Check if page shows "country_code":"GB"
 # 2. Verify city is in UK (London, Manchester, etc.)
 # 3. If you see your local country, routing failed
 
