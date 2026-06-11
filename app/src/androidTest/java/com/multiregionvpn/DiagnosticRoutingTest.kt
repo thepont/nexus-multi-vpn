@@ -163,11 +163,11 @@ class DiagnosticRoutingTest {
         
         // Step 6: Make simple HTTP request
         println("\n6️⃣ Making HTTP request...")
-        println("   URL: http://ip-api.com/json")
+        println("   URL: https://ipwho.is/")
         println("   Expected: This request should go through VPN → UK servers")
         println("   Method: Direct HttpURLConnection (no Retrofit)")
         
-        val url = URL("http://ip-api.com/json")
+        val url = URL("https://ipwho.is/")
         val connection = url.openConnection() as HttpURLConnection
         connection.connectTimeout = 10000
         connection.readTimeout = 10000
@@ -181,8 +181,8 @@ class DiagnosticRoutingTest {
                 val response = connection.inputStream.bufferedReader().readText()
                 println("   Response: ${response.take(200)}...")
                 
-                // Parse country
-                val countryMatch = Regex(""""countryCode":"([A-Z]{2})"""").find(response)
+                // Parse country (ipwho.is uses country_code)
+                val countryMatch = Regex(""""country_code":"([A-Z]{2})"""").find(response)
                 val country = countryMatch?.groupValues?.get(1) ?: "UNKNOWN"
                 
                 println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

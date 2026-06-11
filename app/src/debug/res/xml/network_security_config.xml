@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- All cleartext traffic is disabled by default for security -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Allow cleartext traffic in debug builds for testing and local mocks -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
