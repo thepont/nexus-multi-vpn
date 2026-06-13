@@ -15,7 +15,7 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
-        android:name=".MainApplication"
+        android:name="com.multiregionvpn.MainApplication"
         android:theme="@style/Theme.MultiRegionVPN"
         android:label="@string/app_name"
         android:allowBackup="true"
@@ -24,7 +24,7 @@
         tools:replace="android:name,android:theme,android:label,android:allowBackup,android:usesCleartextTraffic,android:networkSecurityConfig"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
-            android:name=".deviceowner.TestDeviceOwnerReceiver"
+            android:name="com.multiregionvpn.deviceowner.TestDeviceOwnerReceiver"
             android:exported="true"
             android:permission="android.permission.BIND_DEVICE_ADMIN"
             tools:ignore="DeviceAdmin">
