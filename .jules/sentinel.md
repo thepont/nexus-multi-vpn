@@ -6,4 +6,4 @@
 ## 2026-06-16 - Hardening Network Security
 **Vulnerability:** `android:usesCleartextTraffic` was set to `true` in the main manifest, allowing all HTTP traffic.
 **Learning:** Defaulting to allow cleartext traffic increases the risk of MitM attacks and insecure data transmission.
-**Prevention:** Set `android:usesCleartextTraffic="false"` and use `network_security_config.xml` to explicitly permit exceptions only for required domains (e.g., ip-api.com for free-tier IP lookups).
+**Prevention:** Set `android:usesCleartextTraffic="false"` in the main manifest. To ensure Maestro and Hilt work correctly in CI, the debug manifest must explicitly override this and other application attributes using `tools:replace`.
