@@ -15,6 +15,10 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
+        android:name=".MainApplication"
+        android:theme="@style/Theme.MultiRegionVPN"
+        android:label="@string/app_name"
+        tools:replace="android:name,android:theme,android:label"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
