@@ -1,4 +1,4 @@
-## 2024-06-20 - Information Leakage in VPN Error Messages
+## 2024-06-20 - Information Leakage in VPN Error Messages and CI Blockers
 **Vulnerability:** VpnError.kt was configured to include full stack traces in user-facing error messages via the details field. This could leak internal implementation details, class names, and system state to end users.
-**Learning:** Providing detailed error information is helpful for debugging but must be strictly separated from user-facing UI components. The details field should be reserved for logging and internal diagnostics.
-**Prevention:** Enforce strict redaction of stack traces in UI-facing error components. User-facing messages should only contain actionable information and non-sensitive error summaries.
+**Learning:** Providing detailed error information is helpful for debugging but must be strictly separated from user-facing UI components. Additionally, incomplete attribute overrides in debug manifests (e.g., missing android:name or theme during tools:replace) can cause manifest merger failures that break Hilt initialization, leading to cryptic application startup timeouts in automated E2E environments.
+**Prevention:** Enforce strict redaction of stack traces in UI-facing error components. Always ensure debug manifests explicitly synchronize application-level attributes with production manifests when using tools:replace to maintain Hilt compatibility and build stability.
