@@ -139,5 +139,3 @@ data class VpnError(
         }
     }
 }
-
-
