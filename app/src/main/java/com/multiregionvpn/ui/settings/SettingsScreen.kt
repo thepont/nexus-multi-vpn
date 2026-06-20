@@ -1,37 +1,10 @@
 package com.multiregionvpn.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.Row
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -40,7 +13,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.multiregionvpn.ui.settings.composables.AppRuleSection
+import com.multiregionvpn.ui.settings.composables.AppRuleCard
 import com.multiregionvpn.ui.settings.composables.ProviderCredentialsSection
 import com.multiregionvpn.ui.settings.composables.VpnConfigSection
 import com.multiregionvpn.core.VpnError
@@ -64,10 +37,8 @@ fun SettingsScreen(
         }
     }
     
-    // Show error when it occurs
     LaunchedEffect(uiState.currentError) {
         uiState.currentError?.let { error ->
-            // Show snackbar with error
             val message = when (error.type) {
                 VpnError.ErrorType.AUTHENTICATION_FAILED -> "Authentication failed. Tap for details."
                 VpnError.ErrorType.CONNECTION_FAILED -> "Connection failed. Tap for details."
@@ -84,15 +55,9 @@ fun SettingsScreen(
                 actionLabel = "Details"
             )
             
-            // Show detailed error dialog when user taps "Details"
             when (result) {
-                SnackbarResult.ActionPerformed -> {
-                    showErrorDialog = error
-                }
-                SnackbarResult.Dismissed -> {
-                    // User dismissed, clear error
-                    viewModel.clearError()
-                }
+                SnackbarResult.ActionPerformed -> showErrorDialog = error
+                SnackbarResult.Dismissed -> viewModel.clearError()
             }
         }
     }
@@ -107,11 +72,8 @@ fun SettingsScreen(
                 onToggleVpn = { enabled ->
                     if (enabled) {
                         val intent = VpnService.prepare(context)
-                        if (intent != null) {
-                            vpnPermissionLauncher.launch(intent)
-                        } else {
-                            viewModel.startVpn(context)
-                        }
+                        if (intent != null) vpnPermissionLauncher.launch(intent)
+                        else viewModel.startVpn(context)
                     } else {
                         viewModel.stopVpn(context)
                     }
@@ -119,41 +81,46 @@ fun SettingsScreen(
             )
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .testTag("settings_screen")
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(16.dp)
         ) {
-            // Section 1: Provider Credentials
-            ProviderCredentialsSection(
-                credentials = uiState.nordCredentials,
-                onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
-            )
-            
-            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            item {
+                ProviderCredentialsSection(
+                    credentials = uiState.nordCredentials,
+                    onSaveCredentials = { u, p -> viewModel.saveNordCredentials(u, p) }
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
 
-            // Section 2: My VPN Servers (CRUD)
-            VpnConfigSection(
-                configs = uiState.vpnConfigs,
-                onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
-                onDeleteConfig = { id -> viewModel.deleteVpnConfig(id) },
-                onFetchNordVpnServer = { regionId, callback -> viewModel.fetchNordVpnServer(regionId, callback) }
-            )
+            item {
+                VpnConfigSection(
+                    configs = uiState.vpnConfigs,
+                    onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
+                    onDeleteConfig = { id -> viewModel.deleteVpnConfig(id) },
+                    onFetchNordVpnServer = { regionId, callback -> viewModel.fetchNordVpnServer(regionId, callback) }
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
 
-            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            item {
+                Text("App Routing Rules", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
-            // Section 3: App Routing Rules
-            AppRuleSection(
-                installedApps = uiState.installedApps,
-                appRules = uiState.appRules,
-                vpnConfigs = uiState.vpnConfigs,
-                onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
-            )
+            items(uiState.installedApps, key = { it.packageName }) { app ->
+                AppRuleCard(
+                    app = app,
+                    selectedConfigId = uiState.appRules[app.packageName],
+                    vpnConfigs = uiState.vpnConfigs,
+                    onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
+                )
+            }
         }
         
-        // Error Detail Dialog
         showErrorDialog?.let { error ->
             AlertDialog(
                 onDismissRequest = {
@@ -175,9 +142,7 @@ fun SettingsScreen(
                 },
                 text = {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = error.getUserMessage(),
@@ -194,26 +159,11 @@ fun SettingsScreen(
                     }
                 },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            showErrorDialog = null
-                            viewModel.clearError()
-                        }
-                    ) {
+                    Button(onClick = {
+                        showErrorDialog = null
+                        viewModel.clearError()
+                    }) {
                         Text("OK")
-                    }
-                },
-                dismissButton = {
-                    if (error.type == VpnError.ErrorType.AUTHENTICATION_FAILED) {
-                        TextButton(
-                            onClick = {
-                                // Scroll to credentials section (could be enhanced)
-                                showErrorDialog = null
-                                viewModel.clearError()
-                            }
-                        ) {
-                            Text("Go to Credentials")
-                        }
                     }
                 }
             )

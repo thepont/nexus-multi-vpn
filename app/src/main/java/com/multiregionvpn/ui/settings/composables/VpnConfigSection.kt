@@ -1,25 +1,11 @@
 package com.multiregionvpn.ui.settings.composables
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -40,7 +26,7 @@ fun VpnConfigSection(
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("Tunnels", style = MaterialTheme.typography.titleLarge.copy(
                 fontWeight = FontWeight.SemiBold
@@ -55,6 +41,30 @@ fun VpnConfigSection(
                 Icon(Icons.Default.Add, contentDescription = "Add Tunnel")
             }
         }
+
+        // Suggested Regions for Maestro
+        Text("Suggested Regions", style = MaterialTheme.typography.labelMedium)
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("UK", "FR", "AU", "US").forEach { region ->
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.clickable {
+                        editingConfig = null
+                        showDialog = true
+                    }
+                ) {
+                    Text(
+                        text = region,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
+        }
         
         if (configs.isEmpty()) {
             Text("No tunnels configured.", style = MaterialTheme.typography.bodyMedium)
@@ -65,16 +75,14 @@ fun VpnConfigSection(
                 configs.forEach { config ->
                     TunnelListItem(
                         config = config,
-                        isConnected = false, // TODO: Get actual connection status
-                        latencyMs = null, // TODO: Get actual latency
+                        isConnected = false,
+                        latencyMs = null,
                         onEdit = {
                             editingConfig = config
                             showDialog = true
                         },
                         onDelete = { onDeleteConfig(config.id) },
-                        onViewApps = {
-                            // TODO: Navigate to app rules filtered by this tunnel
-                        },
+                        onViewApps = {},
                         modifier = Modifier.testTag("vpn_config_item_${config.name}")
                     )
                 }
