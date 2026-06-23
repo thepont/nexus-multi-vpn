@@ -5,7 +5,7 @@ package com.multiregionvpn.ui.shared
  */
 enum class VpnStatus(val displayText: String) {
     PROTECTED("Protected"),
-    CONNECTED("Connected"),
+    CONNECTED("Protected"),
     CONNECTING("Connecting"),
     DISCONNECTED("Disconnected"),
     ERROR("Error")
