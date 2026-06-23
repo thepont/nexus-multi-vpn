@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -16,6 +17,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.multiregionvpn.ui.shared.VpnStatus
 
 /**
  * Professional VPN Header Bar (NOC Style)
@@ -35,7 +37,7 @@ fun VpnHeaderBar(
     // Animate status color
     val statusColor by animateColorAsState(
         targetValue = when (status) {
-            VpnStatus.PROTECTED -> Color(0xFF4CAF50)  // Green
+            VpnStatus.PROTECTED, VpnStatus.CONNECTED -> Color(0xFF4CAF50)  // Green
             VpnStatus.CONNECTING -> Color(0xFF2196F3) // Blue
             VpnStatus.DISCONNECTED -> Color(0xFF9E9E9E) // Gray
             VpnStatus.ERROR -> Color(0xFFF44336) // Red
@@ -88,7 +90,7 @@ fun VpnHeaderBar(
                     )
                     
                     // Data rate (only show when protected)
-                    if (status == VpnStatus.PROTECTED && dataRateMbps > 0.0) {
+                    if ((status == VpnStatus.PROTECTED || status == VpnStatus.CONNECTED) && dataRateMbps > 0.0) {
                         Text(
                             text = String.format("%.1f MB/s", dataRateMbps),
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -124,14 +126,3 @@ fun VpnHeaderBar(
         )
     )
 }
-
-/**
- * VPN Status States
- */
-enum class VpnStatus(val displayText: String) {
-    PROTECTED("Protected"),
-    CONNECTING("Connecting"),
-    DISCONNECTED("Disconnected"),
-    ERROR("Error")
-}
-
