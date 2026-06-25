@@ -1,4 +1,4 @@
 ## 2026-06-25 - Manifest Merger Conflict during Hardening
 **Vulnerability:** Manifest merger failure or Hilt initialization failure after disabling cleartext traffic.
 **Learning:** In this project, the main manifest uses `tools:replace` for `android:name`, `android:theme`, and `android:label`. When overriding security settings in a debug manifest (e.g., to allow cleartext for tests), these attributes must be explicitly redefined in the debug manifest and included in its own `tools:replace` list. Failure to do so causes manifest merger errors that prevent the application from starting.
-**Prevention:** Always include all attributes from the main manifest's `tools:replace` list in the debug manifest when redefining the `<application>` tag.
+**Prevention:** Always include all attributes from the main manifest's `tools:replace` list in the debug manifest when redefining the `<application>` tag. Additionally, use fully qualified class names for `android:name` in the debug manifest to ensure proper Hilt/Application initialization.
