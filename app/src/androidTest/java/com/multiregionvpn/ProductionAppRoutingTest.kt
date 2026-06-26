@@ -184,7 +184,7 @@ class ProductionAppRoutingTest {
         println("\n5️⃣ MANUAL VERIFICATION REQUIRED:")
         println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         println("1. Open Chrome on your device")
-        println("2. Navigate to: http://ip-api.com/json")
+        println("2. Navigate to: https://freeipapi.com/api/json")
         println("3. Check the 'countryCode' field")
         println("   ✅ Expected: \"GB\" (United Kingdom)")
         println("   ❌ If you see your local country, routing failed")
@@ -251,7 +251,7 @@ class ProductionAppRoutingTest {
         
         println("\n📊 VPN IS ACTIVE - Chrome should be in allowed apps")
         println("   To verify: Check logcat for 'ALLOWED: $CHROME_PACKAGE'")
-        println("   To test: Open Chrome and browse to http://ip-api.com/json")
+        println("   To test: Open Chrome and browse to https://freeipapi.com/api/json")
         println("   Expected: Packets from UID $chromeUid should appear in PacketRouter logs")
         println()
         println("Test will keep VPN active for 60 seconds for observation...")
