@@ -1,0 +1,4 @@
+## 2026-06-30 - [HTTPS Migration and Info Leakage Fix]
+**Vulnerability:** Insecure HTTP transmission for GeoIP lookups and information leakage via stack traces in user-visible VPN error messages.
+**Learning:** Permitting cleartext traffic globally in the manifest (`android:usesCleartextTraffic="true"`) is a common but dangerous shortcut that bypasses modern Android security defaults. Additionally, concatenating `Exception.stackTraceToString()` into UI strings for "debugging" purposes directly violates CWE-209.
+**Prevention:** Always use HTTPS for external API calls, even for non-sensitive data like geographic regions. Enforce `usesCleartextTraffic="false"` in production manifests. Sanitize error messages to ensure only user-friendly strings are displayed, keeping technical details for internal logs only.
