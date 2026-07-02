@@ -1,6 +1,7 @@
 package com.multiregionvpn.network
 
 import android.util.Log
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.Retrofit
@@ -9,7 +10,9 @@ import retrofit2.http.GET
 
 data class GeoIpResponse(
     val countryCode: String?,
+    @SerializedName("countryName")
     val country: String?,
+    @SerializedName("regionName")
     val region: String?
 )
 
@@ -19,11 +22,12 @@ interface GeoIpApi {
 }
 
 /**
- * Service to get current geographic region using ip-api.com
+ * Service to get current geographic region using freeipapi.com over HTTPS.
+ * This is more secure than using insecure HTTP.
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        .baseUrl("https://freeipapi.com/api/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
