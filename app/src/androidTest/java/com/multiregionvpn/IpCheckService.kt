@@ -29,7 +29,7 @@ data class IpInfo(
  * Retrofit interface for IP geolocation checking
  */
 interface IpApiService {
-    @GET("/json")
+    @GET("json")
     suspend fun getIpInfo(): IpInfo
 }
 
@@ -42,7 +42,7 @@ object IpCheckService {
         .build()
 
     private val retrofit = Retrofit.Builder()
-        .baseUrl("https://freeipapi.com/api/")
+        .baseUrl("https://free.freeipapi.com/api/")
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
 
