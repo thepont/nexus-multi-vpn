@@ -14,9 +14,9 @@ import retrofit2.http.GET
 @JsonClass(generateAdapter = true)
 data class IpInfo(
     @Json(name = "countryCode") val countryCode: String?,
-    @Json(name = "query") val ipAddress: String?,
-    @Json(name = "country") val country: String?,
-    @Json(name = "city") val city: String?
+    @Json(name = "ipAddress") val ipAddress: String?,
+    @Json(name = "countryName") val country: String?,
+    @Json(name = "cityName") val city: String?
 ) {
     val normalizedCountryCode: String?
         get() = countryCode
@@ -29,22 +29,20 @@ data class IpInfo(
  * Retrofit interface for IP geolocation checking
  */
 interface IpApiService {
-    @GET("/json")
+    @GET("json")
     suspend fun getIpInfo(): IpInfo
 }
 
 /**
- * Singleton object to access the IP geolocation API
+ * Singleton object to access the IP geolocation API using freeipapi.com over HTTPS.
  */
 object IpCheckService {
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
 
-    // Use ip-api.com with HTTP (requires cleartext traffic enabled)
-    // The test manifest has android:usesCleartextTraffic="true"
     private val retrofit = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        .baseUrl("https://free.freeipapi.com/api/")
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
 
