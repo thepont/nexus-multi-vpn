@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -40,7 +42,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.multiregionvpn.ui.settings.composables.AppRuleSection
+import com.multiregionvpn.ui.settings.composables.AppRuleCard
 import com.multiregionvpn.ui.settings.composables.ProviderCredentialsSection
 import com.multiregionvpn.ui.settings.composables.VpnConfigSection
 import com.multiregionvpn.core.VpnError
@@ -119,38 +121,52 @@ fun SettingsScreen(
             )
         }
     ) { padding ->
-        Column(
+        // Flatten the UI into a single LazyColumn for better scroll performance and Maestro discovery
+        LazyColumn(
             modifier = Modifier
                 .testTag("settings_screen")
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            // Section 1: Provider Credentials
-            ProviderCredentialsSection(
-                credentials = uiState.nordCredentials,
-                onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
-            )
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                // Section 1: Provider Credentials
+                ProviderCredentialsSection(
+                    credentials = uiState.nordCredentials,
+                    onSaveCredentials = { username, password -> viewModel.saveNordCredentials(username, password) }
+                )
+            }
             
-            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                // Section 2: My VPN Servers (CRUD)
+                VpnConfigSection(
+                    configs = uiState.vpnConfigs,
+                    onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
+                    onDeleteConfig = { id -> viewModel.deleteVpnConfig(id) },
+                    onFetchNordVpnServer = { regionId, callback -> viewModel.fetchNordVpnServer(regionId, callback) }
+                )
+            }
 
-            // Section 2: My VPN Servers (CRUD)
-            VpnConfigSection(
-                configs = uiState.vpnConfigs,
-                onSaveConfig = { config -> viewModel.saveVpnConfig(config) },
-                onDeleteConfig = { id -> viewModel.deleteVpnConfig(id) },
-                onFetchNordVpnServer = { regionId, callback -> viewModel.fetchNordVpnServer(regionId, callback) }
-            )
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                Text("App Routing Rules", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
-            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            // Section 3: App Routing Rules (Individual items for lazy loading)
+            items(uiState.installedApps, key = { it.packageName }) { app ->
+                AppRuleCard(
+                    app = app,
+                    selectedConfigId = uiState.appRules[app.packageName],
+                    vpnConfigs = uiState.vpnConfigs,
+                    onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
+                )
+            }
 
-            // Section 3: App Routing Rules
-            AppRuleSection(
-                installedApps = uiState.installedApps,
-                appRules = uiState.appRules,
-                vpnConfigs = uiState.vpnConfigs,
-                onRuleChanged = { pkg, id -> viewModel.saveAppRule(pkg, id) }
-            )
+            item {
+                Spacer(modifier = Modifier.height(32.dp))
+            }
         }
         
         // Error Detail Dialog
