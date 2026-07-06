@@ -14,8 +14,13 @@
         android:name="android.permission.MANAGE_CA_CERTIFICATES"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- 🛡️ Sentinel: Debug manifest overrides for E2E tests and mock servers.
+         Explicitly re-enables allowBackup and usesCleartextTraffic for tests. -->
     <application
-        tools:ignore="MissingLeanbackLauncher">
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        tools:ignore="MissingLeanbackLauncher"
+        tools:replace="android:allowBackup,android:usesCleartextTraffic">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
             android:exported="true"

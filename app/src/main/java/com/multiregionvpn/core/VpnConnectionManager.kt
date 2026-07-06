@@ -447,13 +447,14 @@ class VpnConnectionManager(
                         if (length > 0) {
                             responseCount++
                             val packet = buffer.copyOf(length)
-                            Log.i(TAG, "📥 [Response #$responseCount] Read ${packet.size} bytes from socket pair for tunnel $tunnelId (response from OpenVPN 3)")
+                            // PERFORMANCE: Reduced logging level for per-packet events to prevent binder exhaustion
+                            Log.v(TAG, "📥 [Response #$responseCount] Read ${packet.size} bytes from socket pair for tunnel $tunnelId (response from OpenVPN 3)")
                             
                             // Forward packet to TUN interface via packetReceiver callback
                             // This writes the response packet to the TUN interface so apps receive it
                             if (packetReceiver != null) {
                                 packetReceiver!!.invoke(tunnelId, packet)
-                                Log.d(TAG, "   ✅ Response #$responseCount forwarded to TUN via packetReceiver")
+                                Log.v(TAG, "   ✅ Response #$responseCount forwarded to TUN via packetReceiver")
                             } else {
                                 Log.w(TAG, "   ⚠️  Response #$responseCount received but packetReceiver is null!")
                             }

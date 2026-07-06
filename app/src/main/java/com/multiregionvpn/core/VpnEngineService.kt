@@ -884,11 +884,12 @@ class VpnEngineService : VpnService() {
                     if (length > 0) {
                         packetCount++
                         val packet = buffer.copyOf(length)
-                        Log.i(TAG, "📦 [Packet #$packetCount] Read ${length} bytes from TUN - routing to PacketRouter")
+                        // PERFORMANCE: Reduced logging level for per-packet events to prevent binder exhaustion
+                        Log.v(TAG, "📦 [Packet #$packetCount] Read ${length} bytes from TUN - routing to PacketRouter")
                         // Pass packet to PacketRouter for routing based on app rules
                         // This enables multi-tunnel routing (different apps → different VPNs)
                         packetRouter.routePacket(packet)
-                        Log.d(TAG, "   ✅ Packet #$packetCount routed to PacketRouter")
+                        Log.v(TAG, "   ✅ Packet #$packetCount routed to PacketRouter")
                     } else if (length == -1) {
                         Log.w(TAG, "❌ TUN input stream closed (EOF) - readPacketsFromTun() stopping (read $packetCount packets)")
                         break

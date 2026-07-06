@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 🛡️ Sentinel: Hardened configuration. All cleartext traffic is prohibited. -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- 🛡️ Sentinel: Debug configuration. Allow cleartext for local mock servers and legacy tests. -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
