@@ -14,9 +14,12 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
+        android:name=".MainApplication"
+        android:theme="@style/Theme.MultiRegionVPN"
+        android:label="@string/app_name"
         android:allowBackup="true"
         android:usesCleartextTraffic="true"
-        tools:replace="android:usesCleartextTraffic,android:allowBackup"
+        tools:replace="android:theme,android:name,android:label,android:allowBackup,android:usesCleartextTraffic"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"

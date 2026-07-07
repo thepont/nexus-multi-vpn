@@ -27,7 +27,7 @@ appId: "com.multiregionvpn"
 
 # Launch Chrome
 - stopApp
-- delay: 2000
+- sleep: 2000
 - launchApp:
     appId: "com.android.chrome"
     clearState: false
