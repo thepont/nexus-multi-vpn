@@ -22,11 +22,10 @@ interface GeoIpApi {
 /**
  * Service to get current geographic region using freeipapi.com
  * Secure HTTPS is used to prevent unencrypted transmission of location data.
- * Using free.freeipapi.com subdomain for direct redirect-free access.
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("https://free.freeipapi.com/api/")
+        .baseUrl("https://freeipapi.com/api/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)

@@ -42,9 +42,8 @@ object IpCheckService {
         .build()
 
     // Use freeipapi.com with HTTPS for secure testing
-    // Using free.freeipapi.com subdomain for direct redirect-free access
     private val retrofit = Retrofit.Builder()
-        .baseUrl("https://free.freeipapi.com/api/")
+        .baseUrl("https://freeipapi.com/api/")
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
 

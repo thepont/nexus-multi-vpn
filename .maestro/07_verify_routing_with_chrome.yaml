@@ -35,7 +35,7 @@ appId: "com.multiregionvpn"
 - tapOn:
     id: "url_bar"
     optional: true
-- inputText: "https://free.freeipapi.com/api/json"
+- inputText: "https://freeipapi.com/api/json"
 - pressKey: Enter
 
 # Wait for page to load (use a simple assertion with optional)
