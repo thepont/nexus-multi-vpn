@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Hardened configuration: only HTTPS is permitted for all domains -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Allow cleartext for local mock servers during debug/testing -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
