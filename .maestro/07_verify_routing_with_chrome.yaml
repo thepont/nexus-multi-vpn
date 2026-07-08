@@ -40,7 +40,7 @@ appId: "com.multiregionvpn"
 
 # Wait for page to load (use a simple assertion with optional)
 - assertVisible:
-    text: ".*freeipapi.*|United Kingdom|GB|country|city"
+    text: ".*freeipapi.*|United Kingdom|GB|countryName|cityName"
     optional: true
 
 # Look for "GB" in the page content (UK country code)
