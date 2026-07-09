@@ -1,0 +1,4 @@
+## 2026-07-09 - Prevent Information Exposure via VpnError
+**Vulnerability:** CWE-209: Generation of Error Message Containing Sensitive Information. The `VpnError` class was bundling full stack traces (via `Throwable.stackTraceToString()`) into the `details` field, which was then concatenated into the `getUserMessage()` output displayed in the UI.
+**Learning:** Attaching internal diagnostics to high-level error objects used for UI display is a dangerous pattern. While useful for logging, these details must be explicitly separated from user-facing strings.
+**Prevention:** Always maintain a strict separation between internal error details (stack traces, raw API responses) and the messages displayed to the end-user. Use unit tests to assert that user-facing messages do not contain specific "internal" substrings like stack trace markers.
