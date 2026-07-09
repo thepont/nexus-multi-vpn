@@ -42,7 +42,11 @@ fun AppRuleSection(
     onRuleChanged: (String, String?) -> Unit
 ) {
     Column {
-        Text("App Routing Rules", style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = "App Routing Rules",
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.testTag("App Routing Rules")
+        )
         
         LazyColumn(
             modifier = Modifier.height(400.dp) // Give it a fixed height in a scrolling screen
@@ -88,6 +92,7 @@ fun AppRuleSection(
                                         .fillMaxWidth()
                                         .menuAnchor()
                                         .testTag("app_rule_dropdown_${app.packageName}")
+                                        .testTag(selectedText)
                                 )
                                 
                                 DropdownMenu(

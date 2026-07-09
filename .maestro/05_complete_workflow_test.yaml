@@ -10,7 +10,7 @@ appId: "com.multiregionvpn"
 # Start VPN if not already connected
 - runFlow:
     when:
-      visible: "Direct Internet|Disconnected"
+      visible: "Disconnected"
     commands:
       - tapOn:
           point: "90%,8%"
