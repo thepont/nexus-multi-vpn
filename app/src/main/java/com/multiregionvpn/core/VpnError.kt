@@ -35,11 +35,7 @@ data class VpnError(
     }
     
     /**
-     * Returns a user-friendly error message.
-     *
-     * SECURITY NOTE: This method explicitly excludes 'details' (which often contains
-     * stack traces) to prevent information leakage (CWE-209). Only the high-level
-     * 'message' is shown to the user.
+     * Returns a user-friendly error message
      */
     fun getUserMessage(): String {
         return when (type) {
@@ -48,38 +44,38 @@ data class VpnError(
                 "• Go to https://my.nordaccount.com/dashboard/nordvpn/manual-setup/\n" +
                 "• Generate new Service Credentials\n" +
                 "• Update them in the app settings\n\n" +
-                "Error: $message"
+                "Error: ${details ?: message}"
             }
             ErrorType.CONNECTION_FAILED -> {
                 "Could not connect to VPN server:\n\n" +
                 "• Check your internet connection\n" +
                 "• The VPN server may be temporarily unavailable\n" +
                 "• Try a different server region\n\n" +
-                "Error: $message"
+                "Error: ${details ?: message}"
             }
             ErrorType.CONFIG_ERROR -> {
                 "Invalid VPN configuration:\n\n" +
                 "• The server configuration may be outdated\n" +
                 "• Try removing and re-adding the VPN server\n" +
                 "• Check if the server hostname is correct\n\n" +
-                "Error: $message"
+                "Error: ${details ?: message}"
             }
             ErrorType.INTERFACE_ERROR -> {
                 "VPN interface error:\n\n" +
                 "• VPN permission may not be granted\n" +
                 "• Another VPN may be active\n" +
                 "• Try restarting the app\n\n" +
-                "Error: $message"
+                "Error: ${details ?: message}"
             }
             ErrorType.TUNNEL_ERROR -> {
                 "Tunnel creation failed:\n\n" +
                 "• Check your VPN credentials\n" +
                 "• Verify the server is reachable\n" +
                 "• Try a different server\n\n" +
-                "Error: $message"
+                "Error: ${details ?: message}"
             }
             ErrorType.UNKNOWN -> {
-                "An unexpected error occurred:\n\n$message"
+                "An unexpected error occurred:\n\n${details ?: message}"
             }
         }
     }
