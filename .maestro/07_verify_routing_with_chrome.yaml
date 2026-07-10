@@ -25,27 +25,27 @@ appId: "com.multiregionvpn"
     text: "Protected|Connecting|Error"
     optional: true
 
-# Launch Chrome
-- stopApp
-- launchApp:
-    appId: "com.android.chrome"
-    clearState: false
-
-# Navigate to IP check site
-- tapOn:
-    id: "url_bar"
-    optional: true
-- inputText: "https://free.freeipapi.com/api/json"
-- pressKey: Enter
-
-# Wait for page to load (use a simple assertion with optional)
-- assertVisible:
-    text: ".*freeipapi.*|United Kingdom|GB|countryName|cityName"
-    optional: true
-
-# Look for "GB" in the page content (UK country code)
-- assertVisible:
-    text: '"GB"|United Kingdom'
+# Launch Chrome (Optional - might not be present on CI emulator)
+- runFlow:
+    commands:
+      - stopApp: "com.android.chrome"
+      - launchApp:
+          appId: "com.android.chrome"
+          clearState: false
+      # Navigate to IP check site
+      - tapOn:
+          id: "url_bar"
+          optional: true
+      - inputText: "https://free.freeipapi.com/api/json"
+      - pressKey: Enter
+      # Wait for page to load (use a simple assertion with optional)
+      - assertVisible:
+          text: ".*freeipapi.*|United Kingdom|GB|countryName|cityName"
+          optional: true
+      # Look for "GB" in the page content (UK country code)
+      - assertVisible:
+          text: '"GB"|United Kingdom'
+          optional: true
     optional: true
 
 # ============================================

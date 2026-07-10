@@ -42,7 +42,11 @@ fun AppRuleSection(
     onRuleChanged: (String, String?) -> Unit
 ) {
     Column {
-        Text("App Routing Rules", style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = "App Routing Rules",
+            modifier = Modifier.testTag("app_routing_rules_header"),
+            style = MaterialTheme.typography.titleLarge
+        )
         
         LazyColumn(
             modifier = Modifier.height(400.dp) // Give it a fixed height in a scrolling screen

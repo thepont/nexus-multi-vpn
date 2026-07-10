@@ -61,6 +61,7 @@ fun VpnHeaderBar(
                 // App name
                 Text(
                     text = "Region Router",
+                    modifier = Modifier.testTag("app_title"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold
                 )
