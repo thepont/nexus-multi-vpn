@@ -25,7 +25,7 @@ interface GeoIpApi {
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("https://freeipapi.com/api/")
+        .baseUrl("https://free.freeipapi.com/api/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
