@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext traffic for testing with ip-api.com -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">ip-api.com</domain>
-    </domain-config>
+    <!--
+      Network Security Configuration for Multi-Region VPN.
+
+      SECURITY HARDENING:
+      - All cleartext (HTTP) traffic is strictly prohibited.
+      - System trust anchors only.
+      - Removed previous exception for insecure ip-api.com.
+    -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
 </network-security-config>
-
-
