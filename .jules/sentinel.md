@@ -1,0 +1,4 @@
+## 2026-07-12 - Harden Network Security and Prevent Info Leakage
+**Vulnerability:** Application allowed cleartext traffic for GeoIP lookups via ip-api.com (which lacks free HTTPS) and exposed stack traces in VPN error messages.
+**Learning:** Hardening `android:usesCleartextTraffic="false"` in the main manifest requires explicit overrides in `app/src/debug/AndroidManifest.xml` with `tools:replace` to support local HTTP mock servers used in E2E tests. Redundant application attributes (like `android:name`) in the debug manifest should be avoided to prevent APK installation failures.
+**Prevention:** Use secure GeoIP providers like `freeipapi.com` that support HTTPS. Always sanitize `getUserMessage()` methods to exclude `details` or stack trace fields. Use a minimal debug manifest for test-specific overrides.

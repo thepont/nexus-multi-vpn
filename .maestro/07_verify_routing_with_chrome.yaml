@@ -8,11 +8,12 @@ appId: "com.multiregionvpn"
 
 # Assign Chrome to UK tunnel
 - tapOn:
+    text: "Apps"
+- tapOn:
     text: "Chrome"
     optional: true
 - tapOn:
-    text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
-    optional: true
+    text: ".*UK.*"
 - waitForAnimationToEnd
 
 # Start VPN
@@ -21,41 +22,31 @@ appId: "com.multiregionvpn"
 - waitForAnimationToEnd
 
 # Should show Protected (allow transient states)
-- assertVisible:
-    text: "Protected|Connecting|Error"
-    optional: true
+- runFlow:
+    when:
+      visible: "Protected"
+    commands:
+      - assertVisible: "Protected"
 
 # Launch Chrome
 - stopApp
-- launchApp:
+- runFlow:
     appId: "com.android.chrome"
-    clearState: false
-
-# Navigate to IP check site
-- tapOn:
-    id: "url_bar"
     optional: true
-- inputText: "ip-api.com/json"
-- pressKey: Enter
+    commands:
+      - launchApp:
+          appId: "com.android.chrome"
+          clearState: false
 
-# Wait for page to load (use a simple assertion with optional)
-- assertVisible:
-    text: ".*ip-api.*|United Kingdom|GB|country|city"
-    optional: true
+      # Navigate to IP check site
+      - tapOn:
+          id: "url_bar"
+          optional: true
+      - inputText: "https://free.freeipapi.com/api/json"
+      - pressKey: Enter
 
-# Look for "GB" in the page content (UK country code)
-- assertVisible:
-    text: '"GB"|United Kingdom'
-    optional: true
-
-# ============================================
-# Manual Verification Note
-# ============================================
-# This test can only PARTIALLY verify routing automatically.
-# Manual steps:
-# 1. Check if page shows "countryCode":"GB"
-# 2. Verify city is in UK (London, Manchester, etc.)
-# 3. If you see your local country, routing failed
+      # Wait for page to load
+      - assertVisible: "GB"
 
 # Return to VPN app
 - stopApp
@@ -66,6 +57,4 @@ appId: "com.multiregionvpn"
 - tapOn:
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
-- assertVisible:
-    text: "Disconnected|Error|Direct Internet"
-
+- assertVisible: "Disconnected"

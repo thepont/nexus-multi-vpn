@@ -4,42 +4,15 @@ appId: "com.multiregionvpn"
 # Tests adding, viewing, and managing VPN tunnels
 
 - launchApp
-
 - waitForAnimationToEnd
 
-# Test: Add a new tunnel (open Add dialog via region tile)
-- tapOn:
-    text: "UK"
-    optional: true
-- assertVisible:
-    text: "Add Server"
-    optional: true
+# Test: Add a new tunnel
+- tapOn: "UK"
+- assertVisible: "Add Server"
 
 # Fill in tunnel details
-- tapOn:
-    text: "Friendly Name"
-    optional: true
+- tapOn: "Friendly Name"
 - inputText: "Test UK Tunnel"
-- tapOn:
-    text: "Region"
-    optional: true
-- tapOn:
-    text: "UK"
-    optional: true
-- tapOn:
-    text: "Provider|Template"
-    optional: true
-- tapOn:
-    text: "NordVPN|local-test"
-    optional: true
-- tapOn:
-    text: "Fetch Server|Auto-Fetch|Auto Fetch"
-    optional: true
-- assertVisible:
-    text: "Region Router"
-- tapOn:
-    text: "Save"
-    optional: true
+- tapOn: "Save"
 
-# Skip strict deletion verification locally
-
+- assertVisible: "Test UK Tunnel"
