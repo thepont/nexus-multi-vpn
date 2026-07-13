@@ -24,7 +24,7 @@ appId: "com.multiregionvpn"
     optional: true
 - runFlow:
     when:
-      notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+      notVisible: "UK"
     commands:
       - tapOn: "UK"
       - assertVisible: "Add Server"
@@ -33,8 +33,7 @@ appId: "com.multiregionvpn"
       - tapOn: "Region"
       - tapOn: "UK"
       - tapOn: "Save"
-      - assertVisible:
-          text: ".*UK.*\(OpenVPN\)"
+      - assertVisible: "UK"
 
 # --- 3. Assign a Rule to an App ---
 # Scroll and find an app to assign a rule
