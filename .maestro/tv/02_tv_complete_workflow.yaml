@@ -101,7 +101,7 @@ appId: "com.multiregionvpn"
 
 # Status should update
 - assertVisible:
-    text: "Connecting...|Protected|Error"
+    text: "Connecting..."
 
 # Toggle off
 - pressKey: Up

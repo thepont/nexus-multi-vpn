@@ -57,7 +57,7 @@ appId: "com.multiregionvpn"
 
 # Status should change
 - assertVisible:
-    text: "Connecting...|Protected|Disconnected"
+    text: "Connecting..."
 
 # Toggle back off
 - pressKey: Up

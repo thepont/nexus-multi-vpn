@@ -17,7 +17,7 @@ appId: "com.multiregionvpn"
 
 # Select a tunnel (UK variants)
 - tapOn:
-    text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
+    text: ".*UK.*\(OpenVPN\)"
     optional: true
 
 # Verify rule was saved (badge should turn green)
@@ -33,7 +33,7 @@ appId: "com.multiregionvpn"
 
 # Switch to France tunnel
 - tapOn:
-    text: ".*France.*|.*FR.*"
+    text: "France"
     optional: true
 
 - waitForAnimationToEnd

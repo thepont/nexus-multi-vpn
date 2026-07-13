@@ -16,7 +16,7 @@ appId: "com.multiregionvpn"
     text: "Chrome"
     optional: true
 - tapOn:
-    text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
+    text: ".*UK.*\(OpenVPN\)"
     optional: true
 - waitForAnimationToEnd
 
@@ -30,7 +30,7 @@ appId: "com.multiregionvpn"
     text: "Firefox"
     optional: true
 - tapOn:
-    text: '.*France.*\(OpenVPN\)|.*France.*|.*FR.*'
+    text: ".*France.*\(OpenVPN\)"
     optional: true
 - waitForAnimationToEnd
 
@@ -41,10 +41,11 @@ appId: "com.multiregionvpn"
 
 # Assign a streaming app to UK
 - tapOn:
-    text: "Netflix|Disney"
+    text: "Netflix"
+    optional: true
     optional: true
 - tapOn:
-    text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
+    text: ".*UK.*\(OpenVPN\)"
     optional: true
 - waitForAnimationToEnd
 
@@ -67,7 +68,7 @@ appId: "com.multiregionvpn"
     text: "Chrome"
     optional: true
 - tapOn:
-    text: '.*France.*\(OpenVPN\)|.*France.*|.*FR.*'
+    text: ".*France.*\(OpenVPN\)"
 - waitForAnimationToEnd
 
 # VPN should stay up (skip strict assertion)
@@ -78,7 +79,7 @@ appId: "com.multiregionvpn"
     text: "Chrome"
     optional: true
 - tapOn:
-    text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
+    text: ".*UK.*\(OpenVPN\)"
 - waitForAnimationToEnd
 
 - waitForAnimationToEnd
@@ -101,7 +102,7 @@ appId: "com.multiregionvpn"
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
 - assertVisible:
-    text: "Disconnected|Error|Direct Internet"
+    text: "Disconnected"
 
 # Both tunnels should show Disconnected
 # Skip strict disconnected status per tunnel
