@@ -25,6 +25,7 @@ interface GeoIpApi {
 /**
  * Service to get current geographic region using freeipapi.com
  * switched from ip-api.com to support HTTPS in the free tier.
+ * Using free.freeipapi.com subdomain to avoid 302 redirects.
  */
 class GeoIpService {
     private val api = Retrofit.Builder()

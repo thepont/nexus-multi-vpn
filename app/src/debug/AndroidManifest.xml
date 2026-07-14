@@ -15,6 +15,9 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        tools:replace="android:allowBackup,android:usesCleartextTraffic"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
