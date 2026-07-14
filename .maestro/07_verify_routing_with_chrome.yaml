@@ -80,4 +80,3 @@ appId: "com.multiregionvpn"
 - waitForAnimationToEnd
 - assertVisible:
     text: "Disconnected|Error|Direct Internet"
-

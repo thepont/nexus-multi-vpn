@@ -50,4 +50,3 @@ object IpCheckService {
 
     val api: IpApiService = retrofit.create(IpApiService::class.java)
 }
-
