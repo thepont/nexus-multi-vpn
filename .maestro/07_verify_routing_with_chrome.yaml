@@ -35,17 +35,29 @@ appId: "com.multiregionvpn"
 - tapOn:
     id: "url_bar"
     optional: true
-- inputText: "ip-api.com/json"
+- inputText: "https://free.freeipapi.com/api/json"
 - pressKey: Enter
 
 # Wait for page to load (use a simple assertion with optional)
 - assertVisible:
-    text: ".*ip-api.*|United Kingdom|GB|country|city"
+    text: ".*freeipapi.*"
+    optional: true
+- assertVisible:
+    text: "United Kingdom"
+    optional: true
+- assertVisible:
+    text: "countryName"
+    optional: true
+- assertVisible:
+    text: "cityName"
     optional: true
 
 # Look for "GB" in the page content (UK country code)
 - assertVisible:
-    text: '"GB"|United Kingdom'
+    text: "GB"
+    optional: true
+- assertVisible:
+    text: "United Kingdom"
     optional: true
 
 # ============================================
@@ -68,4 +80,3 @@ appId: "com.multiregionvpn"
 - waitForAnimationToEnd
 - assertVisible:
     text: "Disconnected|Error|Direct Internet"
-
