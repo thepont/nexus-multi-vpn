@@ -13,11 +13,6 @@ appId: "com.multiregionvpn"
     end: "50%,20%"
     duration: 200
 
-# --- 1. (Optional) If navigated to Settings, return to Tunnels ---
-- tapOn:
-    text: "Tunnels"
-    optional: true
-
 # --- 2. Ensure a UK VPN Server Config exists (create if missing) ---
 - assertVisible:
     text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
@@ -26,7 +21,9 @@ appId: "com.multiregionvpn"
     when:
       notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
     commands:
-      - tapOn: "UK"
+      - tapOn:
+          modifier: "testTag"
+          id: "add_vpn_config_button"
       - assertVisible: "Add Server"
       - tapOn: "Friendly Name"
       - inputText: "Test UK Server"
