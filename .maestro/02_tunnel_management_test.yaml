@@ -7,10 +7,9 @@ appId: "com.multiregionvpn"
 
 - waitForAnimationToEnd
 
-# Test: Add a new tunnel (open Add dialog via region tile)
+# Test: Add a new tunnel
 - tapOn:
-    text: "UK"
-    optional: true
+    id: "add_vpn_config_button"
 - assertVisible:
     text: "Add Server"
     optional: true
@@ -27,19 +26,14 @@ appId: "com.multiregionvpn"
     text: "UK"
     optional: true
 - tapOn:
-    text: "Provider|Template"
+    text: "Provider"
     optional: true
 - tapOn:
-    text: "NordVPN|local-test"
+    text: "NordVPN"
     optional: true
-- tapOn:
-    text: "Fetch Server|Auto-Fetch|Auto Fetch"
-    optional: true
-- assertVisible:
-    text: "Region Router"
+- assertVisible: "Region Router"
 - tapOn:
     text: "Save"
     optional: true
 
 # Skip strict deletion verification locally
-
