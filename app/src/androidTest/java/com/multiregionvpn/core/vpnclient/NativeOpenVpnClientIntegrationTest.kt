@@ -284,5 +284,32 @@ class NativeOpenVpnClientIntegrationTest {
         // Should still be functional
         assertThat(client.isConnected()).isFalse()
     }
+
+    /**
+     * Security verification test: verify that the temporary plaintext credentials
+     * file passed to the client is deleted immediately after connection initialization.
+     */
+    @Test
+    fun test_connect_deletesAuthFileImmediately() {
+        // GIVEN: A client and a temporary credentials file
+        val client = NativeOpenVpnClient(appContext, mockVpnService)
+        val tempAuthFile = java.io.File(appContext.cacheDir, "test_temp_auth_${System.currentTimeMillis()}.txt")
+        tempAuthFile.writeText("test_user\ntest_password\n", Charsets.UTF_8)
+
+        assertThat(tempAuthFile.exists()).isTrue()
+
+        // WHEN: Calling connect (it might fail because of invalid config or lack of a real connection)
+        val dummyConfig = "client\nremote 127.0.0.1 1194\nproto udp\n"
+        runBlocking {
+            try {
+                client.connect(dummyConfig, tempAuthFile.absolutePath)
+            } catch (e: Exception) {
+                // Expected to fail, or not, depending on native execution, but we ignore exceptions
+            }
+        }
+
+        // THEN: The temporary plaintext credentials file MUST have been deleted from disk immediately
+        assertThat(tempAuthFile.exists()).isFalse()
+    }
 }
 

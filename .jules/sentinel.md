@@ -1,0 +1,4 @@
+## 2026-07-08 - [Insecure Temporary Credentials Storage]
+**Vulnerability:** The application writes OpenVPN credentials in plaintext to temporary files in `context.cacheDir` so the native OpenVPN client can configure connection profiles, but leaves them lingering indefinitely on disk after connection setup.
+**Learning:** Temporary plaintext files are often created during bridge integration but are easily forgotten. Although private to the application on Android, leaving credentials permanently stored in plaintext on disk exposes them to offline attacks, backup extractions, or security configuration bypasses.
+**Prevention:** Always read credentials from temporary files directly into memory as early as possible and delete the files immediately. Use a try-finally block in the consuming method to guarantee cleanup regardless of success, failure, or exceptions.
