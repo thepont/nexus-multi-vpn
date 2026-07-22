@@ -32,14 +32,16 @@ appId: "com.multiregionvpn"
     clearState: false
     optional: true
 
-# Navigate to IP check site
-- tapOn:
-    id: "url_bar"
-    optional: true
-- inputText: "https://free.freeipapi.com/api/json"
-  optional: true
-- pressKey: Enter
-  optional: true
+# Navigate to IP check site if Chrome launched successfully and url_bar is visible
+- runFlow:
+    when:
+      visible:
+        id: "url_bar"
+    commands:
+      - tapOn:
+          id: "url_bar"
+      - inputText: "https://free.freeipapi.com/api/json"
+      - pressKey: Enter
 
 # Wait for page to load (use a simple assertion with optional)
 - assertVisible:
