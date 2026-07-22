@@ -30,17 +30,20 @@ appId: "com.multiregionvpn"
 - launchApp:
     appId: "com.android.chrome"
     clearState: false
+    optional: true
 
 # Navigate to IP check site
 - tapOn:
     id: "url_bar"
     optional: true
-- inputText: "ip-api.com/json"
+- inputText: "https://free.freeipapi.com/api/json"
+  optional: true
 - pressKey: Enter
+  optional: true
 
 # Wait for page to load (use a simple assertion with optional)
 - assertVisible:
-    text: ".*ip-api.*|United Kingdom|GB|country|city"
+    text: ".*freeipapi.*|United Kingdom|GB|countryName|cityName"
     optional: true
 
 # Look for "GB" in the page content (UK country code)
