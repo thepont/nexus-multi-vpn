@@ -28,10 +28,10 @@ appId: "com.multiregionvpn"
     commands:
       - tapOn:
           id: "add_vpn_config_button"
-        optional: true
+          optional: true
       - tapOn:
           text: "UK"
-        optional: true
+          optional: true
       - assertVisible: "Add Server"
       - tapOn: "Friendly Name"
       - inputText: "Test UK Server"
