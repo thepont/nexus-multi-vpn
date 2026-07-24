@@ -25,10 +25,15 @@ appId: "com.multiregionvpn"
     text: "Protected|Connecting|Error"
     optional: true
 
-# Launch Chrome and verify routing optionally (if Chrome is available)
+# Launch Chrome and verify routing optionally (if Chrome is available in the app list)
 - runFlow:
-    appId: "com.android.chrome"
+    when:
+      visible: "Chrome"
     commands:
+      - stopApp
+      - launchApp:
+          appId: "com.android.chrome"
+          clearState: false
       - tapOn:
           id: "url_bar"
           optional: true
@@ -40,14 +45,11 @@ appId: "com.multiregionvpn"
       - assertVisible:
           text: '"GB"|United Kingdom'
           optional: true
-    optional: true
-
-# Return to VPN app
-- stopApp:
-    appId: "com.android.chrome"
-    optional: true
-- launchApp:
-    appId: "com.multiregionvpn"
+      - stopApp:
+          appId: "com.android.chrome"
+          optional: true
+      - launchApp:
+          appId: "com.multiregionvpn"
 
 # Turn off VPN
 - tapOn:
