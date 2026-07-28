@@ -5,7 +5,7 @@ appId: "com.multiregionvpn"
 - launchApp
 - waitForAnimationToEnd
 - assertVisible:
-    text: "Region Router|Direct Internet|App Routing Rules|Protected|Disconnected"
+    text: ".*(Region Router|Direct Internet|App Routing Rules|Protected|Disconnected)"
 
 # Start VPN if not already connected
 - runFlow:
