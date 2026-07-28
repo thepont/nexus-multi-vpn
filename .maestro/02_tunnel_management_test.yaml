@@ -9,7 +9,7 @@ appId: "com.multiregionvpn"
 
 # Test: Add a new tunnel (open Add dialog via region tile)
 - tapOn:
-    text: "UK"
+    id: "add_vpn_config_button"
     optional: true
 - assertVisible:
     text: "Add Server"
