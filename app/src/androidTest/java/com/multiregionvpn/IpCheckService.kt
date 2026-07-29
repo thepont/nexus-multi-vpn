@@ -8,15 +8,14 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.GET
 
-/**
- * Data class for the ip-api.com response
- */
+// SECURITY: Migrated from insecure ip-api.com to secure freeipapi.com HTTPS endpoint.
+// Moshi annotations map camelCase fields for backwards compatibility with tests.
 @JsonClass(generateAdapter = true)
 data class IpInfo(
     @Json(name = "countryCode") val countryCode: String?,
-    @Json(name = "query") val ipAddress: String?,
-    @Json(name = "country") val country: String?,
-    @Json(name = "city") val city: String?
+    @Json(name = "ipAddress") val ipAddress: String?,
+    @Json(name = "countryName") val country: String?,
+    @Json(name = "cityName") val city: String?
 ) {
     val normalizedCountryCode: String?
         get() = countryCode
@@ -29,7 +28,8 @@ data class IpInfo(
  * Retrofit interface for IP geolocation checking
  */
 interface IpApiService {
-    @GET("/json")
+    // SECURITY: Path must be relative (no leading slash) so it doesn't strip the base path '/api/'
+    @GET("json")
     suspend fun getIpInfo(): IpInfo
 }
 
@@ -41,10 +41,9 @@ object IpCheckService {
         .add(KotlinJsonAdapterFactory())
         .build()
 
-    // Use ip-api.com with HTTP (requires cleartext traffic enabled)
-    // The test manifest has android:usesCleartextTraffic="true"
+    // SECURITY: Use freeipapi.com with HTTPS for secure, encrypted transport
     private val retrofit = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        .baseUrl("https://free.freeipapi.com/api/")
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
 
