@@ -39,6 +39,31 @@ class NativeOpenVpnClientTest {
         
         assertThat(client.isConnected()).isFalse()
     }
+
+    @Test
+    @Ignore("Native libraries require Android runtime - use instrumentation tests on device/emulator")
+    fun test_connect_deletesAuthFileImmediately() = kotlinx.coroutines.test.runTest {
+        val context = mockk<Context>(relaxed = true)
+        val vpnService = mockk<VpnService>(relaxed = true)
+
+        // Create a temporary auth file
+        val authFile = java.io.File.createTempFile("auth_test", ".txt")
+        authFile.writeText("username\npassword\n")
+        assertThat(authFile.exists()).isTrue()
+
+        val client = NativeOpenVpnClient(context, vpnService)
+        try {
+            // This will try to read the auth file and then call nativeConnect.
+            // Since JNI won't load on JVM, this will throw an UnsatisfiedLinkError or similar exception,
+            // but the try-finally block in connect() must still delete the file!
+            client.connect("client\nremote 127.0.0.1 1194", authFile.absolutePath)
+        } catch (e: Throwable) {
+            // Expect exception because JNI is not available
+        }
+
+        // Verify file was deleted regardless of JNI or connection success/failure
+        assertThat(authFile.exists()).isFalse()
+    }
     
     // Note: Actual connection tests require:
     // 1. OpenVPN 3 library integrated
