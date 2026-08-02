@@ -73,13 +73,19 @@ class VpnTemplateService @Inject constructor(
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
             
+            // Set file permissions to owner-only read/write as defense-in-depth security hardening
+            authFile.setReadable(false, false)
+            authFile.setReadable(true, true)
+            authFile.setWritable(false, false)
+            authFile.setWritable(true, true)
+
             // Verify file was written correctly
             val writtenBytes = authFile.length()
             val expectedBytes = authContent.toByteArray(Charsets.UTF_8).size.toLong()
             if (writtenBytes != expectedBytes) {
                 Log.w(TAG, "Auth file size mismatch: written=$writtenBytes, expected=$expectedBytes")
             }
-            Log.d(TAG, "Auth file created: ${authFile.absolutePath}, size: $writtenBytes bytes (UTF-8)")
+            Log.d(TAG, "Auth file created with secure permissions: ${authFile.absolutePath}, size: $writtenBytes bytes (UTF-8)")
         }
         
         // 4. Modify the .ovpn config string
@@ -118,7 +124,14 @@ class VpnTemplateService @Inject constructor(
         withContext(Dispatchers.IO) {
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)
-            Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
+
+            // Set file permissions to owner-only read/write as defense-in-depth security hardening
+            authFile.setReadable(false, false)
+            authFile.setReadable(true, true)
+            authFile.setWritable(false, false)
+            authFile.setWritable(true, true)
+
+            Log.d(TAG, "Local test auth file created with secure permissions: ${authFile.absolutePath}")
         }
         
         // For local test servers using kylemanna/openvpn image:
