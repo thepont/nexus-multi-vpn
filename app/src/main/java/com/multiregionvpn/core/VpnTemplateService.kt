@@ -62,7 +62,7 @@ class VpnTemplateService @Inject constructor(
         val creds = settingsRepo.getProviderCredentials("nordvpn")
             ?: throw Exception("NordVPN credentials are not set.")
 
-        // 3. Create the auth file
+        // 3. Create the auth file with secure owner-only permissions
         // OpenVPN clients can read credentials from a file.
         // This is more secure than passing them as arguments.
         // writeText() uses UTF-8 encoding by default, which is correct for OpenVPN
@@ -73,6 +73,12 @@ class VpnTemplateService @Inject constructor(
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
             
+            // SECURITY HARDENING: Explicitly enforce owner-only read/write permissions
+            // to prevent other local apps/processes on the device from reading plaintext credentials.
+            authFile.setReadable(true, true)
+            authFile.setWritable(true, true)
+            authFile.setExecutable(false, false)
+
             // Verify file was written correctly
             val writtenBytes = authFile.length()
             val expectedBytes = authContent.toByteArray(Charsets.UTF_8).size.toLong()
@@ -113,11 +119,18 @@ class VpnTemplateService @Inject constructor(
         val creds = settingsRepo.getProviderCredentials("local-test")
             ?: throw Exception("Local test credentials are not set.")
         
-        // Create auth file
+        // Create auth file with secure owner-only permissions
         val authFile = File(context.cacheDir, "local_test_auth_${config.id}.txt")
         withContext(Dispatchers.IO) {
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)
+
+            // SECURITY HARDENING: Explicitly enforce owner-only read/write permissions
+            // to prevent other local apps/processes on the device from reading plaintext credentials.
+            authFile.setReadable(true, true)
+            authFile.setWritable(true, true)
+            authFile.setExecutable(false, false)
+
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
         }
         
