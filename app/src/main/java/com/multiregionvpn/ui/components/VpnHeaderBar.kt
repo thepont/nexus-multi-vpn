@@ -62,7 +62,8 @@ fun VpnHeaderBar(
                 Text(
                     text = "Region Router",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.testTag("Region Router")
                 )
             }
         },
