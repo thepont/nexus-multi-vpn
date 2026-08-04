@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext traffic for testing with ip-api.com -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">ip-api.com</domain>
-    </domain-config>
+    <!--
+      Hardened Production Network Security Configuration.
+      Specifically prohibits all cleartext/HTTP traffic globally to prevent
+      MITM attacks and network information leaks of sensitive traffic/IP data.
+    -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
