@@ -14,7 +14,15 @@
         android:name="android.permission.MANAGE_CA_CERTIFICATES"
         tools:ignore="ProtectedPermissions" />
 
+    <!--
+      Debug-specific manifest overrides:
+      - allowBackup="true" and usesCleartextTraffic="true" are permitted ONLY for debug / E2E test builds.
+      - Enables mock servers and automated testing to interface with unencrypted endpoints locally.
+    -->
     <application
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        tools:replace="android:allowBackup,android:usesCleartextTraffic"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
