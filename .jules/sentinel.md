@@ -1,0 +1,4 @@
+## 2025-11-17 - Mitigating CWE-209 Information Exposure in VpnError
+**Vulnerability:** The application was exposing raw exception messages and full stack traces (`details ?: message`) in the user-visible `getUserMessage()` method of `VpnError.kt`. This could leak database details, credentials, or internal class structures directly to the UI layer.
+**Learning:** Returning exception-level details straight to the UI violates the principle of safe error handling and fails securely. Stack traces and inner message exceptions must be logged internally and kept separate from user-facing error strings.
+**Prevention:** Always restrict user-visible error paths to high-level, actionable descriptions and generic instructions. Never concatenate raw exception trace details into strings returning to the front-end components.
