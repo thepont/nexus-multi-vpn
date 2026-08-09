@@ -68,7 +68,7 @@ class VpnTemplateService @Inject constructor(
         // writeText() uses UTF-8 encoding by default, which is correct for OpenVPN
         val authFile = File(context.cacheDir, "nord_auth_${config.id}.txt")
         withContext(Dispatchers.IO) {
-            // Security: Ensure owner-only permissions immediately upon creation to prevent local privilege escalation or unauthorized reading
+            // Security: Ensure owner-only permissions immediately upon file creation to prevent local privilege escalation or unauthorized reading
             authFile.createNewFile()
             authFile.setReadable(false, false)
             authFile.setWritable(false, false)
@@ -123,7 +123,7 @@ class VpnTemplateService @Inject constructor(
         // Create auth file
         val authFile = File(context.cacheDir, "local_test_auth_${config.id}.txt")
         withContext(Dispatchers.IO) {
-            // Security: Ensure owner-only permissions immediately upon creation to prevent local privilege escalation or unauthorized reading
+            // Security: Ensure owner-only permissions immediately upon file creation to prevent local privilege escalation or unauthorized reading
             authFile.createNewFile()
             authFile.setReadable(false, false)
             authFile.setWritable(false, false)
