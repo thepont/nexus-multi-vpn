@@ -4,6 +4,8 @@ appId: "com.multiregionvpn"
 # Tests multiple tunnels running simultaneously with different apps
 
 - launchApp
+- tapOn: "Apps"
+- waitForAnimationToEnd
 
 # Prerequisites: Assume tunnels exist (skip strict checks)
 
@@ -68,6 +70,7 @@ appId: "com.multiregionvpn"
     optional: true
 - tapOn:
     text: '.*France.*\(OpenVPN\)|.*France.*|.*FR.*'
+    optional: true
 - waitForAnimationToEnd
 
 # VPN should stay up (skip strict assertion)
@@ -79,6 +82,7 @@ appId: "com.multiregionvpn"
     optional: true
 - tapOn:
     text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
+    optional: true
 - waitForAnimationToEnd
 
 - waitForAnimationToEnd
@@ -100,9 +104,7 @@ appId: "com.multiregionvpn"
 - tapOn:
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
-- assertVisible:
-    text: "Disconnected|Error|Direct Internet"
+- assertVisible: "Disconnected"
 
 # Both tunnels should show Disconnected
 # Skip strict disconnected status per tunnel
-

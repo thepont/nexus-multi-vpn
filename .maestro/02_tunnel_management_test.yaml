@@ -27,13 +27,13 @@ appId: "com.multiregionvpn"
     text: "UK"
     optional: true
 - tapOn:
-    text: "Provider|Template"
+    text: ".*Provider.*|.*Template.*"
     optional: true
 - tapOn:
-    text: "NordVPN|local-test"
+    text: ".*NordVPN.*|.*local-test.*"
     optional: true
 - tapOn:
-    text: "Fetch Server|Auto-Fetch|Auto Fetch"
+    text: ".*Fetch Server.*|.*Auto-Fetch.*|.*Auto Fetch.*"
     optional: true
 - assertVisible:
     text: "Region Router"
@@ -42,4 +42,3 @@ appId: "com.multiregionvpn"
     optional: true
 
 # Skip strict deletion verification locally
-

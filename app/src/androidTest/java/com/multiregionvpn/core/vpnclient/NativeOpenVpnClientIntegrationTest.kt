@@ -284,5 +284,29 @@ class NativeOpenVpnClientIntegrationTest {
         // Should still be functional
         assertThat(client.isConnected()).isFalse()
     }
+
+    @Test
+    fun test_connect_deletesAuthFileImmediately() {
+        // GIVEN: A client
+        val client = NativeOpenVpnClient(appContext, mockVpnService)
+
+        // Create a mock auth file in cache directory
+        val testAuthFile = java.io.File(appContext.cacheDir, "test_integration_auth_${System.currentTimeMillis()}.txt")
+        testAuthFile.writeText("username\npassword\n", Charsets.UTF_8)
+        assertThat(testAuthFile.exists()).isTrue()
+
+        // WHEN: Calling connect (it will fail to fully connect because of invalid mock config, but it will read and delete the file)
+        runBlocking {
+            try {
+                // Pass an invalid config but valid path to our auth file
+                client.connect("client\ndev tun\nproto udp", testAuthFile.absolutePath)
+            } catch (e: Exception) {
+                // Expected to fail/throw because of invalid connection parameters, but file reading happens first
+            }
+        }
+
+        // THEN: The auth file should be deleted immediately
+        assertThat(testAuthFile.exists()).isFalse()
+    }
 }
 
