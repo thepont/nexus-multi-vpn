@@ -4,10 +4,8 @@ appId: "com.multiregionvpn"
 # Tests assigning apps to tunnels and routing configuration
 
 - launchApp
-
+- tapOn: "Apps"
 - waitForAnimationToEnd
-
-# (Skip search; verify Chrome is present)
 
 # Test: Assign an app to a tunnel
 - scroll
@@ -68,4 +66,3 @@ appId: "com.multiregionvpn"
     duration: 300
 
 # UK apps may or may not be present in this build; skip ordering checks
-
