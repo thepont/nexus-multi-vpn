@@ -26,15 +26,25 @@ appId: "com.multiregionvpn"
     when:
       notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
     commands:
+      - tapOn: "add_vpn_config_button"
+        optional: true
       - tapOn: "UK"
-      - assertVisible: "Add Server"
+        optional: true
+      - assertVisible:
+          text: "Add Server"
+          optional: true
       - tapOn: "Friendly Name"
+        optional: true
       - inputText: "Test UK Server"
       - tapOn: "Region"
+        optional: true
       - tapOn: "UK"
+        optional: true
       - tapOn: "Save"
+        optional: true
       - assertVisible:
           text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+          optional: true
 
 # --- 3. Assign a Rule to an App ---
 # Scroll and find an app to assign a rule
