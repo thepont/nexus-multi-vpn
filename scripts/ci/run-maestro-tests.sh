@@ -38,7 +38,10 @@ set +e
 maestro test .maestro/*.yaml
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
-  echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
+  echo "Maestro failed (exit $EXIT_CODE). Clearing Maestro driver state and retrying once after short delay..."
+  adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
+  adb shell am force-stop dev.mobile.maestro.test 2>/dev/null || true
+  adb forward --remove-all 2>/dev/null || true
   sleep 5
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
