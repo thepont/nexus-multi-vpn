@@ -162,12 +162,12 @@ class DiagnosticRoutingTest {
         delay(5000)
         
         // Step 6: Make simple HTTP request
-        println("\n6️⃣ Making HTTP request...")
-        println("   URL: http://ip-api.com/json")
+        println("\n6️⃣ Making HTTPS request...")
+        println("   URL: https://free.freeipapi.com/api/json")
         println("   Expected: This request should go through VPN → UK servers")
         println("   Method: Direct HttpURLConnection (no Retrofit)")
         
-        val url = URL("http://ip-api.com/json")
+        val url = URL("https://free.freeipapi.com/api/json")
         val connection = url.openConnection() as HttpURLConnection
         connection.connectTimeout = 10000
         connection.readTimeout = 10000
