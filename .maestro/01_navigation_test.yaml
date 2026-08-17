@@ -7,5 +7,17 @@ appId: "com.multiregionvpn"
 
 # Basic UI presence checks
 - assertVisible:
-    text: ".*Region Router.*|.*App Routing Rules.*|.*Direct Internet.*"
+    text: ".*Tunnels.*|.*Apps.*|.*Settings.*"
+
+- tapOn:
+    text: "Apps"
+    optional: true
+
+- tapOn:
+    text: "Settings"
+    optional: true
+
+- tapOn:
+    text: "Tunnels"
+    optional: true
 
