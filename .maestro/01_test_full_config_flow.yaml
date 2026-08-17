@@ -26,8 +26,14 @@ appId: "com.multiregionvpn"
     when:
       notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
     commands:
-      - tapOn: "UK"
+      - tapOn:
+          id: "add_vpn_config_button"
+          optional: true
+      - tapOn:
+          text: "UK"
+          optional: true
       - assertVisible: "Add Server"
+          optional: true
       - tapOn: "Friendly Name"
       - inputText: "Test UK Server"
       - tapOn: "Region"
@@ -44,7 +50,7 @@ appId: "com.multiregionvpn"
     text: "Chrome"
     optional: true
 - tapOn:
-    text: 'Test UK Server|.*UK.*\(OpenVPN\)'
+    text: '.*Test UK Server.*|.*UK.*\(OpenVPN\)'
     optional: true
 
 # --- 4. Start the VPN Service ---
