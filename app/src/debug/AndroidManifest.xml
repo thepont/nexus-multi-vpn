@@ -14,7 +14,11 @@
         android:name="android.permission.MANAGE_CA_CERTIFICATES"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- E2E Test Hardening: Enable cleartext traffic and backup in debug build for local E2E test HTTP mock servers -->
     <application
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        tools:replace="android:usesCleartextTraffic,android:allowBackup"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
