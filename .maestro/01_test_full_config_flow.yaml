@@ -32,7 +32,8 @@ appId: "com.multiregionvpn"
       - tapOn:
           text: "UK"
           optional: true
-      - assertVisible: "Add Server"
+      - assertVisible:
+          text: "Add Server"
           optional: true
       - tapOn: "Friendly Name"
       - inputText: "Test UK Server"
