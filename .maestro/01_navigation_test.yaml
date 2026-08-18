@@ -5,7 +5,17 @@ appId: "com.multiregionvpn"
 
 - launchApp
 
-# Basic UI presence checks
-- assertVisible:
-    text: "Region Router|App Routing Rules|Direct Internet"
+# Basic UI presence checks on Tunnels tab (default)
+- assertVisible: "Region Router"
+- assertVisible: "Tunnels"
 
+# Navigate to Apps tab
+- tapOn: "Apps"
+- waitForAnimationToEnd
+- assertVisible: "App Routing Rules"
+- assertVisible: "Direct Internet"
+
+# Navigate back to Tunnels tab
+- tapOn: "Tunnels"
+- waitForAnimationToEnd
+- assertVisible: "Tunnels"
