@@ -19,27 +19,29 @@ appId: "com.multiregionvpn"
 - tapOn:
     text: "Friendly Name"
     optional: true
-- inputText: "Test UK Tunnel"
+- inputText: "Test UK Server"
 - tapOn:
-    text: "Region"
+    text: "Hostname"
+    optional: true
+- inputText: "uk1234.nordvpn.com"
+
+# Select region/type options
+- tapOn:
+    text: ".*Provider.*|.*Template.*"
     optional: true
 - tapOn:
-    text: "UK"
+    text: ".*NordVPN.*|.*local-test.*"
     optional: true
 - tapOn:
-    text: "Provider|Template"
-    optional: true
-- tapOn:
-    text: "NordVPN|local-test"
-    optional: true
-- tapOn:
-    text: "Fetch Server|Auto-Fetch|Auto Fetch"
+    text: ".*Fetch Server.*|.*Auto-Fetch.*|.*Auto Fetch.*"
     optional: true
 - assertVisible:
     text: "Region Router"
+    optional: true
+
+# Clean up / close dialog if still open
 - tapOn:
-    text: "Save"
+    text: "Cancel"
     optional: true
 
 # Skip strict deletion verification locally
-

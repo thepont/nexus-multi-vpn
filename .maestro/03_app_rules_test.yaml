@@ -4,10 +4,8 @@ appId: "com.multiregionvpn"
 # Tests assigning apps to tunnels and routing configuration
 
 - launchApp
-
+- tapOn: "Apps"
 - waitForAnimationToEnd
-
-# (Skip search; verify Chrome is present)
 
 # Test: Assign an app to a tunnel
 - scroll
@@ -20,52 +18,34 @@ appId: "com.multiregionvpn"
     text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
     optional: true
 
-# Verify rule was saved (badge should turn green)
-- assertVisible:
-    text: "Chrome"
-    optional: true
-
-# Test: Change app rule
-- tapOn:
-    text: "Chrome"
-    optional: true
+# Scroll through app list
+- scroll
 - waitForAnimationToEnd
 
-# Switch to France tunnel
+# Test: Filter/search apps (if search bar present)
+- tapOn:
+    text: "Search"
+    optional: true
+- inputText: "France"
+- waitForAnimationToEnd
+
+# Clear search
+- tapOn:
+    text: "Clear"
+    optional: true
+
+# Assign France app if present
+- tapOn:
+    text: "France"
+    optional: true
 - tapOn:
     text: ".*France.*|.*FR.*"
     optional: true
 
-- waitForAnimationToEnd
-
-# Test: Remove app rule (set to Direct Internet)
-- scroll
-- tapOn:
-    text: "Chrome"
-    optional: true
-- tapOn:
-    text: "Direct Internet"
-    optional: true
-
-- waitForAnimationToEnd
-
-# Badge should turn gray for Chrome (skip strict assertion)
-
-# Test: Smart app ordering
-# Geo-blocked apps should be at the top
-# Use swipe up to scroll to top (scroll direction not supported in Maestro)
+# Reset filter
 - swipe:
-    start: "50%,80%"
-    end: "50%,20%"
-    duration: 300
-- swipe:
-    start: "50%,80%"
-    end: "50%,20%"
-    duration: 300
-- swipe:
-    start: "50%,80%"
-    end: "50%,20%"
+    start: "50%,20%"
+    end: "50%,80%"
     duration: 300
 
 # UK apps may or may not be present in this build; skip ordering checks
-

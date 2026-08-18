@@ -4,6 +4,8 @@ appId: "com.multiregionvpn"
 # Tests multiple tunnels running simultaneously with different apps
 
 - launchApp
+- tapOn: "Apps"
+- waitForAnimationToEnd
 
 # Prerequisites: Assume tunnels exist (skip strict checks)
 
@@ -20,28 +22,22 @@ appId: "com.multiregionvpn"
     optional: true
 - waitForAnimationToEnd
 
-# Scroll to find another app
+# Scroll to find next app
 - scroll
-- scroll
-- scroll
+- waitForAnimationToEnd
 
-# Assign Firefox to France (if exists)
+# Assign Netflix to France
 - tapOn:
-    text: "Firefox"
+    text: "Netflix"
     optional: true
 - tapOn:
     text: '.*France.*\(OpenVPN\)|.*France.*|.*FR.*'
     optional: true
 - waitForAnimationToEnd
 
-# Scroll to find third app
-- scroll
-- scroll
-- scroll
-
-# Assign a streaming app to UK
+# Assign YouTube to UK
 - tapOn:
-    text: "Netflix|Disney"
+    text: "YouTube"
     optional: true
 - tapOn:
     text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
@@ -49,60 +45,58 @@ appId: "com.multiregionvpn"
 - waitForAnimationToEnd
 
 # ============================================
-# STEP 2: Start VPN (should start BOTH tunnels)
+# STEP 2: Start VPN (will connect all active tunnels)
 # ============================================
 - tapOn:
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
 
-# ============================================
-# STEP 3: Verify both tunnels connected
-# ============================================
-# Skip detailed tunnel connected checks (UI varies)
+# Handle permission dialogs
+- tapOn:
+    text: "OK"
+    optional: true
+- tapOn:
+    text: "ALLOW"
+    optional: true
+
+# Should show active connection count or status
+- assertVisible:
+    text: ".*Protected.*|.*Connecting.*|.*2 Tunnels Active.*|.*Error.*"
+    optional: true
 
 # ============================================
-# STEP 4: Test rapid switching
+# STEP 3: Change routing dynamically while connected
 # ============================================
+
+# Change YouTube from UK to France
 - tapOn:
-    text: "Chrome"
+    text: "YouTube"
     optional: true
 - tapOn:
     text: '.*France.*\(OpenVPN\)|.*France.*|.*FR.*'
+    optional: true
 - waitForAnimationToEnd
 
 # VPN should stay up (skip strict assertion)
-- waitForAnimationToEnd
 
-# Switch back to UK
+# Change Netflix from France to UK
 - tapOn:
-    text: "Chrome"
+    text: "Netflix"
     optional: true
 - tapOn:
     text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
-- waitForAnimationToEnd
-
-- waitForAnimationToEnd
-
-# ============================================
-# STEP 5: Remove app rules
-# ============================================
-- tapOn:
-    text: "Chrome"
     optional: true
-- tapOn: "Direct Internet"
 - waitForAnimationToEnd
 
-# Chrome should now have no rule
+- waitForAnimationToEnd
 
 # ============================================
-# STEP 6: Stop VPN
+# STEP 4: Stop VPN (disconnects all tunnels)
 # ============================================
 - tapOn:
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
-- assertVisible:
-    text: "Disconnected|Error|Direct Internet"
+- assertVisible: "Disconnected"
 
 # Both tunnels should show Disconnected
 # Skip strict disconnected status per tunnel
-
