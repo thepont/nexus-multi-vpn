@@ -6,6 +6,6 @@ appId: "com.multiregionvpn"
 - launchApp
 
 # Basic UI presence checks
-- assertVisible:
-    text: "Region Router|App Routing Rules|Direct Internet"
+- assertVisible: "Region Router"
+- assertVisible: "App Routing Rules"
 
