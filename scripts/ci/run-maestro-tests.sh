@@ -35,6 +35,9 @@ sleep 20
 
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
+adb kill-server || true
+adb start-server || true
+adb wait-for-device || true
 adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
 adb shell am force-stop dev.mobile.maestro.test 2>/dev/null || true
 adb forward --remove-all 2>/dev/null || true
@@ -44,6 +47,9 @@ EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
   sleep 5
+  adb kill-server || true
+  adb start-server || true
+  adb wait-for-device || true
   adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
   adb shell am force-stop dev.mobile.maestro.test 2>/dev/null || true
   adb forward --remove-all 2>/dev/null || true
