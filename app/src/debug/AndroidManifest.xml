@@ -14,7 +14,11 @@
         android:name="android.permission.MANAGE_CA_CERTIFICATES"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Debug configuration: Allow cleartext traffic and backups for local E2E test servers -->
     <application
+        android:usesCleartextTraffic="true"
+        android:allowBackup="true"
+        tools:replace="android:usesCleartextTraffic,android:allowBackup"
         tools:ignore="MissingLeanbackLauncher">
         <receiver
             android:name=".deviceowner.TestDeviceOwnerReceiver"
