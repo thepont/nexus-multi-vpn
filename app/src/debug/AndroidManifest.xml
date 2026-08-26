@@ -13,6 +13,7 @@
         android:name="android.permission.MANAGE_CA_CERTIFICATES"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Debug / Test Configuration: Allow backup and cleartext traffic for E2E mock servers and testing -->
     <application
         android:allowBackup="true"
         android:usesCleartextTraffic="true"
