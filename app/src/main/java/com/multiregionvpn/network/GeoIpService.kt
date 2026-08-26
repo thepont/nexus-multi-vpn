@@ -19,11 +19,12 @@ interface GeoIpApi {
 }
 
 /**
- * Service to get current geographic region using ip-api.com
+ * Service to get current geographic region using ip-api.com.
+ * Security Note: HTTPS is enforced to prevent unencrypted network transmission of user location requests.
  */
 class GeoIpService {
     private val api = Retrofit.Builder()
-        .baseUrl("http://ip-api.com/")
+        .baseUrl("https://ip-api.com/")
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(GeoIpApi::class.java)
