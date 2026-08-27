@@ -19,13 +19,14 @@ for i in $(seq 1 300); do
   sleep 2
 done
 
-echo "Cleaning ADB port forwards and restarting server to prevent Maestro driver timeouts..."
-adb kill-server || true
-sleep 2
-adb start-server || true
-adb wait-for-device || true
-adb forward --remove-all || true
-adb shell am force-stop dev.mobile.maestro || true
+echo "Checking for offline device state..."
+if adb devices | grep -q "offline"; then
+  echo "ADB device offline - restarting server..."
+  adb kill-server || true
+  sleep 2
+  adb start-server || true
+  adb wait-for-device || true
+fi
 
 echo "Settling emulator for 20s..."
 sleep 20
@@ -37,13 +38,7 @@ set +e
 maestro test .maestro/*.yaml
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
-  echo "Maestro failed (exit $EXIT_CODE). Resetting ADB environment and retrying once..."
-  adb kill-server || true
-  sleep 2
-  adb start-server || true
-  adb wait-for-device || true
-  adb forward --remove-all || true
-  adb shell am force-stop dev.mobile.maestro || true
+  echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
   sleep 5
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
