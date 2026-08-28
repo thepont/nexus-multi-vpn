@@ -1,0 +1,4 @@
+## 2026-03-26 - [CWE-209 Information Leakage & CI Configuration Requirements]
+**Vulnerability:** Raw exception stack traces and details were leaked through VpnError.getUserMessage(). Additionally, removing .gitmodules or debug network security overrides breaks CI submodule checkout and Maestro E2E test driver communication.
+**Learning:** Production AndroidManifest hardening (prohibiting cleartext traffic) must be paired with explicit debug AndroidManifest and debug network_security_config overrides (enabling cleartext for loopback) so Maestro E2E driver (port 7001) can connect. Furthermore, .gitmodules must always be present when git submodules are registered in .git/config.
+**Prevention:** Keep VpnError.getUserMessage() sanitized without raw exception details. Ensure .gitmodules and app/src/debug/res/xml/network_security_config.xml remain intact across Sentinel security fixes.
