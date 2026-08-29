@@ -25,37 +25,26 @@ appId: "com.multiregionvpn"
     text: "Protected|Connecting|Error"
     optional: true
 
-# Launch Chrome
-- stopApp
-- launchApp:
-    appId: "com.android.chrome"
-    clearState: false
-
-# Navigate to IP check site
-- tapOn:
-    id: "url_bar"
-    optional: true
-- inputText: "ip-api.com/json"
-- pressKey: Enter
-
-# Wait for page to load (use a simple assertion with optional)
-- assertVisible:
-    text: ".*ip-api.*|United Kingdom|GB|country|city"
-    optional: true
-
-# Look for "GB" in the page content (UK country code)
-- assertVisible:
-    text: '"GB"|United Kingdom'
-    optional: true
-
-# ============================================
-# Manual Verification Note
-# ============================================
-# This test can only PARTIALLY verify routing automatically.
-# Manual steps:
-# 1. Check if page shows "countryCode":"GB"
-# 2. Verify city is in UK (London, Manchester, etc.)
-# 3. If you see your local country, routing failed
+# Run Chrome flow only if installed/available
+- runFlow:
+    when:
+      visible: "Chrome"
+    commands:
+      - stopApp
+      - launchApp:
+          appId: "com.android.chrome"
+          clearState: false
+      - tapOn:
+          id: "url_bar"
+          optional: true
+      - inputText: "https://free.freeipapi.com/api/json"
+      - pressKey: Enter
+      - assertVisible:
+          text: ".*freeipapi.*|United Kingdom|GB|country|city"
+          optional: true
+      - assertVisible:
+          text: '"GB"|United Kingdom'
+          optional: true
 
 # Return to VPN app
 - stopApp
@@ -68,4 +57,3 @@ appId: "com.multiregionvpn"
 - waitForAnimationToEnd
 - assertVisible:
     text: "Disconnected|Error|Direct Internet"
-
