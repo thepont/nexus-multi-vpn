@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run Maestro E2E tests in emulator with retry logic
+# Run Maestro E2E tests in emulator with retry logic and driver cleanup
 set -e
 
 echo "Waiting for emulator to be ready..."
@@ -33,12 +33,25 @@ sleep 20
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
 
+cleanup_maestro() {
+  echo "Cleaning up Maestro driver state..."
+  adb forward --remove-all 2>/dev/null || true
+  adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
+  adb kill-server 2>/dev/null || true
+  sleep 2
+  adb start-server 2>/dev/null || true
+  adb wait-for-device 2>/dev/null || true
+}
+
+cleanup_maestro
+
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
 maestro test .maestro/*.yaml
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
-  echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
+  echo "Maestro failed (exit $EXIT_CODE). Cleaning up driver and retrying once..."
+  cleanup_maestro
   sleep 5
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
