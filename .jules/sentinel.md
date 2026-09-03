@@ -1,0 +1,4 @@
+## 2025-05-18 - Enforce HTTPS GeoIP Lookup & Prohibit Cleartext Traffic Globally
+**Vulnerability:** GeoIpService and test services used `http://ip-api.com/` over unencrypted HTTP cleartext traffic, and AndroidManifest.xml had `android:usesCleartextTraffic="true"` and `android:allowBackup="true"`.
+**Learning:** Plaintext HTTP endpoints leak user location and IP data and enable network MITM attackers to tamper with GeoIP responses to hijack automatic VPN routing rules. `ip-api.com` blocks free HTTPS requests (returns HTTP 403), whereas `https://free.freeipapi.com/api/` provides free direct HTTPS JSON responses.
+**Prevention:** Enforce HTTPS globally in `network_security_config.xml` (`cleartextTrafficPermitted="false"`), set `android:allowBackup="false"` to prevent unencrypted ADB backup extraction, and use HTTPS endpoints with appropriate `@SerializedName`/`@Json` mappings for external services.
