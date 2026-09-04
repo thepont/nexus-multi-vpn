@@ -33,12 +33,12 @@ appId: "com.multiregionvpn"
 # Geo-blocked apps should be near the top
 # UK apps (if user is NOT in UK)
 - assertVisible:
-    text: "BBC iPlayer|ITVX|All 4"
+    text: ".*BBC iPlayer|ITVX|All 4"
     optional: true
 
 # AU apps (if user is NOT in AU)
 - assertVisible:
-    text: "ABC iView|7plus|9Now"
+    text: ".*ABC iView|7plus|9Now"
     optional: true
 
 # Test: Badge system
@@ -76,4 +76,3 @@ appId: "com.multiregionvpn"
 - scroll
 
 # Multi-region apps may vary; skip strict asserts
-
