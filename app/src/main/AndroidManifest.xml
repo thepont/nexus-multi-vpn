@@ -18,9 +18,10 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
+    <!-- Security: Disable ADB application backup (allowBackup="false") to prevent unauthorized extraction of VPN credentials and database -->
     <application
         android:name=".MainApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.MultiRegionVPN"
