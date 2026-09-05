@@ -38,10 +38,7 @@ appId: "com.multiregionvpn"
     id: "url_bar"
     optional: true
 - inputText: "https://free.freeipapi.com/api/json"
-  optional: true
-- pressKey:
-    key: "Enter"
-    optional: true
+- pressKey: Enter
 
 # Wait for page to load (use a simple assertion with optional)
 - assertVisible:

@@ -30,13 +30,12 @@ appId: "com.multiregionvpn"
           id: "add_vpn_config_button"
           optional: true
       - tapOn:
-          text: ".*Add.*|.*UK.*|.*"
+          text: ".*Add.*|.*UK.*"
           optional: true
       - tapOn:
           text: "Friendly Name"
           optional: true
       - inputText: "Test UK Server"
-        optional: true
       - tapOn:
           text: "Region"
           optional: true
@@ -50,9 +49,7 @@ appId: "com.multiregionvpn"
 # --- 3. Assign a Rule to an App ---
 # Scroll and find an app to assign a rule
 - scroll
-  optional: true
 - scroll
-  optional: true
 - tapOn:
     text: "Chrome"
     optional: true
@@ -63,7 +60,6 @@ appId: "com.multiregionvpn"
 # --- 4. Start the VPN Service ---
 - tapOn:
     point: "90%,8%"
-    optional: true
 # Handle system VPN permission dialog if it appears
 - tapOn:
     text: "OK"
