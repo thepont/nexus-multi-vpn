@@ -33,6 +33,14 @@ sleep 20
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
 
+echo "Preparing environment for Maestro driver startup..."
+adb kill-server || true
+sleep 2
+adb start-server || true
+adb wait-for-device || true
+adb forward --remove-all || true
+adb shell am force-stop dev.mobile.maestro || true
+
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
 maestro test .maestro/*.yaml
@@ -40,6 +48,12 @@ EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
   sleep 5
+  adb kill-server || true
+  sleep 2
+  adb start-server || true
+  adb wait-for-device || true
+  adb forward --remove-all || true
+  adb shell am force-stop dev.mobile.maestro || true
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
 fi
