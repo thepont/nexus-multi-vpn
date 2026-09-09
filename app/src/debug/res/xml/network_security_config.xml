@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Security configuration enforcing encrypted TLS traffic across all domains -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Allow cleartext traffic in debug builds for Maestro E2E driver -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
