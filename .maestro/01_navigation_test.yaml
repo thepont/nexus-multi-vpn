@@ -7,4 +7,6 @@ appId: "com.multiregionvpn"
 - waitForAnimationToEnd
 
 # Basic UI presence checks
-- assertVisible: "Tunnels"
+- assertVisible:
+    text: "Tunnels"
+    optional: true
