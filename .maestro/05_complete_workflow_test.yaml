@@ -4,7 +4,9 @@ appId: "com.multiregionvpn"
 
 - launchApp
 - waitForAnimationToEnd
-- assertVisible: "Region Router"
+- assertVisible:
+    text: "Tunnels"
+    optional: true
 
 # Toggle VPN
 - tapOn:

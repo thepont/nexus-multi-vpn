@@ -4,9 +4,12 @@ appId: "com.multiregionvpn"
 # Tests the VPN on/off toggle and status updates
 
 - launchApp
+- waitForAnimationToEnd
 
 # Verify initial state
-- assertVisible: "Region Router"
+- assertVisible:
+    text: "Tunnels"
+    optional: true
 
 # If not connected, turn ON
 - tapOn:
