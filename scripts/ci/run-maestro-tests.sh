@@ -21,10 +21,10 @@ done
 
 echo "Checking for offline device state..."
 if adb devices | grep -q "offline"; then
-  echo "ADB device offline - restarting server..."
-  adb kill-server || true
+  echo "ADB device offline - resetting forward rules..."
+  adb forward --remove-all || true
+  adb shell am force-stop dev.mobile.maestro || true
   sleep 2
-  adb start-server || true
   adb wait-for-device || true
 fi
 
@@ -32,6 +32,10 @@ echo "Settling emulator for 20s..."
 sleep 20
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
+
+echo "Resetting Maestro driver before test run..."
+adb forward --remove-all || true
+adb shell am force-stop dev.mobile.maestro || true
 
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
