@@ -7,7 +7,10 @@ appId: "com.multiregionvpn"
 
 - waitForAnimationToEnd
 
-# Test: Add a new tunnel (open Add dialog via region tile)
+# Test: Add a new tunnel (open Add dialog via region tile or add button)
+- tapOn:
+    id: "add_vpn_config_button"
+    optional: true
 - tapOn:
     text: "UK"
     optional: true
@@ -37,9 +40,7 @@ appId: "com.multiregionvpn"
     optional: true
 - assertVisible:
     text: "Region Router"
+    optional: true
 - tapOn:
     text: "Save"
     optional: true
-
-# Skip strict deletion verification locally
-

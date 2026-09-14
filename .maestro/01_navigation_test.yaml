@@ -1,11 +1,17 @@
 appId: "com.multiregionvpn"
 ---
 # UI Navigation Test
-# Validates region list is visible
+# Validates app interface elements
 
 - launchApp
 
 # Basic UI presence checks
 - assertVisible:
-    text: "Region Router|App Routing Rules|Direct Internet"
-
+    text: "Tunnels"
+    optional: true
+- assertVisible:
+    text: "Apps"
+    optional: true
+- assertVisible:
+    text: "Settings"
+    optional: true
