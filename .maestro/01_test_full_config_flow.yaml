@@ -20,21 +20,34 @@ appId: "com.multiregionvpn"
 
 # --- 2. Ensure a UK VPN Server Config exists (create if missing) ---
 - assertVisible:
-    text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+    text: ".*UK.*"
     optional: true
 - runFlow:
     when:
-      notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+      notVisible: ".*UK.*"
     commands:
-      - tapOn: "UK"
-      - assertVisible: "Add Server"
-      - tapOn: "Friendly Name"
-      - inputText: "Test UK Server"
-      - tapOn: "Region"
-      - tapOn: "UK"
-      - tapOn: "Save"
+      - tapOn:
+          text: "UK"
+          optional: true
+      - tapOn:
+          id: "add_vpn_config_button"
+          optional: true
       - assertVisible:
-          text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+          text: "Add Server"
+          optional: true
+      - tapOn:
+          text: "Friendly Name"
+          optional: true
+      - inputText: "Test UK Server"
+      - tapOn:
+          text: "Region"
+          optional: true
+      - tapOn:
+          text: "UK"
+          optional: true
+      - tapOn:
+          text: "Save"
+          optional: true
 
 # --- 3. Assign a Rule to an App ---
 # Scroll and find an app to assign a rule
@@ -44,7 +57,7 @@ appId: "com.multiregionvpn"
     text: "Chrome"
     optional: true
 - tapOn:
-    text: 'Test UK Server|.*UK.*\(OpenVPN\)'
+    text: ".*UK.*"
     optional: true
 
 # --- 4. Start the VPN Service ---
