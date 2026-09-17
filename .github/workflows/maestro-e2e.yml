@@ -155,6 +155,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x gradlew
@@ -253,6 +255,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - name: Install Build Dependencies
         run: ./scripts/ci/install-android-build-deps.sh
