@@ -13,9 +13,12 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.nio.file.Files
 
+@RunWith(RobolectricTestRunner::class)
 class VpnTemplateServiceTest {
 
     private lateinit var nordVpnApi: NordVpnApiService
