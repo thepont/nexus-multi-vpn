@@ -21,10 +21,10 @@ done
 
 echo "Checking for offline device state..."
 if adb devices | grep -q "offline"; then
-  echo "ADB device offline - restarting server..."
-  adb kill-server || true
+  echo "ADB device offline - resetting port forwarding..."
+  adb forward --remove-all || true
+  adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
   sleep 2
-  adb start-server || true
   adb wait-for-device || true
 fi
 
@@ -35,10 +35,14 @@ sleep 20
 
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
+adb forward --remove-all || true
+adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
 maestro test .maestro/*.yaml
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
+  adb forward --remove-all || true
+  adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
   sleep 5
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
