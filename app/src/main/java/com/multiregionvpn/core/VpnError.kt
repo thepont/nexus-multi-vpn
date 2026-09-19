@@ -35,7 +35,8 @@ data class VpnError(
     }
     
     /**
-     * Returns a user-friendly error message
+     * Returns a user-friendly error message.
+     * Security Note (CWE-209): Raw exception details and stack traces are excluded to prevent information leakage.
      */
     fun getUserMessage(): String {
         return when (type) {
@@ -43,47 +44,46 @@ data class VpnError(
                 "Authentication failed. Please check your NordVPN credentials:\n\n" +
                 "• Go to https://my.nordaccount.com/dashboard/nordvpn/manual-setup/\n" +
                 "• Generate new Service Credentials\n" +
-                "• Update them in the app settings\n\n" +
-                "Error: ${details ?: message}"
+                "• Update them in the app settings"
             }
             ErrorType.CONNECTION_FAILED -> {
                 "Could not connect to VPN server:\n\n" +
                 "• Check your internet connection\n" +
                 "• The VPN server may be temporarily unavailable\n" +
-                "• Try a different server region\n\n" +
-                "Error: ${details ?: message}"
+                "• Try a different server region"
             }
             ErrorType.CONFIG_ERROR -> {
                 "Invalid VPN configuration:\n\n" +
                 "• The server configuration may be outdated\n" +
                 "• Try removing and re-adding the VPN server\n" +
-                "• Check if the server hostname is correct\n\n" +
-                "Error: ${details ?: message}"
+                "• Check if the server hostname is correct"
             }
             ErrorType.INTERFACE_ERROR -> {
                 "VPN interface error:\n\n" +
                 "• VPN permission may not be granted\n" +
                 "• Another VPN may be active\n" +
-                "• Try restarting the app\n\n" +
-                "Error: ${details ?: message}"
+                "• Try restarting the app"
             }
             ErrorType.TUNNEL_ERROR -> {
                 "Tunnel creation failed:\n\n" +
                 "• Check your VPN credentials\n" +
                 "• Verify the server is reachable\n" +
-                "• Try a different server\n\n" +
-                "Error: ${details ?: message}"
+                "• Try a different server"
             }
             ErrorType.UNKNOWN -> {
-                "An unexpected error occurred:\n\n${details ?: message}"
+                "An unexpected error occurred. Please try again later."
             }
         }
     }
     
     companion object {
+        /**
+         * Security Note (CWE-209): Avoid storing raw stack traces in VpnError to prevent sensitive
+         * system internal details from leaking via broadcasts or UI logs.
+         */
         fun fromException(e: Throwable, tunnelId: String? = null): VpnError {
             val errorMsg = e.message ?: "Unknown error"
-            val details = e.stackTraceToString()
+            val details = e.javaClass.simpleName
             
             return when {
                 errorMsg.contains("auth", ignoreCase = true) ||
