@@ -21,10 +21,10 @@ done
 
 echo "Checking for offline device state..."
 if adb devices | grep -q "offline"; then
-  echo "ADB device offline - restarting server..."
-  adb kill-server || true
+  echo "ADB device offline - clearing port forwards and resetting Maestro driver..."
+  adb forward --remove-all || true
+  adb shell am force-stop dev.mobile.maestro || true
   sleep 2
-  adb start-server || true
   adb wait-for-device || true
 fi
 
