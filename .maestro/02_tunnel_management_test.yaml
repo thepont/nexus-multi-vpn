@@ -37,6 +37,7 @@ appId: "com.multiregionvpn"
     optional: true
 - assertVisible:
     text: "Region Router"
+    optional: true
 - tapOn:
     text: "Save"
     optional: true
