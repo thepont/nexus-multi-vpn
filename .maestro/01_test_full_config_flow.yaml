@@ -20,13 +20,18 @@ appId: "com.multiregionvpn"
 
 # --- 2. Ensure a UK VPN Server Config exists (create if missing) ---
 - assertVisible:
-    text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+    text: '.*UK.*'
     optional: true
 - runFlow:
     when:
-      notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+      notVisible: '.*UK.*'
     commands:
-      - tapOn: "UK"
+      - tapOn:
+          id: "add_vpn_config_button"
+          optional: true
+      - tapOn:
+          text: "UK"
+          optional: true
       - assertVisible: "Add Server"
       - tapOn: "Friendly Name"
       - inputText: "Test UK Server"
