@@ -19,14 +19,10 @@ for i in $(seq 1 300); do
   sleep 2
 done
 
-echo "Checking for offline device state..."
-if adb devices | grep -q "offline"; then
-  echo "ADB device offline - restarting server..."
-  adb kill-server || true
-  sleep 2
-  adb start-server || true
-  adb wait-for-device || true
-fi
+echo "Checking ADB forwards and clearing stale Maestro driver state..."
+adb forward --remove-all || true
+adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
+sleep 2
 
 echo "Settling emulator for 20s..."
 sleep 20
