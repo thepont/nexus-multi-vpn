@@ -15,7 +15,7 @@ sleep "$SETTLE_TIME"
 echo "Installing APK (with ${MAX_RETRIES} retries)..."
 i=1
 while [ $i -le "$MAX_RETRIES" ]; do
-  if adb install -r "$APK_PATH"; then
+  if adb -s emulator-5554 install -r "$APK_PATH" 2>/dev/null || adb install -r "$APK_PATH"; then
     echo "✅ APK installed successfully on attempt $i"
     exit 0
   else

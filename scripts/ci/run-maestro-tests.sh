@@ -3,7 +3,7 @@
 set -e
 
 echo "Waiting for emulator to be ready..."
-adb wait-for-device || true
+adb -s emulator-5554 wait-for-device 2>/dev/null || adb wait-for-device || true
 
 echo "Waiting for sys.boot_completed..."
 for i in $(seq 1 300); do
@@ -20,16 +20,16 @@ for i in $(seq 1 300); do
 done
 
 echo "Checking for offline device state..."
-if adb devices | grep -q "offline"; then
+if adb devices | grep "emulator-5554" | grep -q "offline"; then
   echo "ADB device offline - reconnecting..."
-  adb reconnect || true
+  adb -s emulator-5554 reconnect 2>/dev/null || adb reconnect || true
   sleep 2
-  adb wait-for-device || true
+  adb -s emulator-5554 wait-for-device 2>/dev/null || adb wait-for-device || true
 fi
 
 # Clear any lingering Maestro driver sessions or forwarded ports
-adb forward --remove-all 2>/dev/null || true
-adb shell am force-stop dev.mobile.maestro 2>/dev/null || true
+adb -s emulator-5554 forward --remove-all 2>/dev/null || adb forward --remove-all 2>/dev/null || true
+adb -s emulator-5554 shell am force-stop dev.mobile.maestro 2>/dev/null || true
 
 echo "Settling emulator for 20s..."
 sleep 20
