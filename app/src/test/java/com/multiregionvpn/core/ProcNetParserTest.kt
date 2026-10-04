@@ -57,6 +57,49 @@ class ProcNetParserTest {
     }
 
     @Test
+    fun test_ipToHex_returnsEmptyStringForMalformedInputs() {
+        assertThat(ProcNetParser.ipToHex("")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("invalid")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("192.168.1")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("192.168.1.100.1")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("256.0.0.1")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("2001:db8::1")).isEmpty()
+    }
+
+    @Test
+    fun test_portToLittleEndianHex_returnsEmptyStringForInvalidPorts() {
+        assertThat(ProcNetParser.portToLittleEndianHex(-1)).isEmpty()
+        assertThat(ProcNetParser.portToLittleEndianHex(65536)).isEmpty()
+    }
+
+    @Test
+    fun test_readUidFromProcNet_returnsNullForMalformedIpOrPort() {
+        val procNetDir = tempFolder.newFolder("proc", "net_invalid")
+        val tcpFile = File(procNetDir, "tcp")
+        tcpFile.writeText("sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n")
+
+        val uidInvalidIp = ProcNetParser.readUidFromProcNet(
+            srcIp = "invalid.ip",
+            srcPort = 80,
+            destIp = "127.0.0.1",
+            destPort = 80,
+            protocol = 6,
+            procNetDir = procNetDir.absolutePath
+        )
+        assertThat(uidInvalidIp).isNull()
+
+        val uidInvalidPort = ProcNetParser.readUidFromProcNet(
+            srcIp = "127.0.0.1",
+            srcPort = -1,
+            destIp = "127.0.0.1",
+            destPort = 80,
+            protocol = 6,
+            procNetDir = procNetDir.absolutePath
+        )
+        assertThat(uidInvalidPort).isNull()
+    }
+
+    @Test
     fun test_readUidFromProcNet_parsesTcpConnection() {
         // Create mock /proc/net/tcp file
         val procNetDir = tempFolder.newFolder("proc", "net")
