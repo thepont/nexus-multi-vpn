@@ -15,17 +15,23 @@ internal class ProcNetParser {
         /**
          * Converts IP address to little-endian hex format used in /proc/net
          * Example: 192.168.1.100 -> "6401A8C0"
+         * Returns empty string if IP address format is invalid.
          */
         fun ipToHex(ip: String): String {
-            val bytes = ip.split(".").map { it.toInt().and(0xFF) }
+            val parts = ip.split(".")
+            if (parts.size != 4) return ""
+            val bytes = parts.mapNotNull { it.toIntOrNull()?.takeIf { num -> num in 0..255 } }
+            if (bytes.size != 4) return ""
             return String.format("%02X%02X%02X%02X", bytes[3], bytes[2], bytes[1], bytes[0])
         }
         
         /**
          * Converts port to little-endian hex format used in /proc/net
          * Example: 443 -> "BB01" (443 = 0x01BB, little-endian = BB 01)
+         * Returns empty string if port is out of valid range (0..65535).
          */
         fun portToLittleEndianHex(port: Int): String {
+            if (port !in 0..65535) return ""
             val low = port.and(0xFF)
             val high = (port shr 8).and(0xFF)
             return String.format("%02X%02X", low, high)
@@ -71,6 +77,10 @@ internal class ProcNetParser {
                 val destIpHex = ipToHex(destIp)
                 val srcPortHex = portToLittleEndianHex(srcPort)
                 val destPortHex = portToLittleEndianHex(destPort)
+
+                if (srcIpHex.isEmpty() || destIpHex.isEmpty() || srcPortHex.isEmpty() || destPortHex.isEmpty()) {
+                    return null
+                }
                 
                 file.bufferedReader().useLines { lines ->
                     lines.drop(1).forEach { line -> // Skip header line
