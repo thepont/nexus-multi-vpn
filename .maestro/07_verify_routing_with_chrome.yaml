@@ -25,11 +25,12 @@ appId: "com.multiregionvpn"
     text: "Protected|Connecting|Error"
     optional: true
 
-# Launch Chrome
+# Launch Chrome if installed
 - stopApp
 - launchApp:
     appId: "com.android.chrome"
     clearState: false
+    optional: true
 
 # Navigate to IP check site
 - tapOn:
