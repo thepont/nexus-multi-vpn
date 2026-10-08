@@ -3,7 +3,7 @@
 set -e
 
 echo "Waiting for emulator to be ready..."
-adb wait-for-device || true
+adb -s emulator-5554 wait-for-device || true
 
 echo "Waiting for sys.boot_completed..."
 for i in $(seq 1 300); do
@@ -19,14 +19,9 @@ for i in $(seq 1 300); do
   sleep 2
 done
 
-echo "Checking for offline device state..."
-if adb devices | grep -q "offline"; then
-  echo "ADB device offline - restarting server..."
-  adb kill-server || true
-  sleep 2
-  adb start-server || true
-  adb wait-for-device || true
-fi
+echo "Preparing ADB and clearing stale Maestro driver state..."
+adb -s emulator-5554 forward --remove-all || true
+adb -s emulator-5554 shell am force-stop dev.mobile.maestro 2>/dev/null || true
 
 echo "Settling emulator for 20s..."
 sleep 20
@@ -40,6 +35,8 @@ EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
   sleep 5
+  adb -s emulator-5554 forward --remove-all || true
+  adb -s emulator-5554 shell am force-stop dev.mobile.maestro 2>/dev/null || true
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
 fi

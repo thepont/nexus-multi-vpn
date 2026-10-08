@@ -1,0 +1,4 @@
+## 2025-05-18 - Restrict permissions on temporary authentication credential files
+**Vulnerability:** Plaintext VPN provider authentication files were written to application cache directory without explicit filesystem permission limits, allowing potentially unauthorized local reading or access on shared/rooted environments.
+**Learning:** `File.writeText()` creates files with default filesystem umask/permissions, which may leave created files readable by other processes or tools on certain Android environments. Calling `setReadable(true, true)` on a `java.io.File` object before writing/creating it on disk has no effect; permission setters must be invoked after file creation.
+**Prevention:** Always invoke explicit permission setters (`setReadable(true, true)`, `setWritable(true, true)`, `setExecutable(false, false)`) immediately after writing temporary sensitive credentials to disk.

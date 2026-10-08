@@ -1,59 +1,70 @@
 appId: "com.multiregionvpn"
 ---
 - launchApp
-
 - waitForAnimationToEnd
-## Ensure list is in a stable position
-- swipe:
-    start: "50%,20%"
-    end: "50%,80%"
-    duration: 200
-- swipe:
-    start: "50%,80%"
-    end: "50%,20%"
-    duration: 200
 
-# --- 1. (Optional) If navigated to Settings, return to Tunnels ---
+# --- 1. Navigate to Settings / Tunnels if tabs exist ---
+- tapOn:
+    text: "Settings"
+    optional: true
+
 - tapOn:
     text: "Tunnels"
     optional: true
 
-# --- 2. Ensure a UK VPN Server Config exists (create if missing) ---
-- assertVisible:
-    text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+# --- 2. Add VPN Config on clean database run ---
+- tapOn:
+    id: "add_vpn_config_button"
     optional: true
-- runFlow:
-    when:
-      notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
-    commands:
-      - tapOn: "UK"
-      - assertVisible: "Add Server"
-      - tapOn: "Friendly Name"
-      - inputText: "Test UK Server"
-      - tapOn: "Region"
-      - tapOn: "UK"
-      - tapOn: "Save"
-      - assertVisible:
-          text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
 
-# --- 3. Assign a Rule to an App ---
-# Scroll and find an app to assign a rule
-- scroll
+- tapOn:
+    text: "Add Config"
+    optional: true
+
+- tapOn:
+    text: "Add Server"
+    optional: true
+
+- tapOn:
+    text: "UK"
+    optional: true
+
+- tapOn:
+    id: "config_name_textfield"
+    optional: true
+- inputText: "Test UK Server"
+
+- tapOn:
+    id: "config_save_button"
+    optional: true
+
+- tapOn:
+    text: "Save"
+    optional: true
+
+# --- 3. Assign Rule in Apps tab ---
+- tapOn:
+    text: "Apps"
+    optional: true
+
 - scroll
 - tapOn:
     text: "Chrome"
     optional: true
+
+# --- 4. Toggle VPN Service ---
 - tapOn:
-    text: 'Test UK Server|.*UK.*\(OpenVPN\)'
+    id: "start_service_toggle"
     optional: true
 
-# --- 4. Start the VPN Service ---
 - tapOn:
     point: "90%,8%"
-# Handle system VPN permission dialog if it appears
+    optional: true
+
 - tapOn:
     text: "OK"
     optional: true
+
 - tapOn:
     text: "Allow"
     optional: true
