@@ -8,4 +8,3 @@ appId: "com.multiregionvpn"
 # Basic UI presence checks
 - assertVisible:
     text: "Region Router|App Routing Rules|Direct Internet"
-

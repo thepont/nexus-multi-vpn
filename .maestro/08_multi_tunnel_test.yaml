@@ -105,4 +105,3 @@ appId: "com.multiregionvpn"
 
 # Both tunnels should show Disconnected
 # Skip strict disconnected status per tunnel
-
