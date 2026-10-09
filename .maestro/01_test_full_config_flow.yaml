@@ -24,15 +24,9 @@ appId: "com.multiregionvpn"
     optional: true
 - runFlow:
     when:
-      notVisible:
-        text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+      notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
     commands:
-      - tapOn:
-          id: "add_vpn_config_button"
-          optional: true
-      - tapOn:
-          text: "UK"
-          optional: true
+      - tapOn: "UK"
       - assertVisible: "Add Server"
       - tapOn: "Friendly Name"
       - inputText: "Test UK Server"

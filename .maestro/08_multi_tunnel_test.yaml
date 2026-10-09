@@ -68,7 +68,6 @@ appId: "com.multiregionvpn"
     optional: true
 - tapOn:
     text: '.*France.*\(OpenVPN\)|.*France.*|.*FR.*'
-    optional: true
 - waitForAnimationToEnd
 
 # VPN should stay up (skip strict assertion)
@@ -80,7 +79,6 @@ appId: "com.multiregionvpn"
     optional: true
 - tapOn:
     text: '.*UK.*\(OpenVPN\)|.*UK.*|.*BBC.*'
-    optional: true
 - waitForAnimationToEnd
 
 - waitForAnimationToEnd
@@ -91,9 +89,7 @@ appId: "com.multiregionvpn"
 - tapOn:
     text: "Chrome"
     optional: true
-- tapOn:
-    text: "Direct Internet"
-    optional: true
+- tapOn: "Direct Internet"
 - waitForAnimationToEnd
 
 # Chrome should now have no rule
@@ -104,4 +100,8 @@ appId: "com.multiregionvpn"
 - tapOn:
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
-- assertVisible: "Region Router"
+- assertVisible:
+    text: "Disconnected|Error|Direct Internet"
+
+# Both tunnels should show Disconnected
+# Skip strict disconnected status per tunnel

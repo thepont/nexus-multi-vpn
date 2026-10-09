@@ -7,10 +7,7 @@ appId: "com.multiregionvpn"
 
 - waitForAnimationToEnd
 
-# Test: Add a new tunnel (open Add dialog via button or region tile)
-- tapOn:
-    id: "add_vpn_config_button"
-    optional: true
+# Test: Add a new tunnel (open Add dialog via region tile)
 - tapOn:
     text: "UK"
     optional: true
