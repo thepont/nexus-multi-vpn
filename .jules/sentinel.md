@@ -1,0 +1,4 @@
+## 2026-03-31 - Enforcing Owner-Only File Permissions on Temporary Auth Files
+**Vulnerability:** `VpnTemplateService` creates temporary files (`nord_auth_${config.id}.txt` and `local_test_auth_${config.id}.txt`) containing plaintext VPN credentials without setting explicit file permissions, risking credential leakage on shared storage or multi-user file systems.
+**Learning:** `File.setReadable()`, `File.setWritable()`, and `File.setExecutable()` must be invoked after writing content to disk (`writeText()`), as applying permission setters before the file exists on the filesystem has no effect.
+**Prevention:** Always explicitly set owner-only permissions (`setReadable(true, true)`, `setWritable(true, true)`, `setExecutable(false, false)`) immediately after creating temporary files containing sensitive authentication or secret material.
