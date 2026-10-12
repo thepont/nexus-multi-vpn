@@ -19,14 +19,17 @@ for i in $(seq 1 300); do
   sleep 2
 done
 
-echo "Checking for offline device state..."
+echo "Checking for offline device state and clearing port forwards..."
 if adb devices | grep -q "offline"; then
-  echo "ADB device offline - restarting server..."
-  adb kill-server || true
+  echo "ADB device offline - reconnecting..."
+  adb -s emulator-5554 reconnect || true
   sleep 2
-  adb start-server || true
-  adb wait-for-device || true
+  adb -s emulator-5554 wait-for-device || true
 fi
+
+# Clean up stale port forwards and stop driver from previous runs
+adb -s emulator-5554 forward --remove-all || true
+adb -s emulator-5554 shell am force-stop dev.mobile.maestro || true
 
 echo "Settling emulator for 20s..."
 sleep 20
