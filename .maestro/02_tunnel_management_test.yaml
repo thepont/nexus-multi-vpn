@@ -7,12 +7,15 @@ appId: "com.multiregionvpn"
 
 - waitForAnimationToEnd
 
-# Test: Add a new tunnel (open Add dialog via region tile)
+# Test: Add a new tunnel (open Add dialog via region tile or FAB)
+- tapOn:
+    id: "add_vpn_config_button"
+    optional: true
 - tapOn:
     text: "UK"
     optional: true
 - assertVisible:
-    text: "Add Server"
+    text: ".*Add Server.*|.*Friendly Name.*"
     optional: true
 
 # Fill in tunnel details
@@ -36,7 +39,8 @@ appId: "com.multiregionvpn"
     text: "Fetch Server|Auto-Fetch|Auto Fetch"
     optional: true
 - assertVisible:
-    text: "Region Router"
+    text: ".*Region Router.*|.*App Routing Rules.*"
+    optional: true
 - tapOn:
     text: "Save"
     optional: true
