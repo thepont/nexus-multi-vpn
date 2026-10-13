@@ -1,3 +1,0 @@
-[submodule "libs/ics-openvpn"]
-	path = libs/ics-openvpn
-	url = https://github.com/schwabe/ics-openvpn.git
