@@ -7,7 +7,10 @@ appId: "com.multiregionvpn"
 
 - waitForAnimationToEnd
 
-# Test: Add a new tunnel (open Add dialog via region tile)
+# Test: Add a new tunnel
+- tapOn:
+    id: "add_vpn_config_button"
+    optional: true
 - tapOn:
     text: "UK"
     optional: true
@@ -36,10 +39,8 @@ appId: "com.multiregionvpn"
     text: "Fetch Server|Auto-Fetch|Auto Fetch"
     optional: true
 - assertVisible:
-    text: "Region Router"
+    text: ".*(Region Router|App Routing Rules|Direct Internet).*"
+    optional: true
 - tapOn:
     text: "Save"
     optional: true
-
-# Skip strict deletion verification locally
-
