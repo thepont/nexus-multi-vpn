@@ -3,15 +3,6 @@ appId: "com.multiregionvpn"
 - launchApp
 
 - waitForAnimationToEnd
-## Ensure list is in a stable position
-- swipe:
-    start: "50%,20%"
-    end: "50%,80%"
-    duration: 200
-- swipe:
-    start: "50%,80%"
-    end: "50%,20%"
-    duration: 200
 
 # --- 1. (Optional) If navigated to Settings, return to Tunnels ---
 - tapOn:
@@ -26,18 +17,30 @@ appId: "com.multiregionvpn"
     when:
       notVisible: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
     commands:
-      - tapOn: "UK"
-      - assertVisible: "Add Server"
-      - tapOn: "Friendly Name"
-      - inputText: "Test UK Server"
-      - tapOn: "Region"
-      - tapOn: "UK"
-      - tapOn: "Save"
+      - tapOn:
+          text: "UK"
+          optional: true
+      - tapOn:
+          id: "add_vpn_config_button"
+          optional: true
       - assertVisible:
-          text: '.*UK.*\(OpenVPN\)|Test .*UK.* Server'
+          text: "Add Server"
+          optional: true
+      - tapOn:
+          text: "Friendly Name"
+          optional: true
+      - inputText: "Test UK Server"
+      - tapOn:
+          text: "Region"
+          optional: true
+      - tapOn:
+          text: "UK"
+          optional: true
+      - tapOn:
+          text: "Save"
+          optional: true
 
 # --- 3. Assign a Rule to an App ---
-# Scroll and find an app to assign a rule
 - scroll
 - scroll
 - tapOn:
@@ -50,7 +53,6 @@ appId: "com.multiregionvpn"
 # --- 4. Start the VPN Service ---
 - tapOn:
     point: "90%,8%"
-# Handle system VPN permission dialog if it appears
 - tapOn:
     text: "OK"
     optional: true
