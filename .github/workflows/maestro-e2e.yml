@@ -46,6 +46,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
+          cmdline-tools-version: 'latest'
           packages: 'platform-tools'
 
       - name: Install Build Dependencies
@@ -156,6 +157,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
+          cmdline-tools-version: 'latest'
           packages: 'platform-tools'
 
       - name: Ensure Gradle wrapper is executable
@@ -256,6 +258,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
+          cmdline-tools-version: 'latest'
           packages: 'platform-tools'
 
       - name: Install Build Dependencies
