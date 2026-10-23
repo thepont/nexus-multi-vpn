@@ -12,6 +12,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.mock
 
@@ -67,6 +68,7 @@ class VpnTemplateServiceTest {
         // Check file permissions are restricted
         assertThat(authFile.canRead()).isTrue()
         assertThat(authFile.canWrite()).isTrue()
+        assertThat(authFile.canExecute()).isFalse()
     }
 
     @Test
@@ -85,7 +87,7 @@ class VpnTemplateServiceTest {
         )
 
         `when`(mockSettingsRepo.getProviderCredentials("nordvpn")).thenReturn(creds)
-        `when`(mockNordVpnApi.getOvpnConfig("uk123"))
+        `when`(mockNordVpnApi.getOvpnConfig(anyString() ?: ""))
             .thenReturn("client\ndev tun\nauth-user-pass\n".toResponseBody())
 
         val prepared = service.prepareConfig(config)
@@ -99,6 +101,7 @@ class VpnTemplateServiceTest {
         // Check file permissions are restricted
         assertThat(authFile.canRead()).isTrue()
         assertThat(authFile.canWrite()).isTrue()
+        assertThat(authFile.canExecute()).isFalse()
     }
 
     // Helper extension to access private function or test via prepareConfig

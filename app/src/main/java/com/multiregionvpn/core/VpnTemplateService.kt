@@ -75,9 +75,12 @@ class VpnTemplateService @Inject constructor(
             
             // Security hardening: Restrict temporary auth file permissions to owner-only
             // to prevent local privilege escalation or access by unauthorized local apps/users.
+            // Explicitly revoke all permissions first before granting owner-only access.
+            authFile.setReadable(false, false)
+            authFile.setWritable(false, false)
+            authFile.setExecutable(false, false)
             authFile.setReadable(true, true)
             authFile.setWritable(true, true)
-            authFile.setExecutable(false, false)
 
             // Verify file was written correctly
             val writtenBytes = authFile.length()
@@ -127,9 +130,12 @@ class VpnTemplateService @Inject constructor(
 
             // Security hardening: Restrict temporary auth file permissions to owner-only
             // to prevent local privilege escalation or access by unauthorized local apps/users.
+            // Explicitly revoke all permissions first before granting owner-only access.
+            authFile.setReadable(false, false)
+            authFile.setWritable(false, false)
+            authFile.setExecutable(false, false)
             authFile.setReadable(true, true)
             authFile.setWritable(true, true)
-            authFile.setExecutable(false, false)
 
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
         }
