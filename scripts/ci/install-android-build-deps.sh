@@ -18,9 +18,4 @@ cmake --version
 ninja --version
 
 echo "=== Android SDK Components ==="
-SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name "sdkmanager" 2>/dev/null | head -n 1)
-if [ -n "$SDKMANAGER" ]; then
-    "$SDKMANAGER" --list_installed
-else
-    echo "⚠️ sdkmanager executable not found in $ANDROID_HOME/cmdline-tools"
-fi
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list_installed
