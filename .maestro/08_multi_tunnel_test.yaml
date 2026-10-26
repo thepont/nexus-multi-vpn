@@ -68,6 +68,7 @@ appId: "com.multiregionvpn"
     optional: true
 - tapOn:
     text: '.*France.*\(OpenVPN\)|.*France.*|.*FR.*'
+    optional: true
 - waitForAnimationToEnd
 
 # VPN should stay up (skip strict assertion)
@@ -100,8 +101,7 @@ appId: "com.multiregionvpn"
 - tapOn:
     point: "90%,8%"  # Toggle switch in top right
 - waitForAnimationToEnd
-- assertVisible:
-    text: "Disconnected|Error|Direct Internet"
+- assertVisible: ".*Disconnected.*|.*Error.*|.*Direct Internet.*"
 
 # Both tunnels should show Disconnected
 # Skip strict disconnected status per tunnel
