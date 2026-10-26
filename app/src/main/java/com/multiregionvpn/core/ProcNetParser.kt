@@ -15,17 +15,23 @@ internal class ProcNetParser {
         /**
          * Converts IP address to little-endian hex format used in /proc/net
          * Example: 192.168.1.100 -> "6401A8C0"
+         * Safely validates input to prevent exceptions on malformed strings.
          */
         fun ipToHex(ip: String): String {
-            val bytes = ip.split(".").map { it.toInt().and(0xFF) }
+            val parts = ip.trim().split(".")
+            if (parts.size != 4) return ""
+            val bytes = parts.map { it.toIntOrNull() ?: return "" }
+            if (bytes.any { it !in 0..255 }) return ""
             return String.format("%02X%02X%02X%02X", bytes[3], bytes[2], bytes[1], bytes[0])
         }
         
         /**
          * Converts port to little-endian hex format used in /proc/net
          * Example: 443 -> "BB01" (443 = 0x01BB, little-endian = BB 01)
+         * Safely validates port range (0..65535).
          */
         fun portToLittleEndianHex(port: Int): String {
+            if (port !in 0..65535) return ""
             val low = port.and(0xFF)
             val high = (port shr 8).and(0xFF)
             return String.format("%02X%02X", low, high)

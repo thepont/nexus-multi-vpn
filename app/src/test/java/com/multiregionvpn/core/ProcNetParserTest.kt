@@ -33,6 +33,21 @@ class ProcNetParserTest {
     }
 
     @Test
+    fun test_ipToHex_handlesMalformedInputGracefully() {
+        assertThat(ProcNetParser.ipToHex("invalid.ip.str")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("192.168.1")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("192.168.1.256")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("192.168.-1.100")).isEmpty()
+        assertThat(ProcNetParser.ipToHex("")).isEmpty()
+    }
+
+    @Test
+    fun test_portToLittleEndianHex_handlesOutOfBoundsPort() {
+        assertThat(ProcNetParser.portToLittleEndianHex(-1)).isEmpty()
+        assertThat(ProcNetParser.portToLittleEndianHex(65536)).isEmpty()
+    }
+
+    @Test
     fun test_portToLittleEndianHex_convertsPort443() {
         // Port 443 = 0x01BB
         // Little-endian: BB 01 = "BB01"
