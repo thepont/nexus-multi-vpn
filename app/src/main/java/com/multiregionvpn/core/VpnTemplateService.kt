@@ -29,6 +29,15 @@ class VpnTemplateService @Inject constructor(
 ) {
     companion object {
         private const val TAG = "VpnTemplateService"
+
+        // Enforce owner-only read/write permissions on temporary credential files
+        internal fun secureAuthFilePermissions(file: File) {
+            file.setReadable(false, false)
+            file.setWritable(false, false)
+            file.setExecutable(false, false)
+            file.setReadable(true, true)
+            file.setWritable(true, true)
+        }
     }
 
     /**
@@ -72,6 +81,7 @@ class VpnTemplateService @Inject constructor(
             // OpenVPN expects: username\npassword\n (with newline, no CRLF)
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)  // Explicitly use UTF-8
+            secureAuthFilePermissions(authFile)
             
             // Verify file was written correctly
             val writtenBytes = authFile.length()
@@ -118,6 +128,7 @@ class VpnTemplateService @Inject constructor(
         withContext(Dispatchers.IO) {
             val authContent = "${creds.username}\n${creds.password}\n"
             authFile.writeText(authContent, Charsets.UTF_8)
+            secureAuthFilePermissions(authFile)
             Log.d(TAG, "Local test auth file created: ${authFile.absolutePath}")
         }
         
