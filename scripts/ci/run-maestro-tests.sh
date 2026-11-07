@@ -19,19 +19,14 @@ for i in $(seq 1 300); do
   sleep 2
 done
 
-echo "Checking for offline device state..."
-if adb devices | grep -q "offline"; then
-  echo "ADB device offline - restarting server..."
-  adb kill-server || true
-  sleep 2
-  adb start-server || true
-  adb wait-for-device || true
-fi
-
 echo "Settling emulator for 20s..."
 sleep 20
 
 ./scripts/install-apk-with-retry.sh app/build/outputs/apk/debug/app-debug.apk
+
+echo "Resetting previous driver state and port forwards..."
+adb forward --remove-all 2>/dev/null || true
+adb -s emulator-5554 shell am force-stop dev.mobile.maestro 2>/dev/null || true
 
 echo "Running Maestro tests (with single retry on failure)..."
 set +e
@@ -39,6 +34,8 @@ maestro test .maestro/*.yaml
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Maestro failed (exit $EXIT_CODE). Retrying once after short delay..."
+  adb forward --remove-all 2>/dev/null || true
+  adb -s emulator-5554 shell am force-stop dev.mobile.maestro 2>/dev/null || true
   sleep 5
   maestro test .maestro/*.yaml
   EXIT_CODE=$?
