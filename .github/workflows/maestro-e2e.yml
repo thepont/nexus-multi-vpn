@@ -143,6 +143,7 @@ jobs:
       TEST_VPN_HOSTNAME: ${{ secrets.TEST_VPN_HOSTNAME != '' && secrets.TEST_VPN_HOSTNAME || 'uk1234.nordvpn.com' }}
       TEST_VPN_REGION: ${{ secrets.TEST_VPN_REGION != '' && secrets.TEST_VPN_REGION || 'UK' }}
       TEST_APP_PACKAGE: ${{ secrets.TEST_APP_PACKAGE != '' && secrets.TEST_APP_PACKAGE || 'com.android.chrome' }}
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: 600000
 
     steps:
       - name: Checkout repository
@@ -221,6 +222,11 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot -memory 4096
+          disable-animations: true
+          emulator-boot-timeout: 900
+          force-avd-creation: false
           script: ./scripts/ci/run-maestro-tests.sh
 
       - name: Upload Maestro artifacts
