@@ -1,6 +1,6 @@
 # Sentinel Security Journal
 
-## 2026-09-07 - Application Backup Vulnerability & Git Submodule Registration
-**Vulnerability:** The Android application had `android:allowBackup="true"` enabled in `app/src/main/AndroidManifest.xml`. Because Room database storage for sensitive provider credentials and OpenVPN configs is not hardware-backed encrypted at rest, an attacker with physical access or ADB debugging enabled could extract plaintext VPN credentials using `adb backup`. Additionally, missing `.gitmodules` definitions caused submodule checkout failures during CI runs.
-**Learning:** `android:allowBackup` defaults to true if omitted or not explicitly disabled. In security-sensitive applications handling VPN or proxy credentials, leaving backup enabled risks credential exfiltration across device backups or adb extraction. Furthermore, XML comments inside attribute lists break Android manifest merger, and git submodules configured in `.git/config` require corresponding entries in `.gitmodules`.
-**Prevention:** Explicitly configure `android:allowBackup="false"` in the root `<application>` element, ensure `.gitmodules` is tracked in version control, and place comments outside XML opening tags.
+## 2025-05-14 - Information Exposure through Stack Traces
+**Vulnerability:** The `VpnError.fromException()` method used `e.stackTraceToString()` to populate its `details` field, which was then displayed to the user in the UI. This leaked internal package structures, library versions, and execution flow.
+**Learning:** Even convenience methods for debugging can become security risks if they propagate sensitive internal data to user-facing components. In Android, `VpnService` and native JNI interactions can provide particularly sensitive stack traces.
+**Prevention:** Use `e.javaClass.simpleName` or a generic error code for user-facing details. Reserved full stack traces for secure, internal logging only.
