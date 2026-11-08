@@ -83,10 +83,8 @@ data class VpnError(
     companion object {
         fun fromException(e: Throwable, tunnelId: String? = null): VpnError {
             val errorMsg = e.message ?: "Unknown error"
-            // SECURITY FIX: Do not leak the full stack trace in the 'details' field.
-            // Using the exception's simple name provides useful context for debugging
-            // without exposing internal implementation details or sensitive code structure.
-            val details = e.javaClass.simpleName
+            // SECURITY (CWE-209): Prevent sensitive stack trace leakage in user-facing error details
+            val details = errorMsg
             
             return when {
                 errorMsg.contains("auth", ignoreCase = true) ||

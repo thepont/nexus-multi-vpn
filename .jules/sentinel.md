@@ -1,6 +1,4 @@
-# Sentinel Security Journal
-
-## 2025-05-14 - Information Exposure through Stack Traces
-**Vulnerability:** The `VpnError.fromException()` method used `e.stackTraceToString()` to populate its `details` field, which was then displayed to the user in the UI. This leaked internal package structures, library versions, and execution flow.
-**Learning:** Even convenience methods for debugging can become security risks if they propagate sensitive internal data to user-facing components. In Android, `VpnService` and native JNI interactions can provide particularly sensitive stack traces.
-**Prevention:** Use `e.javaClass.simpleName` or a generic error code for user-facing details. Reserved full stack traces for secure, internal logging only.
+## 2026-03-01 - Prevent Information Disclosure in User-Facing VPN Errors
+**Vulnerability:** `VpnError.fromException` previously invoked `e.stackTraceToString()` and stored it in the `details` field, which was then displayed directly to users via `getUserMessage()`, leaking technical runtime environment, class structure, and source file metadata (CWE-209).
+**Learning:** Error conversion utilities in core components must avoid attaching raw stack traces directly to domain models displayed by UI layers or exported across service boundaries.
+**Prevention:** Sanitize exception reporting by storing high-level messages (`errorMsg`) rather than raw stack traces, and enforce this via dedicated unit tests.
