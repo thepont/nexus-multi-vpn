@@ -1,0 +1,6 @@
+# Sentinel Security Journal
+
+## 2026-09-07 - Application Backup Vulnerability & Git Submodule Registration
+**Vulnerability:** The Android application had `android:allowBackup="true"` enabled in `app/src/main/AndroidManifest.xml`. Because Room database storage for sensitive provider credentials and OpenVPN configs is not hardware-backed encrypted at rest, an attacker with physical access or ADB debugging enabled could extract plaintext VPN credentials using `adb backup`. Additionally, missing `.gitmodules` definitions caused submodule checkout failures during CI runs.
+**Learning:** `android:allowBackup` defaults to true if omitted or not explicitly disabled. In security-sensitive applications handling VPN or proxy credentials, leaving backup enabled risks credential exfiltration across device backups or adb extraction. Furthermore, XML comments inside attribute lists break Android manifest merger, and git submodules configured in `.git/config` require corresponding entries in `.gitmodules`.
+**Prevention:** Explicitly configure `android:allowBackup="false"` in the root `<application>` element, ensure `.gitmodules` is tracked in version control, and place comments outside XML opening tags.
